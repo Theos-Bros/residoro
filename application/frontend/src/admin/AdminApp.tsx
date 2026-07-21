@@ -3,7 +3,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import type { OperatorStatus } from '@/hooks/useOperatorStatus';
 import { AuthPage } from '@/pages/AuthPage';
 import { AdminLayout } from './AdminLayout';
-import { AdminHome } from './AdminHome';
+import { ClientList } from './clients/ClientList';
+import { NewClientForm } from './clients/NewClientForm';
 
 type AdminAppProps = {
   session: Session | null;
@@ -33,7 +34,8 @@ export function AdminApp({ session, loading, operatorStatus }: AdminAppProps) {
   return (
     <Routes>
       <Route element={<AdminLayout />}>
-        <Route index element={<AdminHome />} />
+        <Route index element={<ClientList session={session} />} />
+        <Route path="clients/new" element={<NewClientForm session={session} />} />
       </Route>
     </Routes>
   );
