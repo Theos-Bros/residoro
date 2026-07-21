@@ -1,0 +1,52 @@
+import { useRef, useState } from 'react';
+
+type Props = {
+  onFileSelected: (file: File) => void;
+  disabled?: boolean;
+};
+
+export function FileUploadDropzone({ onFileSelected, disabled }: Props) {
+  const [isDragging, setIsDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) onFileSelected(file);
+  }
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={handleDrop}
+      onClick={() => inputRef.current?.click()}
+      style={{
+        border: isDragging ? '2px solid #333' : '2px dashed #999',
+        padding: '2rem',
+        textAlign: 'center',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <p>Drag and drop your property CSV here, or click to choose a file.</p>
+      <p>Max 10 MB, up to 10,000 rows.</p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv"
+        disabled={disabled}
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onFileSelected(file);
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
