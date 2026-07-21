@@ -1,17 +1,23 @@
+import type { Session } from '@supabase/supabase-js';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { useSupabaseSession } from '@/hooks/useSupabaseSession';
-import { useOperatorStatus } from '@/hooks/useOperatorStatus';
+import type { OperatorStatus } from '@/hooks/useOperatorStatus';
 import { AuthPage } from '@/pages/AuthPage';
 import { AdminLayout } from './AdminLayout';
 import { AdminHome } from './AdminHome';
 
+type AdminAppProps = {
+  session: Session | null;
+  loading: boolean;
+  operatorStatus: OperatorStatus;
+};
+
 // Guards the whole /admin/* tree: unauthenticated -> shared sign-in page;
 // authenticated but not an operator -> bounced back to the brokerage app;
 // confirmed operator -> the actual dashboard shell + nested routes.
-export function AdminApp() {
-  const { session, loading } = useSupabaseSession();
-  const operatorStatus = useOperatorStatus(session);
-
+// session/operatorStatus are computed once at the App root and passed in --
+// see App.tsx and useSupabaseSession's comment for why this isn't
+// re-subscribed per-route.
+export function AdminApp({ session, loading, operatorStatus }: AdminAppProps) {
   if (loading || (session && operatorStatus === 'loading')) {
     return null;
   }

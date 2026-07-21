@@ -4,14 +4,17 @@ import { fetchWhoami } from '@/lib/adminApi';
 
 export type OperatorStatus = 'loading' | 'operator' | 'not-operator';
 
-// Shared by the root brokerage route (redirect operators to /admin) and
-// AdminApp (redirect everyone else away from /admin) -- same async check,
-// two different redirect directions.
+// Called ONCE at the App root, alongside useSupabaseSession -- see App.tsx.
+// Depends on the access_token *string*, not the session object reference:
+// Supabase fires onAuthStateChange with a new session object (same token)
+// on every subscribe (e.g. an INITIAL_SESSION event), which would otherwise
+// needlessly reset this back to 'loading' and refetch.
 export function useOperatorStatus(session: Session | null): OperatorStatus {
   const [status, setStatus] = useState<OperatorStatus>('loading');
+  const accessToken = session?.access_token;
 
   useEffect(() => {
-    if (!session) {
+    if (!accessToken) {
       setStatus('not-operator');
       return;
     }
@@ -19,14 +22,14 @@ export function useOperatorStatus(session: Session | null): OperatorStatus {
     let cancelled = false;
     setStatus('loading');
 
-    fetchWhoami(session.access_token).then((whoami) => {
+    fetchWhoami(accessToken).then((whoami) => {
       if (!cancelled) setStatus(whoami ? 'operator' : 'not-operator');
     });
 
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [accessToken]);
 
   return status;
 }
