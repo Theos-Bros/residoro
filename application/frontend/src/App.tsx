@@ -3,10 +3,13 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { supabase } from './lib/supabaseClient';
 import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { useOperatorStatus, type OperatorStatus } from './hooks/useOperatorStatus';
+import { useWorkspaceStatus } from './hooks/useWorkspaceStatus';
 import { AuthPage } from './pages/AuthPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { MigrationPage } from './pages/MigrationPage';
 import { AdminApp } from './admin/AdminApp';
+import { ContractWarningBanner } from './components/ContractWarningBanner';
+import { ContractNotificationPanel } from './components/ContractNotificationPanel';
 
 type BrokerageAppProps = {
   session: Session | null;
@@ -21,6 +24,10 @@ type BrokerageAppProps = {
 // the App root (see below) and passed in, rather than each route
 // independently re-subscribing -- see useSupabaseSession's comment for why.
 function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
+  // Called unconditionally (Rules of Hooks) -- tolerates a null session
+  // while loading/redirecting, since the early returns below happen after.
+  const { status: workspaceStatus, refetch: refetchWorkspaceStatus } = useWorkspaceStatus(session);
+
   if (loading || (session && operatorStatus === 'loading')) {
     return null;
   }
@@ -39,7 +46,13 @@ function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
         <span>{session.user.email}</span>
         <button onClick={() => supabase.auth.signOut()}>Sign out</button>
       </header>
-      <MigrationPage session={session} />
+      <ContractWarningBanner status={workspaceStatus} />
+      <ContractNotificationPanel
+        session={session}
+        notifications={workspaceStatus?.notifications ?? []}
+        onDismissed={refetchWorkspaceStatus}
+      />
+      <MigrationPage session={session} readOnly={workspaceStatus !== null && workspaceStatus.access_state !== 'active'} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ export type Client = {
   brokerage_name: string;
   contract_start_date: string;
   contract_end_date: string;
+  access_state: 'active' | 'read_only' | 'blocked';
   invite_status: 'pending' | 'accepted';
 };
 
@@ -61,6 +62,22 @@ export async function createClient(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function extendContract(
+  accessToken: string,
+  workspaceId: string,
+  contractEndDate: string,
+): Promise<{ workspace_id: string; contract_end_date: string }> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ contract_end_date: contractEndDate }),
   });
   return parseJsonOrThrow(response);
 }

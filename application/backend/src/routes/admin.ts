@@ -86,7 +86,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get('/admin/clients', { preHandler: requireOperator }, async (request, reply) => {
     const { data: workspaces, error: workspacesError } = await supabaseAdmin
       .from('workspaces')
-      .select('id, name, contract_start_date, contract_end_date')
+      .select('id, name, contract_start_date, contract_end_date, access_state')
       .order('created_at', { ascending: false });
 
     if (workspacesError || !workspaces) {
@@ -127,8 +127,41 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         brokerage_name: w.name,
         contract_start_date: w.contract_start_date,
         contract_end_date: w.contract_end_date,
+        access_state: w.access_state,
         invite_status: confirmedByTenant.get(w.id) ? 'accepted' : 'pending',
       })),
     };
   });
+
+  // tb-client-lifecycle-contract-expiry-001's renewal path: the doc
+  // deliberately doesn't assume a dedicated renewal screen beyond "extend
+  // contract_end_date somewhere" -- this is that somewhere. The next daily
+  // contract-expiry-check run (Edge Function) is what actually resets
+  // access_state back to 'active' and clears warning flags; this endpoint
+  // only records the new date.
+  app.patch<{ Params: { id: string }; Body: { contract_end_date?: string } }>(
+    '/admin/clients/:id',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { contract_end_date } = request.body ?? {};
+
+      if (!contract_end_date || Number.isNaN(new Date(contract_end_date).getTime())) {
+        return reply.status(400).send({ error: 'contract_end_date is required and must be a valid date' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('workspaces')
+        .update({ contract_end_date })
+        .eq('id', request.params.id)
+        .select('id, contract_end_date')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not update the contract end date' });
+      }
+
+      return { workspace_id: data.id, contract_end_date: data.contract_end_date };
+    },
+  );
 }

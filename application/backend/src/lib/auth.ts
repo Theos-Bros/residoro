@@ -1,10 +1,13 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { supabaseAdmin } from './supabaseAdmin.js';
 
+export type AccessState = 'active' | 'read_only' | 'blocked';
+
 export type AuthedUser = {
   id: string;
   tenantId: string;
   role: string;
+  accessState: AccessState;
 };
 
 export type AuthedOperator = {
@@ -23,11 +26,14 @@ type VerifiedProfile = {
   userId: string;
   tenantId: string | null;
   role: string;
+  accessState: AccessState | null;
 };
 
 // Shared by requireAuth and requireOperator: verify the bearer token against
-// Supabase Auth, then look up the caller's profile. Replies and returns
-// undefined on any failure so callers can just check the return value.
+// Supabase Auth, then look up the caller's profile (with its workspace's
+// access_state embedded via the tenant_id FK -- null for operators, who
+// aren't tenant-scoped). Replies and returns undefined on any failure so
+// callers can just check the return value.
 async function verifyBearerAndFetchProfile(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -48,21 +54,33 @@ async function verifyBearerAndFetchProfile(
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('tenant_id, role')
+    .select('tenant_id, role, workspaces(access_state)')
     .eq('id', userData.user.id)
-    .single();
+    .single<{ tenant_id: string | null; role: string; workspaces: { access_state: AccessState } | null }>();
 
   if (profileError || !profile) {
+    if (profileError) request.log.error(profileError);
     reply.status(401).send({ error: 'No profile found for this user' });
     return undefined;
   }
 
-  return { userId: userData.user.id, tenantId: profile.tenant_id, role: profile.role };
+  return {
+    userId: userData.user.id,
+    tenantId: profile.tenant_id,
+    role: profile.role,
+    accessState: profile.workspaces?.access_state ?? null,
+  };
 }
 
 // First authenticated backend route establishes this pattern: tenant is always
 // derived server-side from the verified auth token, never trusted from the
 // request body (see tb-migration-csv-001 plan's Deviations section).
+//
+// tb-client-lifecycle-contract-expiry-001: also enforces workspace
+// access_state here, since every tenant-scoped route already goes through
+// this guard -- 'blocked' rejects the request outright (this is what makes
+// "login itself rejected" real, since there's no separate login endpoint to
+// gate); 'read_only' allows GET (reads/export) but rejects any other method.
 export async function requireAuth(request: FastifyRequest, reply: FastifyReply) {
   const profile = await verifyBearerAndFetchProfile(request, reply);
   if (!profile) return;
@@ -72,7 +90,25 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply) 
     return;
   }
 
-  request.user = { id: profile.userId, tenantId: profile.tenantId, role: profile.role };
+  const accessState = profile.accessState ?? 'active';
+
+  if (accessState === 'blocked') {
+    reply.status(403).send({
+      error: 'Your workspace\'s contract has expired and access is blocked. Contact your Residoro representative to renew.',
+      access_state: accessState,
+    });
+    return;
+  }
+
+  if (accessState === 'read_only' && request.method !== 'GET') {
+    reply.status(403).send({
+      error: 'Your workspace is in a read-only grace period after contract expiry. Contact your Residoro representative to renew.',
+      access_state: accessState,
+    });
+    return;
+  }
+
+  request.user = { id: profile.userId, tenantId: profile.tenantId, role: profile.role, accessState };
 }
 
 // Operators are not tenant-scoped (tenant_id is null by design -- see

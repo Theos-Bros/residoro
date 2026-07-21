@@ -15,9 +15,10 @@ type Step = 'upload' | 'mapping' | 'preview';
 
 type Props = {
   session: Session;
+  readOnly?: boolean;
 };
 
-export function MigrationPage({ session }: Props) {
+export function MigrationPage({ session, readOnly = false }: Props) {
   const [step, setStep] = useState<Step>('upload');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +88,13 @@ export function MigrationPage({ session }: Props) {
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       {busy && <p>Working…</p>}
 
-      {step === 'upload' && <FileUploadDropzone onFileSelected={handleFileSelected} disabled={busy} />}
+      {step === 'upload' && readOnly && (
+        <p>
+          Migration is disabled while your workspace is in a read-only or blocked state. Contact
+          your Residoro representative to renew.
+        </p>
+      )}
+      {step === 'upload' && !readOnly && <FileUploadDropzone onFileSelected={handleFileSelected} disabled={busy} />}
 
       {step === 'mapping' && (
         <div>
