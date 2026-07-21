@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { parseCsv } from '../lib/csv.js';
-import { suggestFieldMappings } from '../lib/anthropic.js';
+import { suggestFieldMappings } from '../lib/gemini.js';
 import { transformSample, type MappingEntry } from '../lib/transform.js';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;

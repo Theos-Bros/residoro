@@ -1,7 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI, Type } from '@google/genai';
 import { TARGET_FIELDS } from './transform.js';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const FIELD_DESCRIPTIONS: Record<(typeof TARGET_FIELDS)[number], string> = {
   title: 'Property title/name',
@@ -31,25 +31,23 @@ export type SuggestMappingsResult = {
 };
 
 const MAPPING_SCHEMA = {
-  type: 'object',
+  type: Type.OBJECT,
   properties: {
     mappings: {
-      type: 'array',
+      type: Type.ARRAY,
       items: {
-        type: 'object',
+        type: Type.OBJECT,
         properties: {
-          csv_column: { type: 'string' },
-          residoro_field: { type: 'string', enum: [...TARGET_FIELDS, 'unmapped'] },
-          confidence: { type: 'number' },
+          csv_column: { type: Type.STRING },
+          residoro_field: { type: Type.STRING, enum: [...TARGET_FIELDS, 'unmapped'] },
+          confidence: { type: Type.NUMBER },
         },
         required: ['csv_column', 'residoro_field', 'confidence'],
-        additionalProperties: false,
       },
     },
-    warnings: { type: 'array', items: { type: 'string' } },
+    warnings: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
   required: ['mappings', 'warnings'],
-  additionalProperties: false,
 } as const;
 
 export async function suggestFieldMappings(
@@ -58,16 +56,9 @@ export async function suggestFieldMappings(
 ): Promise<SuggestMappingsResult> {
   const fieldList = TARGET_FIELDS.map((field) => `- ${field}: ${FIELD_DESCRIPTIONS[field]}`).join('\n');
 
-  const response = await anthropic.messages.create({
-    model: 'claude-opus-4-8',
-    max_tokens: 2048,
-    output_config: {
-      format: { type: 'json_schema', schema: MAPPING_SCHEMA },
-    },
-    messages: [
-      {
-        role: 'user',
-        content: `You are helping migrate property listing data into Residoro, a Philippine real estate brokerage platform. Suggest how each CSV column maps to a Residoro property field.
+  const response = await ai.models.generateContent({
+    model: 'gemini-flash-latest',
+    contents: `You are helping migrate property listing data into Residoro, a Philippine real estate brokerage platform. Suggest how each CSV column maps to a Residoro property field.
 
 CSV headers: ${JSON.stringify(headers)}
 
@@ -78,16 +69,18 @@ Available Residoro fields:
 ${fieldList}
 
 For each CSV column, suggest the best-matching Residoro field, or "unmapped" if none fits, with a confidence score from 0.0 to 1.0. Be conservative — only assign high confidence when the match is clear from the header name and sample values. Include a warnings array noting anything worth flagging (e.g. ambiguous data types, values that don't look valid for the suggested field).`,
-      },
-    ],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: MAPPING_SCHEMA,
+    },
   });
 
-  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
-  if (!textBlock) {
-    throw new Error('Claude did not return a structured response');
+  const text = response.text;
+  if (!text) {
+    throw new Error('Gemini did not return a structured response');
   }
 
-  const parsed = JSON.parse(textBlock.text) as { mappings: FieldMappingSuggestion[]; warnings: string[] };
+  const parsed = JSON.parse(text) as { mappings: FieldMappingSuggestion[]; warnings: string[] };
   const unmapped_columns = parsed.mappings
     .filter((mapping) => mapping.residoro_field === 'unmapped')
     .map((mapping) => mapping.csv_column);

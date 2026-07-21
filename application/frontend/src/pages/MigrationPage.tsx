@@ -91,7 +91,7 @@ export function MigrationPage({ session }: Props) {
 
       {step === 'mapping' && (
         <div>
-          <h2>Review Claude's suggested mappings</h2>
+          <h2>Review the suggested mappings</h2>
           <MappingReviewTable mappings={mappings} warnings={warnings} onChange={setMappings} />
           <button onClick={handleGeneratePreview} disabled={busy}>
             These look correct — show preview
