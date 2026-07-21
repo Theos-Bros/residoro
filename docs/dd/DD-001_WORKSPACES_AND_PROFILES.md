@@ -54,6 +54,23 @@ default of `"{email}'s Workspace"`), then creates the corresponding `profiles` r
 `role = 'admin'`. See DS-001's "Key Decision" section — this is a flagged placeholder, not a
 final invite/onboarding design.
 
+**Known gap, discovered via real usage (2026-07-21):** deleting a user (`auth.users` row)
+cascades `profiles` away (`on delete cascade`), but does **not** clean up the `workspaces` row
+that user's signup created — confirmed by testing: creating and then deleting an account left
+an orphaned `workspaces` row with no members. Not fixed here; needs a product decision first
+(delete the workspace when its last member leaves? require ownership transfer instead?) before
+adding a cleanup trigger — flagging so it isn't mistaken for an oversight nobody noticed.
+
+**Auth confirmation setting (2026-07-21):** `mailer_autoconfirm` is set to `true` on the
+Residoro Prototype project (dashboard: Authentication → Email → "Confirm email" off). This
+was a deliberate fix for Supabase's default email-sending rate limit (2/hour) blocking
+repeated signups during testing — without custom SMTP configured, every signup otherwise
+tries to send a confirmation email and quickly exhausts that limit. Auto-confirming means
+anyone can sign up with any email address without proving ownership of it — acceptable for a
+prototype under our own testing, but **revisit before any real user-facing launch** (either
+configure custom SMTP and re-enable confirmation, or keep autoconfirm only for pre-launch
+internal testing).
+
 ---
 
 ## Row-Level Security
