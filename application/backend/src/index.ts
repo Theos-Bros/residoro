@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { registerHealthRoute } from './routes/health.js';
 import { registerMigrationRoutes } from './routes/migrations.js';
+import { registerAdminRoutes } from './routes/admin.js';
 
 const app = Fastify({ logger: true });
 
@@ -11,6 +12,7 @@ await app.register(cors, { origin: true });
 await app.register(multipart);
 await registerHealthRoute(app);
 await registerMigrationRoutes(app);
+await registerAdminRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

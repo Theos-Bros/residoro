@@ -1,22 +1,30 @@
-import { useEffect, useState } from 'react';
-import type { Session } from '@supabase/supabase-js';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { supabase } from './lib/supabaseClient';
+import { useSupabaseSession } from './hooks/useSupabaseSession';
+import { useOperatorStatus } from './hooks/useOperatorStatus';
 import { AuthPage } from './pages/AuthPage';
+import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { MigrationPage } from './pages/MigrationPage';
+import { AdminApp } from './admin/AdminApp';
 
-export function App() {
-  const [session, setSession] = useState<Session | null>(null);
+// The pre-existing brokerage flow, unchanged behavior-wise -- just now aware
+// that an operator session should redirect to /admin instead of rendering
+// MigrationPage (operators never touch this flow directly, per
+// cap-client-lifecycle-001).
+function BrokerageApp() {
+  const { session, loading } = useSupabaseSession();
+  const operatorStatus = useOperatorStatus(session);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-    });
-    return () => subscription.subscription.unsubscribe();
-  }, []);
+  if (loading || (session && operatorStatus === 'loading')) {
+    return null;
+  }
 
   if (!session) {
     return <AuthPage />;
+  }
+
+  if (operatorStatus === 'operator') {
+    return <Navigate to="/admin" replace />;
   }
 
   return (
@@ -27,5 +35,15 @@ export function App() {
       </header>
       <MigrationPage session={session} />
     </div>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<BrokerageApp />} />
+      <Route path="/accept-invite" element={<AcceptInvitePage />} />
+      <Route path="/admin/*" element={<AdminApp />} />
+    </Routes>
   );
 }
