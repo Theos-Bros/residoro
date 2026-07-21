@@ -187,12 +187,30 @@ docs/
 
 - ✅ CTX-000 Context Index
 - ✅ CTX-001 Project Context
-- ⏳ CTX-002 Product Context
-- ⏳ CTX-003 Engineering Context
-- ⏳ CTX-004 AI Guidelines
-- ⏳ CTX-005 Current Status
-- ⏳ CTX-006 Roadmap
-- ⏳ CTX-007 Glossary
+- ✅ CTX-002 Product Context
+- ✅ CTX-003 Engineering Context
+- ✅ CTX-004 AI Guidelines
+- ✅ CTX-005 Current Status
+- ✅ CTX-006 Roadmap
+- ✅ CTX-007 Glossary
+
+---
+
+## Architecture (ADR)
+
+- ✅ ADR-001 Shared-Schema Multi-Tenant Architecture
+- ✅ ADR-002 Workspace Isolation & Row-Level Security
+- ⏳ ADR-003 Configuration Over Customization
+- ⏳ ADR-004 Documentation-First Development
+- ⏳ ADR-005 AI-Assisted Migration
+- ⏳ ADR-006 Workspace Naming Convention
+
+---
+
+## Engineering Standards (STD)
+
+- ✅ STD-002 Documentation Standards
+- ⏳ STD-001 Engineering Principles (referenced by CTX-004, not yet written)
 
 ---
 

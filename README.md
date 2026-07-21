@@ -30,8 +30,9 @@ To become the operating system that powers every Philippine real estate brokerag
 
 | Layer | Technology |
 |--------|------------|
-| Frontend | WeWeb |
-| Backend | Supabase |
+| Frontend | React + TypeScript (Vite) |
+| Application Backend | Node.js + TypeScript (Fastify) |
+| Backend-as-a-Service | Supabase |
 | Database | PostgreSQL |
 | Authentication | Supabase Auth |
 | Storage | Supabase Storage |

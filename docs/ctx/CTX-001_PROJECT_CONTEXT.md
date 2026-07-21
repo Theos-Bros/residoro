@@ -1,10 +1,10 @@
 # CTX-001 — Project Context
 
 **Status:** Approved  
-**Version:** 1.0.0  
+**Version:** 1.0.1  
 **Owner:** Residoro Engineering  
 **Created:** 2026-07-20  
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-21
 
 ---
 
@@ -35,7 +35,7 @@ Implementation details are intentionally excluded and documented elsewhere.
 - CTX-002 — Product Context
 - CTX-003 — Engineering Context
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
-- ADR-006 — Workspace Isolation
+- ADR-002 — Workspace Isolation
 
 ---
 
