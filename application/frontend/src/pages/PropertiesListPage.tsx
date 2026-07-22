@@ -36,7 +36,12 @@ export function PropertiesListPage({ session }: Props) {
 
   return (
     <div>
-      <h1>Properties</h1>
+      <div className="flex items-center justify-between">
+        <h1>Properties</h1>
+        <Button asChild size="sm">
+          <Link to="/properties/new">Add a new listing</Link>
+        </Button>
+      </div>
 
       {error && <p role="alert">{error}</p>}
       {!error && properties === null && <p>Loading…</p>}

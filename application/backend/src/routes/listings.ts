@@ -5,6 +5,17 @@ import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 const LISTING_TYPES = ['sale', 'rent'] as const;
 const STATUSES = ['active', 'withdrawn'] as const;
 const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
+const PROPERTY_TYPES = [
+  'condo_unit',
+  'house_and_lot',
+  'lot_only',
+  'townhouse',
+  'commercial',
+  'warehouse',
+  'agricultural',
+  'industrial',
+] as const;
+const OWNER_TYPES = ['developer', 'individual', 'company'] as const;
 
 type CreateListingBody = {
   property_id?: string;
@@ -14,6 +25,22 @@ type CreateListingBody = {
   exclusivity?: string;
   authority_starts_at?: string;
   authority_expires_at?: string | null;
+};
+
+type CreatePropertyBody = {
+  title?: string;
+  type?: string;
+  owner_type?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  floor_area_sqm?: number;
+  lot_area_sqm?: number;
+  bedrooms?: number;
+  bathrooms?: number;
+  parking_slots?: number;
+  price?: number;
+  price_currency?: string;
 };
 
 type UpdateListingStatusBody = {
@@ -38,6 +65,77 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     }
 
     return { properties: data ?? [] };
+  });
+
+  // tb-listings-new-property-001: the only other way a property enters
+  // residoro is Migration (operator-driven CSV import) -- this lets an
+  // agent create one directly for the "I just got a new listing" moment.
+  // owner_id is never accepted from the body -- always NULL on insert,
+  // matching Migration's own existing behavior (no real Developer/Contact
+  // FK target exists yet, cap-properties-001 Decision #2).
+  app.post<{ Body: CreatePropertyBody }>('/properties', { preHandler: requireAuth }, async (request, reply) => {
+    const {
+      title,
+      type,
+      owner_type,
+      address,
+      city,
+      province,
+      floor_area_sqm,
+      lot_area_sqm,
+      bedrooms,
+      bathrooms,
+      parking_slots,
+      price,
+      price_currency,
+    } = request.body ?? {};
+
+    if (!title || !type || !owner_type) {
+      return reply.status(400).send({ error: 'title, type, and owner_type are required' });
+    }
+    if (!PROPERTY_TYPES.includes(type as (typeof PROPERTY_TYPES)[number])) {
+      return reply.status(400).send({ error: `type must be one of: ${PROPERTY_TYPES.join(', ')}` });
+    }
+    if (!OWNER_TYPES.includes(owner_type as (typeof OWNER_TYPES)[number])) {
+      return reply.status(400).send({ error: `owner_type must be one of: ${OWNER_TYPES.join(', ')}` });
+    }
+
+    const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price };
+    for (const [field, value] of Object.entries(numericFields)) {
+      if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+        return reply.status(400).send({ error: `${field} must be a non-negative number` });
+      }
+    }
+
+    const { data: property, error: propertyError } = await supabaseAdmin
+      .from('properties')
+      .insert({
+        tenant_id: request.user!.tenantId,
+        created_by: request.user!.id,
+        title,
+        type,
+        owner_type,
+        owner_id: null,
+        address,
+        city,
+        province,
+        floor_area_sqm,
+        lot_area_sqm,
+        bedrooms,
+        bathrooms,
+        parking_slots,
+        price,
+        price_currency: price_currency ?? 'PHP',
+      })
+      .select('id, title, price, price_currency, status')
+      .single();
+
+    if (propertyError || !property) {
+      request.log.error(propertyError);
+      return reply.status(500).send({ error: 'Could not create the property' });
+    }
+
+    return reply.status(201).send(property);
   });
 
   app.get('/listings', { preHandler: requireAuth }, async (request, reply) => {

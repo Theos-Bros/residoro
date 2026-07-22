@@ -4,6 +4,7 @@ import { useOperatorStatus } from './hooks/useOperatorStatus';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { PropertiesListPage } from './pages/PropertiesListPage';
 import { CreateListingForm } from './pages/CreateListingForm';
+import { NewPropertyListingForm } from './pages/NewPropertyListingForm';
 import { ListingsPage } from './pages/ListingsPage';
 import { AdminApp } from './admin/AdminApp';
 import { BrokerageLayout } from './BrokerageLayout';
@@ -33,6 +34,7 @@ export function App() {
       <Route element={<BrokerageLayout session={session} loading={loading} operatorStatus={operatorStatus} />}>
         <Route path="/" element={<Navigate to="/properties" replace />} />
         <Route path="/properties" element={session && <PropertiesListPage session={session} />} />
+        <Route path="/properties/new" element={session && <NewPropertyListingForm session={session} />} />
         <Route
           path="/properties/:propertyId/listings/new"
           element={session && <CreateListingForm session={session} />}
