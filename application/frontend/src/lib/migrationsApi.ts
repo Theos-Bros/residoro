@@ -78,3 +78,44 @@ export async function previewMappings(
   });
   return parseJsonOrThrow(response);
 }
+
+export type ImportResult = {
+  batch_id: string;
+  status: string;
+  total_rows: number;
+  successful_imports: number;
+  failed_rows: number;
+};
+
+export type FailedRowDetail = {
+  original_row: Record<string, string>;
+  error_message: string;
+};
+
+export type BatchDetail = {
+  batch_id: string;
+  filename: string;
+  status: string;
+  total_rows: number;
+  successful_imports: number;
+  failed_rows: number;
+  rollback_deadline: string;
+  failed_row_details: FailedRowDetail[];
+};
+
+// tb-migration-preview-001: the confirm step tb-migration-csv-001 stubbed out
+// ("Importing into Residoro is not built yet") -- this is that build.
+export async function confirmImport(accessToken: string, fileId: string): Promise<ImportResult> {
+  const response = await fetch(`${BACKEND_URL}/migrations/${fileId}/import`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function fetchImportBatch(accessToken: string, batchId: string): Promise<BatchDetail> {
+  const response = await fetch(`${BACKEND_URL}/migrations/batches/${batchId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}

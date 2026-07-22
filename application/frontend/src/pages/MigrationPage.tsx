@@ -4,15 +4,20 @@ import { FileUploadDropzone } from '../components/FileUploadDropzone';
 import { MappingReviewTable } from '../components/MappingReviewTable';
 import { PreviewTable } from '../components/PreviewTable';
 import { PropertyCard } from '../components/PropertyCard';
+import { ConfirmImportModal } from '../components/ConfirmImportModal';
+import { ImportBatchDetail } from '../components/ImportBatchDetail';
 import {
   analyzeMappings,
+  confirmImport,
+  fetchImportBatch,
   previewMappings,
   uploadCsv,
+  type BatchDetail,
   type FieldMapping,
   type PreviewProperty,
 } from '../lib/migrationsApi';
 
-type Step = 'upload' | 'mapping' | 'preview';
+type Step = 'upload' | 'mapping' | 'preview' | 'imported';
 
 type Props = {
   session: Session;
@@ -30,7 +35,8 @@ export function MigrationPage({ session, readOnly = false }: Props) {
   const [previewProperties, setPreviewProperties] = useState<PreviewProperty[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [totalValidationErrors, setTotalValidationErrors] = useState(0);
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [batch, setBatch] = useState<BatchDetail | null>(null);
 
   const accessToken = session.access_token;
 
@@ -71,12 +77,28 @@ export function MigrationPage({ session, readOnly = false }: Props) {
     }
   }
 
+  async function handleConfirmImport() {
+    if (!fileId) return;
+    setError(null);
+    setConfirming(true);
+    try {
+      const result = await confirmImport(accessToken, fileId);
+      const detail = await fetchImportBatch(accessToken, result.batch_id);
+      setBatch(detail);
+      setStep('imported');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   function handleStartOver() {
     setStep('upload');
     setFileId(null);
     setMappings([]);
     setPreviewProperties([]);
-    setConfirmed(false);
+    setBatch(null);
     setError(null);
   }
 
@@ -121,17 +143,19 @@ export function MigrationPage({ session, readOnly = false }: Props) {
               <PropertyCard key={property.row_number} property={property} />
             ))}
           </div>
-          {confirmed ? (
-            <p>
-              Confirmed. Importing into Residoro is not built yet — that's the next tracer bullet
-              (tb-migration-preview-001).
-            </p>
-          ) : (
-            <>
-              <button onClick={() => setConfirmed(true)}>These look correct</button>
-              <button onClick={() => setStep('mapping')}>Edit mappings</button>
-            </>
-          )}
+          <ConfirmImportModal
+            totalRows={totalRows}
+            busy={confirming}
+            onConfirm={handleConfirmImport}
+            onCancel={() => setStep('mapping')}
+          />
+        </div>
+      )}
+
+      {step === 'imported' && batch && (
+        <div>
+          <ImportBatchDetail batch={batch} />
+          <button onClick={handleStartOver}>Start another migration</button>
         </div>
       )}
     </div>
