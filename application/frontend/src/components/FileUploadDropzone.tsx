@@ -3,9 +3,10 @@ import { useRef, useState } from 'react';
 type Props = {
   onFileSelected: (file: File) => void;
   disabled?: boolean;
+  label?: string;
 };
 
-export function FileUploadDropzone({ onFileSelected, disabled }: Props) {
+export function FileUploadDropzone({ onFileSelected, disabled, label = 'property' }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -29,7 +30,7 @@ export function FileUploadDropzone({ onFileSelected, disabled }: Props) {
         isDragging ? 'border-solid border-primary bg-accent' : 'border-dashed border-input'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-accent'}`}
     >
-      <p className="text-sm text-foreground">Drag and drop your property CSV here, or click to choose a file.</p>
+      <p className="text-sm text-foreground">Drag and drop your {label} CSV here, or click to choose a file.</p>
       <p className="mt-1 text-xs text-muted-foreground">Max 10 MB, up to 10,000 rows.</p>
       <input
         ref={inputRef}

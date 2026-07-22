@@ -2,7 +2,7 @@
 // example fields (name/listed_date/listing_type/developer/condominium), which
 // don't exist on the actual schema. See the tb-migration-csv-001 plan's
 // Deviations section.
-export const TARGET_FIELDS = [
+export const PROPERTY_FIELDS = [
   'title',
   'price',
   'bedrooms',
@@ -17,7 +17,20 @@ export const TARGET_FIELDS = [
   'parking_slots',
 ] as const;
 
-export type TargetField = (typeof TARGET_FIELDS)[number];
+// tb-migration-contacts-001: the generic Contact entity's columns. `type` is
+// deliberately NOT validated against a fixed set here (unlike property.type)
+// -- an open set of buyer_lead/co_broker/developer/owner/etc, per that
+// tracer bullet's Context decision.
+export const CONTACT_FIELDS = ['name', 'type', 'email', 'phone', 'company', 'notes'] as const;
+
+export type EntityType = 'property' | 'contact';
+
+export const FIELDS_BY_ENTITY: Record<EntityType, readonly string[]> = {
+  property: PROPERTY_FIELDS,
+  contact: CONTACT_FIELDS,
+};
+
+export type TargetField = (typeof PROPERTY_FIELDS)[number] | (typeof CONTACT_FIELDS)[number];
 
 const NUMERIC_FIELDS = new Set<TargetField>([
   'price',
@@ -43,16 +56,22 @@ const OWNER_TYPES = new Set(['developer', 'individual', 'company']);
 
 export type MappingEntry = { csv_column: string; residoro_field: string };
 
-function isTargetField(value: string): value is TargetField {
-  return (TARGET_FIELDS as readonly string[]).includes(value);
+function isTargetField(value: string, entityType: EntityType): value is TargetField {
+  return (FIELDS_BY_ENTITY[entityType] as readonly string[]).includes(value);
 }
 
-export function transformSample(rows: Record<string, string>[], mappings: MappingEntry[]) {
-  const activeMappings = mappings.filter((m) => isTargetField(m.residoro_field));
+// sampleProperties/sample_properties is a holdover name from before contacts
+// existed (tb-migration-contacts-001) -- it's really "mapped sample records"
+// for whichever entity is being migrated. Not renamed on the wire: the
+// property flow's response shape is already live and tested, and renaming it
+// buys nothing since both fields end up rendered by the same generic
+// PreviewTable either way.
+export function transformSample(rows: Record<string, string>[], mappings: MappingEntry[], entityType: EntityType) {
+  const activeMappings = mappings.filter((m) => isTargetField(m.residoro_field, entityType));
 
   let errorCount = 0;
   const sampleProperties = rows.map((row, index) => {
-    const property: Record<string, unknown> = { row_number: index + 1 };
+    const record: Record<string, unknown> = { row_number: index + 1 };
     const validationErrors: string[] = [];
 
     for (const { csv_column, residoro_field } of activeMappings) {
@@ -60,32 +79,33 @@ export function transformSample(rows: Record<string, string>[], mappings: Mappin
       const rawValue = row[csv_column];
 
       if (rawValue === undefined || rawValue === '') {
-        property[field] = null;
+        record[field] = null;
         continue;
       }
 
-      if (NUMERIC_FIELDS.has(field)) {
+      if (entityType === 'property' && NUMERIC_FIELDS.has(field)) {
         const numeric = Number(rawValue.replace(/[^0-9.-]/g, ''));
         if (Number.isNaN(numeric)) {
           validationErrors.push(`${field}: "${rawValue}" is not a number`);
-          property[field] = null;
+          record[field] = null;
         } else {
-          property[field] = numeric;
+          record[field] = numeric;
         }
-      } else if (field === 'type' && !PROPERTY_TYPES.has(rawValue)) {
+      } else if (entityType === 'property' && field === 'type' && !PROPERTY_TYPES.has(rawValue)) {
         validationErrors.push(`type: "${rawValue}" is not a recognized property type`);
-        property[field] = rawValue;
-      } else if (field === 'owner_type' && !OWNER_TYPES.has(rawValue)) {
+        record[field] = rawValue;
+      } else if (entityType === 'property' && field === 'owner_type' && !OWNER_TYPES.has(rawValue)) {
         validationErrors.push(`owner_type: "${rawValue}" is not a recognized owner type`);
-        property[field] = rawValue;
+        record[field] = rawValue;
       } else {
-        property[field] = rawValue;
+        // contact.type is preserved as given, no enum check -- see Context.
+        record[field] = rawValue;
       }
     }
 
     if (validationErrors.length > 0) errorCount += 1;
-    property.validation_errors = validationErrors;
-    return property;
+    record.validation_errors = validationErrors;
+    return record;
   });
 
   return { sampleProperties, errorCount };

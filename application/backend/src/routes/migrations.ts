@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
+import type { MultipartFile } from '@fastify/multipart';
 import { requireMigrationAccess } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { parseCsv } from '../lib/csv.js';
 import { directMatchHeaders } from '../lib/mapping.js';
-import { transformSample, type MappingEntry } from '../lib/transform.js';
+import { transformSample, type EntityType, type MappingEntry } from '../lib/transform.js';
 import { sendImportSummaryEmail } from '../lib/email.js';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -12,12 +13,39 @@ const SAMPLE_ROW_COUNT = 3;
 const PREVIEW_ROW_COUNT = 5;
 const ROLLBACK_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// Columns properties.NOT NULL requires that transformSample doesn't already
-// surface a validation error for when unmapped (transformSample only
+// Columns properties/contacts NOT NULL requires that transformSample doesn't
+// already surface a validation error for when unmapped (transformSample only
 // validates fields that ARE mapped -- a field missing from the mapping
 // entirely produces no error, but would still fail the DB's NOT NULL check
 // with a raw, unhelpful Postgres error instead of a per-row message).
 const REQUIRED_PROPERTY_FIELDS = ['title', 'type', 'owner_type'] as const;
+const REQUIRED_CONTACT_FIELDS = ['name', 'type'] as const;
+
+// tb-migration-contacts-001: which table a migration writes into, and which
+// per-row tracking table records success/error, keyed by entity_type. Both
+// tables follow the same shape (see imported_contacts' comment).
+const ENTITY_CONFIG: Record<
+  EntityType,
+  {
+    targetTable: 'properties' | 'contacts';
+    trackingTable: 'imported_properties' | 'imported_contacts';
+    trackingIdColumn: 'property_id' | 'contact_id';
+    requiredFields: readonly string[];
+  }
+> = {
+  property: {
+    targetTable: 'properties',
+    trackingTable: 'imported_properties',
+    trackingIdColumn: 'property_id',
+    requiredFields: REQUIRED_PROPERTY_FIELDS,
+  },
+  contact: {
+    targetTable: 'contacts',
+    trackingTable: 'imported_contacts',
+    trackingIdColumn: 'contact_id',
+    requiredFields: REQUIRED_CONTACT_FIELDS,
+  },
+};
 
 type MigrationTempFileRow = {
   id: string;
@@ -26,6 +54,7 @@ type MigrationTempFileRow = {
   raw_content: string;
   row_count: number;
   expires_at: string;
+  entity_type: EntityType;
 };
 
 type ConfirmedMigrationTempFileRow = MigrationTempFileRow & {
@@ -38,6 +67,22 @@ function isExpired(expiresAt: string): boolean {
   return new Date(expiresAt).getTime() < Date.now();
 }
 
+// entity_type travels as a plain form field alongside the file in the same
+// multipart upload -- @fastify/multipart's request.file() collects value
+// fields it sees before the file part into file.fields, so the frontend must
+// append entity_type ahead of the file in its FormData. Missing entirely
+// means a pre-existing (legacy) caller that predates contacts -- default to
+// 'property' rather than reject. Anything else explicit and invalid is a
+// real client bug, not a scenario to silently paper over.
+function resolveEntityType(file: MultipartFile): EntityType | null {
+  const field = file.fields.entity_type;
+  const entry = Array.isArray(field) ? field[0] : field;
+  if (!entry || entry.type !== 'field') return 'property';
+  const raw = String(entry.value);
+  if (raw === 'property' || raw === 'contact') return raw;
+  return null;
+}
+
 export async function registerMigrationRoutes(app: FastifyInstance) {
   app.post('/migrations/upload', { preHandler: requireMigrationAccess }, async (request, reply) => {
     const file = await request.file({ limits: { fileSize: MAX_FILE_SIZE_BYTES } });
@@ -46,6 +91,11 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
     }
     if (!file.filename.toLowerCase().endsWith('.csv')) {
       return reply.status(400).send({ error: 'Only CSV files are supported for v1' });
+    }
+
+    const entityType = resolveEntityType(file);
+    if (entityType === null) {
+      return reply.status(400).send({ error: 'entity_type must be "property" or "contact"' });
     }
 
     const buffer = await file.toBuffer();
@@ -80,6 +130,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         headers: parsed.headers,
         sample_rows: parsed.rows.slice(0, SAMPLE_ROW_COUNT),
         row_count: parsed.rows.length,
+        entity_type: entityType,
         created_by: request.user!.id,
       })
       .select('id, filename, expires_at')
@@ -96,6 +147,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
       rows_detected: parsed.rows.length,
       columns: parsed.headers,
       status: 'uploaded',
+      entity_type: entityType,
       expires_at: data.expires_at,
     };
   });
@@ -106,7 +158,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { data: row, error } = await supabaseAdmin
         .from('migration_temp_files')
-        .select('id, headers, sample_rows, raw_content, row_count, expires_at')
+        .select('id, headers, sample_rows, raw_content, row_count, expires_at, entity_type')
         .eq('id', request.params.fileId)
         .eq('tenant_id', request.user!.tenantId)
         .single<MigrationTempFileRow>();
@@ -115,7 +167,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'File not found or expired — please re-upload' });
       }
 
-      const result = directMatchHeaders(row.headers);
+      const result = directMatchHeaders(row.headers, row.entity_type);
 
       const { error: updateError } = await supabaseAdmin
         .from('migration_temp_files')
@@ -147,7 +199,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
 
       const { data: row, error } = await supabaseAdmin
         .from('migration_temp_files')
-        .select('id, headers, sample_rows, raw_content, row_count, expires_at')
+        .select('id, headers, sample_rows, raw_content, row_count, expires_at, entity_type')
         .eq('id', request.params.fileId)
         .eq('tenant_id', request.user!.tenantId)
         .single<MigrationTempFileRow>();
@@ -157,7 +209,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
       }
 
       const { rows } = parseCsv(row.raw_content);
-      const { sampleProperties, errorCount } = transformSample(rows.slice(0, PREVIEW_ROW_COUNT), mappings);
+      const { sampleProperties, errorCount } = transformSample(rows.slice(0, PREVIEW_ROW_COUNT), mappings, row.entity_type);
 
       const { error: updateError } = await supabaseAdmin
         .from('migration_temp_files')
@@ -191,7 +243,9 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { data: row, error } = await supabaseAdmin
         .from('migration_temp_files')
-        .select('id, headers, sample_rows, raw_content, row_count, expires_at, filename, status, user_confirmed_mappings')
+        .select(
+          'id, headers, sample_rows, raw_content, row_count, expires_at, filename, status, user_confirmed_mappings, entity_type',
+        )
         .eq('id', request.params.fileId)
         .eq('tenant_id', request.user!.tenantId)
         .single<ConfirmedMigrationTempFileRow>();
@@ -205,8 +259,9 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         });
       }
 
+      const config = ENTITY_CONFIG[row.entity_type];
       const { rows } = parseCsv(row.raw_content);
-      const { sampleProperties: transformed } = transformSample(rows, row.user_confirmed_mappings);
+      const { sampleProperties: transformed } = transformSample(rows, row.user_confirmed_mappings, row.entity_type);
 
       const { data: batch, error: batchError } = await supabaseAdmin
         .from('import_batches')
@@ -216,6 +271,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           filename: row.filename,
           total_rows: row.row_count,
           mapping_config: row.user_confirmed_mappings,
+          entity_type: row.entity_type,
           rollback_deadline: new Date(Date.now() + ROLLBACK_WINDOW_MS).toISOString(),
           created_by: request.user!.id,
         })
@@ -236,14 +292,14 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           validation_errors: string[];
         };
         const originalRow = rows[row_number - 1];
-        const missingField = REQUIRED_PROPERTY_FIELDS.find((field) => mappedData[field] == null);
+        const missingField = config.requiredFields.find((field) => mappedData[field] == null);
 
         if (validation_errors.length > 0 || missingField) {
           failCount += 1;
           const errorMessage = missingField
             ? [...validation_errors, `Missing required field: ${missingField}`].join('; ')
             : validation_errors.join('; ');
-          await supabaseAdmin.from('imported_properties').insert({
+          await supabaseAdmin.from(config.trackingTable).insert({
             batch_id: batch.id,
             original_row: originalRow,
             mapped_data: mappedData,
@@ -253,29 +309,29 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           continue;
         }
 
-        const { data: property, error: propertyError } = await supabaseAdmin
-          .from('properties')
+        const { data: record, error: recordError } = await supabaseAdmin
+          .from(config.targetTable)
           .insert({ ...mappedData, tenant_id: request.user!.tenantId })
           .select('id')
           .single();
 
-        if (propertyError || !property) {
+        if (recordError || !record) {
           failCount += 1;
-          request.log.error(propertyError);
-          await supabaseAdmin.from('imported_properties').insert({
+          request.log.error(recordError);
+          await supabaseAdmin.from(config.trackingTable).insert({
             batch_id: batch.id,
             original_row: originalRow,
             mapped_data: mappedData,
             status: 'error',
-            error_message: propertyError?.message ?? 'Could not create property',
+            error_message: recordError?.message ?? `Could not create ${row.entity_type}`,
           });
           continue;
         }
 
         successCount += 1;
-        await supabaseAdmin.from('imported_properties').insert({
+        await supabaseAdmin.from(config.trackingTable).insert({
           batch_id: batch.id,
-          property_id: property.id,
+          [config.trackingIdColumn]: record.id,
           original_row: originalRow,
           mapped_data: mappedData,
           status: 'success',
@@ -325,17 +381,26 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { data: batch, error } = await supabaseAdmin
         .from('import_batches')
-        .select('id, filename, status, total_rows, successful_imports, failed_rows, rollback_deadline')
+        .select('id, filename, status, total_rows, successful_imports, failed_rows, rollback_deadline, entity_type')
         .eq('id', request.params.batchId)
         .eq('tenant_id', request.user!.tenantId)
-        .single();
+        .single<{
+          id: string;
+          filename: string;
+          status: string;
+          total_rows: number;
+          successful_imports: number;
+          failed_rows: number;
+          rollback_deadline: string;
+          entity_type: EntityType;
+        }>();
 
       if (error || !batch) {
         return reply.status(404).send({ error: 'Import batch not found' });
       }
 
       const { data: failedRows, error: failedRowsError } = await supabaseAdmin
-        .from('imported_properties')
+        .from(ENTITY_CONFIG[batch.entity_type].trackingTable)
         .select('original_row, error_message')
         .eq('batch_id', batch.id)
         .eq('status', 'error');

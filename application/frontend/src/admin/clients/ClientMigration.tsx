@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { FileUploadDropzone } from '@/components/FileUploadDropzone';
-import { MappingReviewTable } from '@/components/MappingReviewTable';
+import { MappingReviewTable, PROPERTY_FIELD_OPTIONS, CONTACT_FIELD_OPTIONS } from '@/components/MappingReviewTable';
 import { PreviewTable } from '@/components/PreviewTable';
 import { PropertyCard } from '@/components/PropertyCard';
+import { ContactCard } from '@/components/ContactCard';
 import { ConfirmImportModal } from '@/components/ConfirmImportModal';
 import { ImportBatchDetail } from '@/components/ImportBatchDetail';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import {
   previewMappings,
   uploadCsv,
   type BatchDetail,
+  type EntityType,
   type FieldMapping,
   type PreviewProperty,
 } from '@/lib/migrationsApi';
@@ -35,8 +37,14 @@ type Props = {
 // existed to stop an expired *client* self-servicing further action: it
 // doesn't apply to an operator acting on the client's behalf, see
 // requireMigrationAccess's comment in the backend.
+//
+// tb-migration-contacts-001: a migration now targets one of two entities
+// (properties or contacts), picked before upload -- everything downstream
+// (mapping field options, card rendering, dropzone label) branches on that
+// choice, threaded through as `entityType`.
 export function ClientMigration({ session }: Props) {
   const { tenantId } = useParams<{ tenantId: string }>();
+  const [entityType, setEntityType] = useState<EntityType | null>(null);
   const [step, setStep] = useState<Step>('upload');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,10 +65,11 @@ export function ClientMigration({ session }: Props) {
   }
 
   async function handleFileSelected(file: File) {
+    if (!entityType) return;
     setError(null);
     setBusy(true);
     try {
-      const uploaded = await uploadCsv(accessToken, file, tenantId);
+      const uploaded = await uploadCsv(accessToken, file, entityType, tenantId);
       setFileId(uploaded.file_id);
       const analyzed = await analyzeMappings(accessToken, uploaded.file_id, tenantId);
       setMappings(analyzed.mappings);
@@ -111,6 +120,7 @@ export function ClientMigration({ session }: Props) {
   }
 
   function handleStartOver() {
+    setEntityType(null);
     setStep('upload');
     setFileId(null);
     setMappings([]);
@@ -119,10 +129,17 @@ export function ClientMigration({ session }: Props) {
     setError(null);
   }
 
+  const heading =
+    step === 'upload' && !entityType
+      ? 'Migrate client data from CSV'
+      : entityType === 'contact'
+        ? 'Migrate contacts from CSV'
+        : 'Migrate properties from CSV';
+
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Migrate properties from CSV</h1>
+        <h1 className="text-2xl font-semibold">{heading}</h1>
         <Button asChild variant="outline" size="sm">
           <Link to="/admin">Back to clients</Link>
         </Button>
@@ -130,9 +147,23 @@ export function ClientMigration({ session }: Props) {
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       {busy && <p className="mt-2 text-sm text-muted-foreground">Working…</p>}
 
-      {step === 'upload' && (
+      {step === 'upload' && !entityType && (
         <div className="mt-4">
-          <FileUploadDropzone onFileSelected={handleFileSelected} disabled={busy} />
+          <p className="text-sm text-muted-foreground">What are you migrating for this client?</p>
+          <div className="mt-2 flex gap-2">
+            <Button onClick={() => setEntityType('property')}>Properties</Button>
+            <Button onClick={() => setEntityType('contact')}>Contacts</Button>
+          </div>
+        </div>
+      )}
+
+      {step === 'upload' && entityType && (
+        <div className="mt-4">
+          <FileUploadDropzone
+            onFileSelected={handleFileSelected}
+            disabled={busy}
+            label={entityType === 'contact' ? 'contacts' : 'property'}
+          />
         </div>
       )}
 
@@ -140,7 +171,11 @@ export function ClientMigration({ session }: Props) {
         <div className="mt-4">
           <h2 className="text-lg font-semibold">Review the mappings</h2>
           <div className="mt-2">
-            <MappingReviewTable mappings={mappings} onChange={setMappings} />
+            <MappingReviewTable
+              mappings={mappings}
+              fieldOptions={entityType === 'contact' ? CONTACT_FIELD_OPTIONS : PROPERTY_FIELD_OPTIONS}
+              onChange={setMappings}
+            />
           </div>
           <div className="mt-3 flex gap-2">
             <Button onClick={handleGeneratePreview} disabled={busy}>
@@ -163,9 +198,13 @@ export function ClientMigration({ session }: Props) {
           />
           <h3 className="mt-6 mb-2 text-lg font-semibold">Card view</h3>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {previewProperties.map((property) => (
-              <PropertyCard key={property.row_number} property={property} />
-            ))}
+            {previewProperties.map((property) =>
+              entityType === 'contact' ? (
+                <ContactCard key={property.row_number} contact={property} />
+              ) : (
+                <PropertyCard key={property.row_number} property={property} />
+              ),
+            )}
           </div>
           <ConfirmImportModal
             totalRows={totalRows}

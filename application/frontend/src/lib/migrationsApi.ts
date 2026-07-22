@@ -1,5 +1,9 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
+// tb-migration-contacts-001: which entity a migration writes into. Threaded
+// through every call so upload/analyze/preview/import all agree on it.
+export type EntityType = 'property' | 'contact';
+
 export type FieldMapping = {
   csv_column: string;
   residoro_field: string;
@@ -51,8 +55,17 @@ function withTenant(path: string, tenantId?: string): string {
   return tenantId ? `${BACKEND_URL}${path}?tenant_id=${encodeURIComponent(tenantId)}` : `${BACKEND_URL}${path}`;
 }
 
-export async function uploadCsv(accessToken: string, file: File, tenantId?: string): Promise<UploadResult> {
+export async function uploadCsv(
+  accessToken: string,
+  file: File,
+  entityType: EntityType,
+  tenantId?: string,
+): Promise<UploadResult> {
   const formData = new FormData();
+  // entity_type must be appended before file: the backend reads it off
+  // @fastify/multipart's file.fields, which only captures fields seen before
+  // the file part in the stream.
+  formData.append('entity_type', entityType);
   formData.append('file', file);
 
   const response = await fetch(withTenant('/migrations/upload', tenantId), {

@@ -1,8 +1,9 @@
 import type { FieldMapping } from '../lib/migrationsApi';
 
-// Mirrors the backend's TARGET_FIELDS (application/backend/src/lib/transform.ts) —
-// the real `properties` columns, per DD-002.
-const TARGET_FIELD_OPTIONS = [
+// Mirrors the backend's PROPERTY_FIELDS/CONTACT_FIELDS
+// (application/backend/src/lib/transform.ts) -- the real target columns per
+// entity, per DD-002 and tb-migration-contacts-001.
+export const PROPERTY_FIELD_OPTIONS = [
   'unmapped',
   'title',
   'price',
@@ -18,12 +19,15 @@ const TARGET_FIELD_OPTIONS = [
   'parking_slots',
 ];
 
+export const CONTACT_FIELD_OPTIONS = ['unmapped', 'name', 'type', 'email', 'phone', 'company', 'notes'];
+
 type Props = {
   mappings: FieldMapping[];
+  fieldOptions: string[];
   onChange: (mappings: FieldMapping[]) => void;
 };
 
-export function MappingReviewTable({ mappings, onChange }: Props) {
+export function MappingReviewTable({ mappings, fieldOptions, onChange }: Props) {
   function updateMapping(index: number, residoro_field: string) {
     const next = mappings.slice();
     next[index] = { ...next[index], residoro_field };
@@ -48,7 +52,7 @@ export function MappingReviewTable({ mappings, onChange }: Props) {
                 onChange={(e) => updateMapping(index, e.target.value)}
                 className="rounded-md border border-input px-2 py-1 text-sm"
               >
-                {TARGET_FIELD_OPTIONS.map((field) => (
+                {fieldOptions.map((field) => (
                   <option key={field} value={field}>
                     {field}
                   </option>
