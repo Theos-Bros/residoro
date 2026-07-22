@@ -21,6 +21,17 @@ export type NewClientInput = {
   contract_end_date: string;
 };
 
+export type TrainingSession = {
+  id: string;
+  workspace_id: string;
+  brokerage_name: string;
+  session_number: 1 | 2;
+  scheduled_date: string;
+  status: 'scheduled' | 'completed' | 'missed';
+  completed_at: string | null;
+  overdue: boolean;
+};
+
 // Returns null (rather than throwing) for a non-operator/expired session --
 // callers use this to decide whether to render the admin dashboard or
 // redirect away, not to distinguish *why* it failed.
@@ -78,6 +89,46 @@ export async function extendContract(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ contract_end_date: contractEndDate }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function scheduleTraining(
+  accessToken: string,
+  workspaceId: string,
+  session1Date: string,
+  session2Date: string,
+): Promise<{ workspace_id: string; sessions: unknown[] }> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/training`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ session_1_date: session1Date, session_2_date: session2Date }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function updateTrainingStatus(
+  accessToken: string,
+  sessionId: string,
+  status: 'completed' | 'missed',
+): Promise<{ id: string; status: string; completed_at: string | null }> {
+  const response = await fetch(`${BACKEND_URL}/admin/training/${sessionId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function fetchTrainingOverview(accessToken: string): Promise<{ sessions: TrainingSession[] }> {
+  const response = await fetch(`${BACKEND_URL}/admin/training`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);
 }

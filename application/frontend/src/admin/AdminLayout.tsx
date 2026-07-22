@@ -16,9 +16,12 @@ export function AdminLayout() {
         </Button>
       </header>
       <div className="flex flex-1">
-        <nav className="w-56 border-r p-4">
+        <nav className="w-56 border-r p-4 flex flex-col gap-2">
           <Link to="/admin" className="text-sm font-medium">
             Clients
+          </Link>
+          <Link to="/admin/training" className="text-sm font-medium">
+            Training
           </Link>
         </nav>
         <main className="flex-1 p-6">

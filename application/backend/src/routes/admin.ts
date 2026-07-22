@@ -11,6 +11,15 @@ type NewClientBody = {
   contract_end_date?: string;
 };
 
+type TrainingScheduleBody = {
+  session_1_date?: string;
+  session_2_date?: string;
+};
+
+type TrainingStatusBody = {
+  status?: string;
+};
+
 export async function registerAdminRoutes(app: FastifyInstance) {
   // Smallest end-to-end proof of the operator auth path: token -> profile
   // lookup -> operator check -> response. The frontend calls this right
@@ -164,4 +173,116 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       return { workspace_id: data.id, contract_end_date: data.contract_end_date };
     },
   );
+
+  // tb-client-lifecycle-training-001: record/reschedule a client's two
+  // training session dates. Upserts both rows in one call rather than two
+  // separate endpoints, since the doc's acceptance criteria treats "record
+  // both dates" as one operator action. reminder_sent_at resets to null on
+  // every call (including a no-op resubmission) so a rescheduled session is
+  // always eligible for a fresh reminder -- mirrors contract-expiry's
+  // renewal-clears-warning-flags behavior.
+  app.post<{ Params: { id: string }; Body: TrainingScheduleBody }>(
+    '/admin/clients/:id/training',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { session_1_date, session_2_date } = request.body ?? {};
+
+      if (!session_1_date || !session_2_date) {
+        return reply.status(400).send({ error: 'session_1_date and session_2_date are required' });
+      }
+      if (Number.isNaN(new Date(session_1_date).getTime()) || Number.isNaN(new Date(session_2_date).getTime())) {
+        return reply.status(400).send({ error: 'session_1_date and session_2_date must be valid dates' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('training_sessions')
+        .upsert(
+          [
+            { workspace_id: request.params.id, session_number: 1, scheduled_date: session_1_date, reminder_sent_at: null },
+            { workspace_id: request.params.id, session_number: 2, scheduled_date: session_2_date, reminder_sent_at: null },
+          ],
+          { onConflict: 'workspace_id,session_number' },
+        )
+        .select('id, session_number, scheduled_date, status');
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not save training sessions' });
+      }
+
+      return { workspace_id: request.params.id, sessions: data };
+    },
+  );
+
+  // tb-client-lifecycle-training-001: mark a session completed or missed.
+  app.patch<{ Params: { id: string }; Body: TrainingStatusBody }>(
+    '/admin/training/:id',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { status } = request.body ?? {};
+
+      if (status !== 'completed' && status !== 'missed') {
+        return reply.status(400).send({ error: "status must be 'completed' or 'missed'" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('training_sessions')
+        .update({ status, completed_at: status === 'completed' ? new Date().toISOString() : null })
+        .eq('id', request.params.id)
+        .select('id, status, completed_at')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not update training session status' });
+      }
+
+      return data;
+    },
+  );
+
+  // tb-client-lifecycle-training-001: cross-client training overview.
+  // status=upcoming|overdue filters; omitted returns every session so the
+  // frontend can render a single table with an overdue badge inline.
+  app.get<{ Querystring: { status?: string } }>('/admin/training', { preHandler: requireOperator }, async (request, reply) => {
+    const { data, error } = await supabaseAdmin
+      .from('training_sessions')
+      .select('id, workspace_id, session_number, scheduled_date, status, completed_at, workspaces(name)')
+      .order('scheduled_date', { ascending: true });
+
+    if (error || !data) {
+      request.log.error(error);
+      return reply.status(500).send({ error: 'Could not load training sessions' });
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const sessions = (data as unknown as Array<{
+      id: string;
+      workspace_id: string;
+      session_number: number;
+      scheduled_date: string;
+      status: string;
+      completed_at: string | null;
+      workspaces: { name: string } | null;
+    }>).map((s) => ({
+      id: s.id,
+      workspace_id: s.workspace_id,
+      brokerage_name: s.workspaces?.name ?? '',
+      session_number: s.session_number,
+      scheduled_date: s.scheduled_date,
+      status: s.status,
+      completed_at: s.completed_at,
+      overdue: s.status === 'scheduled' && s.scheduled_date < today,
+    }));
+
+    const { status } = request.query ?? {};
+    const filtered =
+      status === 'upcoming'
+        ? sessions.filter((s) => s.status === 'scheduled' && !s.overdue)
+        : status === 'overdue'
+          ? sessions.filter((s) => s.overdue)
+          : sessions;
+
+    return { sessions: filtered };
+  });
 }
