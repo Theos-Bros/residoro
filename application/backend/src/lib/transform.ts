@@ -1,3 +1,5 @@
+import { normalizePropertyType, classifyLocation } from './normalize.js';
+
 // Real `properties` columns (DD-002), not tb-migration-csv-001's illustrative
 // example fields (name/listed_date/listing_type/developer/condominium), which
 // don't exist on the actual schema. See the tb-migration-csv-001 plan's
@@ -56,6 +58,14 @@ const OWNER_TYPES = new Set(['developer', 'individual', 'company']);
 
 export type MappingEntry = { csv_column: string; residoro_field: string };
 
+// tb-migration-value-normalization-001: property type and city/province
+// values from a real CRM export don't come pre-shaped to Residoro's schema
+// (free text like "House" instead of the enum, a single "Location" column
+// mixing city and province names) -- these run only for entityType ===
+// 'property', same as the numeric/owner_type checks above. Currency-
+// prefixed prices are already handled by the numeric coercion above (see
+// this tracer bullet's Context) and needed no new code.
+
 function isTargetField(value: string, entityType: EntityType): value is TargetField {
   return (FIELDS_BY_ENTITY[entityType] as readonly string[]).includes(value);
 }
@@ -91,12 +101,21 @@ export function transformSample(rows: Record<string, string>[], mappings: Mappin
         } else {
           record[field] = numeric;
         }
-      } else if (entityType === 'property' && field === 'type' && !PROPERTY_TYPES.has(rawValue)) {
-        validationErrors.push(`type: "${rawValue}" is not a recognized property type`);
-        record[field] = rawValue;
+      } else if (entityType === 'property' && field === 'type') {
+        const normalized = normalizePropertyType(rawValue, PROPERTY_TYPES);
+        if (normalized.warning) validationErrors.push(normalized.warning);
+        record[field] = normalized.value;
       } else if (entityType === 'property' && field === 'owner_type' && !OWNER_TYPES.has(rawValue)) {
         validationErrors.push(`owner_type: "${rawValue}" is not a recognized owner type`);
         record[field] = rawValue;
+      } else if (entityType === 'property' && (field === 'city' || field === 'province')) {
+        const classification = classifyLocation(rawValue);
+        if (classification) {
+          record[classification.field] = classification.value;
+        } else {
+          validationErrors.push(`${field}: "${rawValue}" could not be classified as a known city or province`);
+          record[field] = rawValue;
+        }
       } else {
         // contact.type is preserved as given, no enum check -- see Context.
         record[field] = rawValue;
