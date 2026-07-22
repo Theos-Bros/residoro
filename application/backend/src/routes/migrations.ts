@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../lib/auth.js';
+import { requireMigrationAccess } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { parseCsv } from '../lib/csv.js';
 import { directMatchHeaders } from '../lib/mapping.js';
@@ -39,7 +39,7 @@ function isExpired(expiresAt: string): boolean {
 }
 
 export async function registerMigrationRoutes(app: FastifyInstance) {
-  app.post('/migrations/upload', { preHandler: requireAuth }, async (request, reply) => {
+  app.post('/migrations/upload', { preHandler: requireMigrationAccess }, async (request, reply) => {
     const file = await request.file({ limits: { fileSize: MAX_FILE_SIZE_BYTES } });
     if (!file) {
       return reply.status(400).send({ error: 'No file uploaded' });
@@ -102,7 +102,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { fileId: string } }>(
     '/migrations/:fileId/analyze',
-    { preHandler: requireAuth },
+    { preHandler: requireMigrationAccess },
     async (request, reply) => {
       const { data: row, error } = await supabaseAdmin
         .from('migration_temp_files')
@@ -138,7 +138,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { fileId: string }; Body: { mappings: MappingEntry[] } }>(
     '/migrations/:fileId/preview',
-    { preHandler: requireAuth },
+    { preHandler: requireMigrationAccess },
     async (request, reply) => {
       const { mappings } = request.body;
       if (!Array.isArray(mappings) || mappings.length === 0) {
@@ -187,7 +187,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
   // 10,000-row cap, revisit if that proves too slow in practice.
   app.post<{ Params: { fileId: string } }>(
     '/migrations/:fileId/import',
-    { preHandler: requireAuth },
+    { preHandler: requireMigrationAccess },
     async (request, reply) => {
       const { data: row, error } = await supabaseAdmin
         .from('migration_temp_files')
@@ -321,7 +321,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { batchId: string } }>(
     '/migrations/batches/:batchId',
-    { preHandler: requireAuth },
+    { preHandler: requireMigrationAccess },
     async (request, reply) => {
       const { data: batch, error } = await supabaseAdmin
         .from('import_batches')

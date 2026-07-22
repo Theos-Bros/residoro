@@ -13,35 +13,43 @@ export function PreviewTable({ properties, totalRows, totalValidationErrors }: P
 
   return (
     <div>
-      <p>
+      <p className="text-sm text-muted-foreground">
         Showing {properties.length} of {totalRows} rows.{' '}
         {totalValidationErrors > 0
           ? `${totalValidationErrors} row(s) in this preview have validation errors.`
           : 'No validation errors in this preview.'}
       </p>
-      <table border={1} cellPadding={6}>
-        <thead>
-          <tr>
-            <th>Row</th>
-            {columns.map((col) => (
-              <th key={col}>{col}</th>
-            ))}
-            <th>Errors</th>
-          </tr>
-        </thead>
-        <tbody>
-          {properties.map((property) => (
-            <tr key={property.row_number}>
-              <td>{property.row_number}</td>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-max border-collapse text-sm">
+          <thead>
+            <tr className="border-b text-left">
+              <th className="py-2 pr-4 font-medium">Row</th>
               {columns.map((col) => (
-                <td key={col}>{String(property[col] ?? '')}</td>
+                <th key={col} className="py-2 pr-4 font-medium">
+                  {col}
+                </th>
               ))}
-              <td>{property.validation_errors.join('; ')}</td>
+              <th className="py-2 pr-4 font-medium">Errors</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p>No data has been imported to Residoro yet — this is a preview only.</p>
+          </thead>
+          <tbody>
+            {properties.map((property) => (
+              <tr key={property.row_number} className="border-b">
+                <td className="py-2 pr-4">{property.row_number}</td>
+                {columns.map((col) => (
+                  <td key={col} className="py-2 pr-4">
+                    {String(property[col] ?? '')}
+                  </td>
+                ))}
+                <td className="py-2 pr-4 text-destructive">{property.validation_errors.join('; ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">
+        No data has been imported to Residoro yet — this is a preview only.
+      </p>
     </div>
   );
 }

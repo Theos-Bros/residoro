@@ -31,19 +31,23 @@ export function MappingReviewTable({ mappings, onChange }: Props) {
   }
 
   return (
-    <table border={1} cellPadding={6}>
+    <table className="w-full border-collapse text-sm">
       <thead>
-        <tr>
-          <th>CSV Column</th>
-          <th>Residoro Field</th>
+        <tr className="border-b text-left">
+          <th className="py-2 pr-4 font-medium">CSV Column</th>
+          <th className="py-2 pr-4 font-medium">Residoro Field</th>
         </tr>
       </thead>
       <tbody>
         {mappings.map((mapping, index) => (
-          <tr key={mapping.csv_column}>
-            <td>{mapping.csv_column}</td>
-            <td>
-              <select value={mapping.residoro_field} onChange={(e) => updateMapping(index, e.target.value)}>
+          <tr key={mapping.csv_column} className="border-b">
+            <td className="py-2 pr-4">{mapping.csv_column}</td>
+            <td className="py-2 pr-4">
+              <select
+                value={mapping.residoro_field}
+                onChange={(e) => updateMapping(index, e.target.value)}
+                className="rounded-md border border-input px-2 py-1 text-sm"
+              >
                 {TARGET_FIELD_OPTIONS.map((field) => (
                   <option key={field} value={field}>
                     {field}

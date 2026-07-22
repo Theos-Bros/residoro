@@ -8,7 +8,6 @@ import { useWorkspaceStatus } from './hooks/useWorkspaceStatus';
 import { exportProperties } from './lib/workspaceApi';
 import { AuthPage } from './pages/AuthPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
-import { MigrationPage } from './pages/MigrationPage';
 import { AdminApp } from './admin/AdminApp';
 import { ContractWarningBanner } from './components/ContractWarningBanner';
 import { ContractNotificationPanel } from './components/ContractNotificationPanel';
@@ -19,12 +18,16 @@ type BrokerageAppProps = {
   operatorStatus: OperatorStatus;
 };
 
-// The pre-existing brokerage flow, unchanged behavior-wise -- just now aware
-// that an operator session should redirect to /admin instead of rendering
-// MigrationPage (operators never touch this flow directly, per
-// cap-client-lifecycle-001). session/operatorStatus are computed once at
-// the App root (see below) and passed in, rather than each route
-// independently re-subscribing -- see useSupabaseSession's comment for why.
+// The pre-existing brokerage flow -- an operator session redirects to
+// /admin instead of rendering here. Migration used to render inline below
+// (MigrationPage) despite that redirect comment claiming operators drove it
+// -- they couldn't reach this route at all, and the backend had no way to
+// scope a migration to any tenant but the caller's own. Migration now lives
+// only in the admin dashboard, tenant-selected by the operator; see
+// tb-client-lifecycle-migration-execution-001. session/operatorStatus are
+// computed once at the App root (see below) and passed in, rather than each
+// route independently re-subscribing -- see useSupabaseSession's comment for
+// why.
 function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
   // Called unconditionally (Rules of Hooks) -- tolerates a null session
   // while loading/redirecting, since the early returns below happen after.
@@ -76,7 +79,6 @@ function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
         notifications={workspaceStatus?.notifications ?? []}
         onDismissed={refetchWorkspaceStatus}
       />
-      <MigrationPage session={session} readOnly={workspaceStatus !== null && workspaceStatus.access_state !== 'active'} />
     </div>
   );
 }

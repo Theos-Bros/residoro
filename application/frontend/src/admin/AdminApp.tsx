@@ -5,6 +5,7 @@ import { AuthPage } from '@/pages/AuthPage';
 import { AdminLayout } from './AdminLayout';
 import { ClientList } from './clients/ClientList';
 import { NewClientForm } from './clients/NewClientForm';
+import { ClientMigration } from './clients/ClientMigration';
 
 type AdminAppProps = {
   session: Session | null;
@@ -36,6 +37,7 @@ export function AdminApp({ session, loading, operatorStatus }: AdminAppProps) {
       <Route element={<AdminLayout />}>
         <Route index element={<ClientList session={session} />} />
         <Route path="clients/new" element={<NewClientForm session={session} />} />
+        <Route path="clients/:tenantId/migrate" element={<ClientMigration session={session} />} />
       </Route>
     </Routes>
   );

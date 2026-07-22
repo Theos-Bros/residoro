@@ -91,6 +91,7 @@ export function ClientList({ session }: Props) {
               <th className="py-2 pr-4 font-medium">Access</th>
               <th className="py-2 pr-4 font-medium">Invite status</th>
               <th className="py-2 pr-4 font-medium" />
+              <th className="py-2 pr-4 font-medium" />
             </tr>
           </thead>
           <tbody>
@@ -101,6 +102,11 @@ export function ClientList({ session }: Props) {
                 <td className="py-2 pr-4">{client.contract_end_date}</td>
                 <td className="py-2 pr-4">{ACCESS_STATE_LABEL[client.access_state]}</td>
                 <td className="py-2 pr-4 capitalize">{client.invite_status}</td>
+                <td className="py-2 pr-4">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/admin/clients/${client.workspace_id}/migrate`}>Migrate</Link>
+                  </Button>
+                </td>
                 <td className="py-2 pr-4">
                   {renewingId === client.workspace_id ? (
                     <div className="flex items-center gap-2">

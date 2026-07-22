@@ -25,22 +25,18 @@ export function FileUploadDropzone({ onFileSelected, disabled }: Props) {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
-      style={{
-        border: isDragging ? '2px solid #333' : '2px dashed #999',
-        padding: '2rem',
-        textAlign: 'center',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-      }}
+      className={`rounded-md border-2 p-8 text-center transition-colors ${
+        isDragging ? 'border-solid border-primary bg-accent' : 'border-dashed border-input'
+      } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-accent'}`}
     >
-      <p>Drag and drop your property CSV here, or click to choose a file.</p>
-      <p>Max 10 MB, up to 10,000 rows.</p>
+      <p className="text-sm text-foreground">Drag and drop your property CSV here, or click to choose a file.</p>
+      <p className="mt-1 text-xs text-muted-foreground">Max 10 MB, up to 10,000 rows.</p>
       <input
         ref={inputRef}
         type="file"
         accept=".csv"
         disabled={disabled}
-        style={{ display: 'none' }}
+        className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) onFileSelected(file);

@@ -34,7 +34,7 @@ type VerifiedProfile = {
 // access_state embedded via the tenant_id FK -- null for operators, who
 // aren't tenant-scoped). Replies and returns undefined on any failure so
 // callers can just check the return value.
-async function verifyBearerAndFetchProfile(
+export async function verifyBearerAndFetchProfile(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<VerifiedProfile | undefined> {
@@ -126,4 +126,39 @@ export async function requireOperator(request: FastifyRequest, reply: FastifyRep
   }
 
   request.operator = { id: profile.userId, role: 'operator' };
+}
+
+// tb-client-lifecycle-migration-execution-001: migration is the one flow both
+// an operator (acting on a client's behalf, per cap-client-lifecycle-001) and
+// a brokerage caller (legacy self-service, no longer reachable from the UI
+// but left working rather than deleted) can reach. requireAuth's caller's-
+// own-tenant-only assumption doesn't fit an operator, who has no tenant_id of
+// their own -- this resolves which tenant to scope to instead:
+// - operator: tenant_id must come from ?tenant_id= (the client the operator
+//   selected in the admin dashboard); never inferred, always explicit.
+//   access_state is deliberately NOT enforced for operators -- the
+//   active/read_only/blocked gate exists to stop an expired *client* from
+//   self-servicing further action, not to stop an operator's own on-behalf-of
+//   work.
+// - non-operator: identical to requireAuth -- own tenant_id, own
+//   access_state, any ?tenant_id= in the query string is ignored, so
+//   self-service scoping can't be overridden by a crafted request.
+// Re-running requireAuth for the non-operator branch costs one extra profile
+// fetch rather than duplicating its blocked/read_only logic here -- an
+// acceptable tracer-bullet tradeoff, not a hot path.
+export async function requireMigrationAccess(request: FastifyRequest, reply: FastifyReply) {
+  const profile = await verifyBearerAndFetchProfile(request, reply);
+  if (!profile) return;
+
+  if (profile.role === 'operator') {
+    const targetTenantId = (request.query as Record<string, string> | undefined)?.tenant_id;
+    if (!targetTenantId) {
+      reply.status(400).send({ error: 'tenant_id is required for operator-driven migration calls' });
+      return;
+    }
+    request.user = { id: profile.userId, tenantId: targetTenantId, role: 'operator', accessState: 'active' };
+    return;
+  }
+
+  await requireAuth(request, reply);
 }

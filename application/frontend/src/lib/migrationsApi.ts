@@ -43,11 +43,19 @@ async function parseJsonOrThrow(response: Response) {
   return body;
 }
 
-export async function uploadCsv(accessToken: string, file: File): Promise<UploadResult> {
+// tb-client-lifecycle-migration-execution-001: an operator passes the
+// client's tenant they selected in the admin dashboard; a brokerage caller
+// (legacy self-service path, no longer reachable from the UI) omits it and
+// is scoped to their own session tenant server-side, unaffected by this.
+function withTenant(path: string, tenantId?: string): string {
+  return tenantId ? `${BACKEND_URL}${path}?tenant_id=${encodeURIComponent(tenantId)}` : `${BACKEND_URL}${path}`;
+}
+
+export async function uploadCsv(accessToken: string, file: File, tenantId?: string): Promise<UploadResult> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${BACKEND_URL}/migrations/upload`, {
+  const response = await fetch(withTenant('/migrations/upload', tenantId), {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: formData,
@@ -55,8 +63,8 @@ export async function uploadCsv(accessToken: string, file: File): Promise<Upload
   return parseJsonOrThrow(response);
 }
 
-export async function analyzeMappings(accessToken: string, fileId: string): Promise<AnalyzeResult> {
-  const response = await fetch(`${BACKEND_URL}/migrations/${fileId}/analyze`, {
+export async function analyzeMappings(accessToken: string, fileId: string, tenantId?: string): Promise<AnalyzeResult> {
+  const response = await fetch(withTenant(`/migrations/${fileId}/analyze`, tenantId), {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -67,8 +75,9 @@ export async function previewMappings(
   accessToken: string,
   fileId: string,
   mappings: { csv_column: string; residoro_field: string }[],
+  tenantId?: string,
 ): Promise<PreviewResult> {
-  const response = await fetch(`${BACKEND_URL}/migrations/${fileId}/preview`, {
+  const response = await fetch(withTenant(`/migrations/${fileId}/preview`, tenantId), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -105,16 +114,16 @@ export type BatchDetail = {
 
 // tb-migration-preview-001: the confirm step tb-migration-csv-001 stubbed out
 // ("Importing into Residoro is not built yet") -- this is that build.
-export async function confirmImport(accessToken: string, fileId: string): Promise<ImportResult> {
-  const response = await fetch(`${BACKEND_URL}/migrations/${fileId}/import`, {
+export async function confirmImport(accessToken: string, fileId: string, tenantId?: string): Promise<ImportResult> {
+  const response = await fetch(withTenant(`/migrations/${fileId}/import`, tenantId), {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);
 }
 
-export async function fetchImportBatch(accessToken: string, batchId: string): Promise<BatchDetail> {
-  const response = await fetch(`${BACKEND_URL}/migrations/batches/${batchId}`, {
+export async function fetchImportBatch(accessToken: string, batchId: string, tenantId?: string): Promise<BatchDetail> {
+  const response = await fetch(withTenant(`/migrations/batches/${batchId}`, tenantId), {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);
