@@ -404,6 +404,12 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
 
+# Called by pg_cron via pg_net with a custom `Authorization: Bearer <vault secret>` header,
+# not a Supabase JWT -- platform JWT verification must stay off so the function's own
+# CRON_SECRET check (see index.ts) is what gates the call, not the platform's JWT check.
+[functions.contract-expiry-check]
+verify_jwt = false
+
 # pg-delta is the schema diff engine for db diff / db pull / db remote commit.
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]
