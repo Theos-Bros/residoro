@@ -4,12 +4,16 @@ import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const LISTING_TYPES = ['sale', 'rent'] as const;
 const STATUSES = ['active', 'withdrawn'] as const;
+const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
 
 type CreateListingBody = {
   property_id?: string;
   listing_type?: string;
   price?: number;
   price_currency?: string;
+  exclusivity?: string;
+  authority_starts_at?: string;
+  authority_expires_at?: string | null;
 };
 
 type UpdateListingStatusBody = {
@@ -39,7 +43,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   app.get('/listings', { preHandler: requireAuth }, async (request, reply) => {
     const { data, error } = await supabaseAdmin
       .from('listings')
-      .select('id, property_id, agent_id, listing_type, price, price_currency, status, created_at, properties(title)')
+      .select(
+        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, properties(title)',
+      )
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
 
@@ -55,6 +61,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       listing_type: string;
       price: number;
       price_currency: string;
+      exclusivity: string;
+      authority_starts_at: string;
+      authority_expires_at: string | null;
       status: string;
       created_at: string;
       properties: { title: string } | null;
@@ -66,6 +75,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       listing_type: l.listing_type,
       price: l.price,
       price_currency: l.price_currency,
+      exclusivity: l.exclusivity,
+      authority_starts_at: l.authority_starts_at,
+      authority_expires_at: l.authority_expires_at,
       status: l.status,
       created_at: l.created_at,
     }));
@@ -81,7 +93,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // "never trust tenant scoping from the body" precedent as every other
   // tenant-scoped write route in this codebase.
   app.post<{ Body: CreateListingBody }>('/listings', { preHandler: requireAuth }, async (request, reply) => {
-    const { property_id, listing_type, price, price_currency } = request.body ?? {};
+    const {
+      property_id,
+      listing_type,
+      price,
+      price_currency,
+      exclusivity,
+      authority_starts_at,
+      authority_expires_at,
+    } = request.body ?? {};
 
     if (!property_id || !listing_type || price === undefined || price === null) {
       return reply.status(400).send({ error: 'property_id, listing_type, and price are required' });
@@ -91,6 +111,30 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     }
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
       return reply.status(400).send({ error: 'price must be a positive number' });
+    }
+    if (exclusivity !== undefined && !EXCLUSIVITY_VALUES.includes(exclusivity as (typeof EXCLUSIVITY_VALUES)[number])) {
+      return reply.status(400).send({ error: "exclusivity must be 'exclusive' or 'open'" });
+    }
+
+    let startsAt: Date | undefined;
+    if (authority_starts_at !== undefined) {
+      startsAt = new Date(authority_starts_at);
+      if (Number.isNaN(startsAt.getTime())) {
+        return reply.status(400).send({ error: 'authority_starts_at must be a valid date' });
+      }
+    }
+
+    let expiresAt: Date | null | undefined;
+    if (authority_expires_at !== undefined && authority_expires_at !== null) {
+      expiresAt = new Date(authority_expires_at);
+      if (Number.isNaN(expiresAt.getTime())) {
+        return reply.status(400).send({ error: 'authority_expires_at must be a valid date' });
+      }
+      if (startsAt && expiresAt <= startsAt) {
+        return reply.status(400).send({ error: 'authority_expires_at must be after authority_starts_at' });
+      }
+    } else if (authority_expires_at === null) {
+      expiresAt = null;
     }
 
     const { data: property, error: propertyError } = await supabaseAdmin
@@ -117,8 +161,13 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         listing_type,
         price,
         price_currency: price_currency ?? 'PHP',
+        exclusivity: exclusivity ?? 'open',
+        ...(startsAt ? { authority_starts_at: startsAt.toISOString() } : {}),
+        ...(expiresAt !== undefined ? { authority_expires_at: expiresAt?.toISOString() ?? null } : {}),
       })
-      .select('id, property_id, listing_type, price, price_currency, status')
+      .select(
+        'id, property_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status',
+      )
       .single();
 
     if (listingError || !listing) {
@@ -144,7 +193,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         .update({ status })
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .select('id, status')
+        .select('id, property_id, status')
         .maybeSingle();
 
       if (error) {
@@ -153,6 +202,28 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       }
       if (!data) {
         return reply.status(404).send({ error: 'Listing not found in your workspace' });
+      }
+
+      // tb-listings-authority-001: activating a listing on a property that
+      // already has another active exclusive listing still succeeds -- soft
+      // warning only, never a block, per cap-listings-001 Decision #2.
+      if (status === 'active') {
+        const { data: conflicting, error: conflictError } = await supabaseAdmin
+          .from('listings')
+          .select('id')
+          .eq('tenant_id', request.user!.tenantId)
+          .eq('property_id', data.property_id)
+          .eq('status', 'active')
+          .eq('exclusivity', 'exclusive')
+          .neq('id', data.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (conflictError) {
+          request.log.error(conflictError);
+        } else if (conflicting) {
+          return { ...data, warning: 'This property already has an active exclusive listing.' };
+        }
       }
 
       return data;

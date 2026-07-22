@@ -20,6 +20,7 @@ const STATUS_LABEL: Record<Listing['status'], string> = {
 export function ListingsPage({ session }: Props) {
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   function reload() {
     fetchListings(session.access_token)
@@ -44,8 +45,10 @@ export function ListingsPage({ session }: Props) {
   }, [session.access_token]);
 
   async function handleStatus(listingId: string, status: 'active' | 'withdrawn') {
+    setWarning(null);
     try {
-      await updateListingStatus(session.access_token, listingId, status);
+      const result = await updateListingStatus(session.access_token, listingId, status);
+      if (result.warning) setWarning(result.warning);
       reload();
     } catch (err) {
       setError((err as Error).message);
@@ -57,6 +60,7 @@ export function ListingsPage({ session }: Props) {
       <h1>Listings</h1>
 
       {error && <p role="alert">{error}</p>}
+      {warning && <p role="alert">{warning}</p>}
       {!error && listings === null && <p>Loading…</p>}
       {listings?.length === 0 && <p>No listings yet — create one from the Properties page.</p>}
 
@@ -67,6 +71,8 @@ export function ListingsPage({ session }: Props) {
               <th>Property</th>
               <th>Type</th>
               <th>Price</th>
+              <th>Exclusivity</th>
+              <th>Authority to Sell/Lease</th>
               <th>Status</th>
               <th />
             </tr>
@@ -78,6 +84,14 @@ export function ListingsPage({ session }: Props) {
                 <td>{listing.listing_type}</td>
                 <td>
                   {listing.price_currency} {listing.price.toLocaleString()}
+                </td>
+                <td>{listing.exclusivity === 'exclusive' ? 'Exclusive' : 'Open'}</td>
+                <td>
+                  {new Date(listing.authority_starts_at).toLocaleDateString()}
+                  {' – '}
+                  {listing.authority_expires_at
+                    ? new Date(listing.authority_expires_at).toLocaleDateString()
+                    : 'open-ended'}
                 </td>
                 <td>{STATUS_LABEL[listing.status]}</td>
                 <td>

@@ -18,6 +18,9 @@ export function CreateListingForm({ session }: Props) {
   const { propertyId } = useParams<{ propertyId: string }>();
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [price, setPrice] = useState('');
+  const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
+  const [authorityStartsAt, setAuthorityStartsAt] = useState(() => new Date().toISOString().slice(0, 10));
+  const [authorityExpiresAt, setAuthorityExpiresAt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -38,6 +41,9 @@ export function CreateListingForm({ session }: Props) {
         property_id: propertyId!,
         listing_type: listingType,
         price: numericPrice,
+        exclusivity,
+        authority_starts_at: authorityStartsAt ? new Date(authorityStartsAt).toISOString() : undefined,
+        authority_expires_at: authorityExpiresAt ? new Date(authorityExpiresAt).toISOString() : null,
       });
       navigate('/properties', { replace: true });
     } catch (err) {
@@ -77,6 +83,44 @@ export function CreateListingForm({ session }: Props) {
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             required
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label htmlFor="exclusivity" className="text-sm font-medium">
+            Exclusivity
+          </label>
+          <select
+            id="exclusivity"
+            value={exclusivity}
+            onChange={(e) => setExclusivity(e.target.value as 'exclusive' | 'open')}
+            className={inputClass}
+          >
+            <option value="open">Open (non-exclusive)</option>
+            <option value="exclusive">Exclusive</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="authority_starts_at" className="text-sm font-medium">
+            Authority to Sell/Lease starts
+          </label>
+          <input
+            id="authority_starts_at"
+            type="date"
+            value={authorityStartsAt}
+            onChange={(e) => setAuthorityStartsAt(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label htmlFor="authority_expires_at" className="text-sm font-medium">
+            Authority to Sell/Lease ends (optional)
+          </label>
+          <input
+            id="authority_expires_at"
+            type="date"
+            value={authorityExpiresAt}
+            onChange={(e) => setAuthorityExpiresAt(e.target.value)}
             className={inputClass}
           />
         </div>

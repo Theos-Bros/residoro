@@ -16,6 +16,9 @@ export type Listing = {
   listing_type: 'sale' | 'rent';
   price: number;
   price_currency: string;
+  exclusivity: 'exclusive' | 'open';
+  authority_starts_at: string;
+  authority_expires_at: string | null;
   status: 'draft' | 'active' | 'withdrawn';
   created_at: string;
 };
@@ -44,7 +47,14 @@ export async function fetchListings(accessToken: string): Promise<{ listings: Li
 
 export async function createListing(
   accessToken: string,
-  input: { property_id: string; listing_type: 'sale' | 'rent'; price: number },
+  input: {
+    property_id: string;
+    listing_type: 'sale' | 'rent';
+    price: number;
+    exclusivity?: 'exclusive' | 'open';
+    authority_starts_at?: string;
+    authority_expires_at?: string | null;
+  },
 ): Promise<Listing> {
   const response = await fetch(`${BACKEND_URL}/listings`, {
     method: 'POST',
@@ -61,7 +71,7 @@ export async function updateListingStatus(
   accessToken: string,
   listingId: string,
   status: 'active' | 'withdrawn',
-): Promise<{ id: string; status: string }> {
+): Promise<{ id: string; status: string; warning?: string }> {
   const response = await fetch(`${BACKEND_URL}/listings/${listingId}`, {
     method: 'PATCH',
     headers: {
