@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { useOperatorStatus, type OperatorStatus } from './hooks/useOperatorStatus';
 import { useWorkspaceStatus } from './hooks/useWorkspaceStatus';
-import { exportProperties } from './lib/workspaceApi';
+import { exportData } from './lib/workspaceApi';
 import { AuthPage } from './pages/AuthPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { AdminApp } from './admin/AdminApp';
@@ -55,7 +55,7 @@ function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
     setExportError(null);
     setExporting(true);
     try {
-      await exportProperties(session.access_token);
+      await exportData(session.access_token);
     } catch (err) {
       setExportError((err as Error).message);
     } finally {

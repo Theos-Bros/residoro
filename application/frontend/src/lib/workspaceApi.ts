@@ -43,7 +43,10 @@ export async function dismissNotification(accessToken: string, id: string): Prom
 // tb-client-lifecycle-export-001: triggers the browser's native download flow
 // for a fetch response (needed since the file requires an Authorization
 // header, so a plain <a href> to the endpoint won't carry credentials).
-export async function exportProperties(accessToken: string): Promise<void> {
+// tb-client-lifecycle-export-contacts-001: the response is now a zip
+// (properties.csv + contacts.csv) instead of a bare properties CSV -- the
+// download mechanics themselves are unchanged.
+export async function exportData(accessToken: string): Promise<void> {
   const response = await fetch(`${BACKEND_URL}/export`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -55,7 +58,7 @@ export async function exportProperties(accessToken: string): Promise<void> {
 
   const disposition = response.headers.get('Content-Disposition') ?? '';
   const filenameMatch = disposition.match(/filename="([^"]+)"/);
-  const filename = filenameMatch?.[1] ?? 'residoro-properties-export.csv';
+  const filename = filenameMatch?.[1] ?? 'residoro-export.zip';
 
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
