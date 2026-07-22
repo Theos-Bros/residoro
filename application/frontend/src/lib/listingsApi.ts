@@ -123,3 +123,78 @@ export async function updateListingStatus(
   });
   return parseJsonOrThrow(response);
 }
+
+export const DOCKET_LISTING_FIELDS = [
+  'listing_type',
+  'price',
+  'price_currency',
+  'exclusivity',
+  'authority_starts_at',
+  'authority_expires_at',
+  'status',
+] as const;
+
+export const DOCKET_PROPERTY_FIELDS = [
+  'title',
+  'type',
+  'address',
+  'city',
+  'province',
+  'floor_area_sqm',
+  'lot_area_sqm',
+  'bedrooms',
+  'bathrooms',
+  'parking_slots',
+] as const;
+
+export type DocketField = (typeof DOCKET_LISTING_FIELDS)[number] | (typeof DOCKET_PROPERTY_FIELDS)[number];
+
+export type CreatedDocket = {
+  id: string;
+  source_listing_id: string;
+  shared_with: string;
+  included_fields: DocketField[];
+  status: 'active' | 'revoked';
+  created_at: string;
+};
+
+export type ReceivedDocket = {
+  id: string;
+  shared_by_handle: string | null;
+  fields: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function createDocket(
+  accessToken: string,
+  input: { listing_id: string; handle: string; included_fields: DocketField[] },
+): Promise<CreatedDocket> {
+  const response = await fetch(`${BACKEND_URL}/listing-dockets`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function fetchReceivedDockets(accessToken: string): Promise<{ dockets: ReceivedDocket[] }> {
+  const response = await fetch(`${BACKEND_URL}/listing-dockets/received`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function revokeDocket(accessToken: string, docketId: string): Promise<{ id: string; status: string }> {
+  const response = await fetch(`${BACKEND_URL}/listing-dockets/${docketId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ status: 'revoked' }),
+  });
+  return parseJsonOrThrow(response);
+}

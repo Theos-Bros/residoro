@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchListings, updateListingStatus, type Listing } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
@@ -105,6 +106,9 @@ export function ListingsPage({ session }: Props) {
                       Withdraw
                     </Button>
                   )}
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/listings/${listing.id}/share`}>Share as docket</Link>
+                  </Button>
                 </td>
               </tr>
             ))}

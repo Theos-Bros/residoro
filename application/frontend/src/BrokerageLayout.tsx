@@ -54,6 +54,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
       <header>
         <span>{session.user.email}</span>
         <Link to="/properties">Properties</Link>
+        <Link to="/shared-with-me">Shared with me</Link>
         <button onClick={handleExport} disabled={exporting}>
           {exporting ? 'Exporting…' : 'Export My Data'}
         </button>
