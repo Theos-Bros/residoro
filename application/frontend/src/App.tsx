@@ -1,22 +1,12 @@
-import type { Session } from '@supabase/supabase-js';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { supabase } from './lib/supabaseClient';
-import { useState } from 'react';
 import { useSupabaseSession } from './hooks/useSupabaseSession';
-import { useOperatorStatus, type OperatorStatus } from './hooks/useOperatorStatus';
-import { useWorkspaceStatus } from './hooks/useWorkspaceStatus';
-import { exportData } from './lib/workspaceApi';
-import { AuthPage } from './pages/AuthPage';
+import { useOperatorStatus } from './hooks/useOperatorStatus';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
+import { PropertiesListPage } from './pages/PropertiesListPage';
+import { CreateListingForm } from './pages/CreateListingForm';
+import { ListingsPage } from './pages/ListingsPage';
 import { AdminApp } from './admin/AdminApp';
-import { ContractWarningBanner } from './components/ContractWarningBanner';
-import { ContractNotificationPanel } from './components/ContractNotificationPanel';
-
-type BrokerageAppProps = {
-  session: Session | null;
-  loading: boolean;
-  operatorStatus: OperatorStatus;
-};
+import { BrokerageLayout } from './BrokerageLayout';
 
 // The pre-existing brokerage flow -- an operator session redirects to
 // /admin instead of rendering here. Migration used to render inline below
@@ -24,75 +14,31 @@ type BrokerageAppProps = {
 // -- they couldn't reach this route at all, and the backend had no way to
 // scope a migration to any tenant but the caller's own. Migration now lives
 // only in the admin dashboard, tenant-selected by the operator; see
-// tb-client-lifecycle-migration-execution-001. session/operatorStatus are
-// computed once at the App root (see below) and passed in, rather than each
-// route independently re-subscribing -- see useSupabaseSession's comment for
-// why.
-function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
-  // Called unconditionally (Rules of Hooks) -- tolerates a null session
-  // while loading/redirecting, since the early returns below happen after.
-  const { status: workspaceStatus, refetch: refetchWorkspaceStatus } = useWorkspaceStatus(session);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-
-  if (loading || (session && operatorStatus === 'loading')) {
-    return null;
-  }
-
-  if (!session) {
-    return <AuthPage />;
-  }
-
-  if (operatorStatus === 'operator') {
-    return <Navigate to="/admin" replace />;
-  }
-
-  // tb-client-lifecycle-export-001: available whenever the session/backend
-  // calls succeed at all -- 'blocked' workspaces already fail every
-  // requireAuth-gated call (including this one), so no extra access_state
-  // check is needed here; the button just reflects whatever state is real.
-  const handleExport = async () => {
-    setExportError(null);
-    setExporting(true);
-    try {
-      await exportData(session.access_token);
-    } catch (err) {
-      setExportError((err as Error).message);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  return (
-    <div>
-      <header>
-        <span>{session.user.email}</span>
-        <button onClick={handleExport} disabled={exporting}>
-          {exporting ? 'Exporting…' : 'Export My Data'}
-        </button>
-        {exportError && <span role="alert">{exportError}</span>}
-        <button onClick={() => supabase.auth.signOut()}>Sign out</button>
-      </header>
-      <ContractWarningBanner status={workspaceStatus} />
-      <ContractNotificationPanel
-        session={session}
-        notifications={workspaceStatus?.notifications ?? []}
-        onDismissed={refetchWorkspaceStatus}
-      />
-    </div>
-  );
-}
-
+// tb-client-lifecycle-migration-execution-001.
+//
+// tb-listings-create-001: BrokerageLayout now carries the session/operator
+// gating and shared header/banner (previously all of this route's body) so
+// /properties and /properties/:id/listings/new can nest under it, the same
+// way AdminLayout's <Outlet/> shares gating across the admin dashboard's
+// routes. session/operatorStatus are computed once here and passed down,
+// rather than each route independently re-subscribing -- see
+// useSupabaseSession's comment for why. The index route redirects to
+// /properties since there's no dashboard content of its own yet.
 export function App() {
   const { session, loading } = useSupabaseSession();
   const operatorStatus = useOperatorStatus(session);
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={<BrokerageApp session={session} loading={loading} operatorStatus={operatorStatus} />}
-      />
+      <Route element={<BrokerageLayout session={session} loading={loading} operatorStatus={operatorStatus} />}>
+        <Route path="/" element={<Navigate to="/properties" replace />} />
+        <Route path="/properties" element={session && <PropertiesListPage session={session} />} />
+        <Route
+          path="/properties/:propertyId/listings/new"
+          element={session && <CreateListingForm session={session} />}
+        />
+        <Route path="/listings" element={session && <ListingsPage session={session} />} />
+      </Route>
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route
         path="/admin/*"

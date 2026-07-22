@@ -7,6 +7,7 @@ import { registerMigrationRoutes } from './routes/migrations.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerWorkspaceRoutes } from './routes/workspace.js';
 import { registerExportRoutes } from './routes/export.js';
+import { registerListingsRoutes } from './routes/listings.js';
 
 const app = Fastify({ logger: true });
 
@@ -17,6 +18,7 @@ await registerMigrationRoutes(app);
 await registerAdminRoutes(app);
 await registerWorkspaceRoutes(app);
 await registerExportRoutes(app);
+await registerListingsRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 
