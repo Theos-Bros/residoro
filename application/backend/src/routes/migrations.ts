@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { parseCsv } from '../lib/csv.js';
-import { suggestFieldMappings } from '../lib/gemini.js';
+import { directMatchHeaders } from '../lib/mapping.js';
 import { transformSample, type MappingEntry } from '../lib/transform.js';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -100,7 +100,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'File not found or expired — please re-upload' });
       }
 
-      const result = await suggestFieldMappings(row.headers, row.sample_rows);
+      const result = directMatchHeaders(row.headers);
 
       const { error: updateError } = await supabaseAdmin
         .from('migration_temp_files')
@@ -116,7 +116,6 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         file_id: row.id,
         mappings: result.mappings,
         unmapped_columns: result.unmapped_columns,
-        warnings: result.warnings,
         status: 'ready_for_preview',
       };
     },

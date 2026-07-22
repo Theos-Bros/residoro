@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { FileUploadDropzone } from '../components/FileUploadDropzone';
 import { MappingReviewTable } from '../components/MappingReviewTable';
 import { PreviewTable } from '../components/PreviewTable';
+import { PropertyCard } from '../components/PropertyCard';
 import {
   analyzeMappings,
   previewMappings,
@@ -25,7 +26,6 @@ export function MigrationPage({ session, readOnly = false }: Props) {
 
   const [fileId, setFileId] = useState<string | null>(null);
   const [mappings, setMappings] = useState<FieldMapping[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
 
   const [previewProperties, setPreviewProperties] = useState<PreviewProperty[]>([]);
   const [totalRows, setTotalRows] = useState(0);
@@ -42,7 +42,6 @@ export function MigrationPage({ session, readOnly = false }: Props) {
       setFileId(uploaded.file_id);
       const analyzed = await analyzeMappings(accessToken, uploaded.file_id);
       setMappings(analyzed.mappings);
-      setWarnings(analyzed.warnings);
       setStep('mapping');
     } catch (err) {
       setError((err as Error).message);
@@ -76,7 +75,6 @@ export function MigrationPage({ session, readOnly = false }: Props) {
     setStep('upload');
     setFileId(null);
     setMappings([]);
-    setWarnings([]);
     setPreviewProperties([]);
     setConfirmed(false);
     setError(null);
@@ -98,8 +96,8 @@ export function MigrationPage({ session, readOnly = false }: Props) {
 
       {step === 'mapping' && (
         <div>
-          <h2>Review the suggested mappings</h2>
-          <MappingReviewTable mappings={mappings} warnings={warnings} onChange={setMappings} />
+          <h2>Review the mappings</h2>
+          <MappingReviewTable mappings={mappings} onChange={setMappings} />
           <button onClick={handleGeneratePreview} disabled={busy}>
             These look correct — show preview
           </button>
@@ -117,6 +115,12 @@ export function MigrationPage({ session, readOnly = false }: Props) {
             totalRows={totalRows}
             totalValidationErrors={totalValidationErrors}
           />
+          <h3 className="mt-6 mb-2 text-lg font-semibold">Card view</h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {previewProperties.map((property) => (
+              <PropertyCard key={property.row_number} property={property} />
+            ))}
+          </div>
           {confirmed ? (
             <p>
               Confirmed. Importing into Residoro is not built yet — that's the next tracer bullet

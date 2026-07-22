@@ -3,7 +3,6 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 export type FieldMapping = {
   csv_column: string;
   residoro_field: string;
-  confidence: number;
 };
 
 export type UploadResult = {
@@ -19,7 +18,6 @@ export type AnalyzeResult = {
   file_id: string;
   mappings: FieldMapping[];
   unmapped_columns: string[];
-  warnings: string[];
   status: string;
 };
 
