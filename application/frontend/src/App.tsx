@@ -1,9 +1,11 @@
 import type { Session } from '@supabase/supabase-js';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { supabase } from './lib/supabaseClient';
+import { useState } from 'react';
 import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { useOperatorStatus, type OperatorStatus } from './hooks/useOperatorStatus';
 import { useWorkspaceStatus } from './hooks/useWorkspaceStatus';
+import { exportProperties } from './lib/workspaceApi';
 import { AuthPage } from './pages/AuthPage';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { MigrationPage } from './pages/MigrationPage';
@@ -27,6 +29,8 @@ function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
   // Called unconditionally (Rules of Hooks) -- tolerates a null session
   // while loading/redirecting, since the early returns below happen after.
   const { status: workspaceStatus, refetch: refetchWorkspaceStatus } = useWorkspaceStatus(session);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   if (loading || (session && operatorStatus === 'loading')) {
     return null;
@@ -40,10 +44,30 @@ function BrokerageApp({ session, loading, operatorStatus }: BrokerageAppProps) {
     return <Navigate to="/admin" replace />;
   }
 
+  // tb-client-lifecycle-export-001: available whenever the session/backend
+  // calls succeed at all -- 'blocked' workspaces already fail every
+  // requireAuth-gated call (including this one), so no extra access_state
+  // check is needed here; the button just reflects whatever state is real.
+  const handleExport = async () => {
+    setExportError(null);
+    setExporting(true);
+    try {
+      await exportProperties(session.access_token);
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div>
       <header>
         <span>{session.user.email}</span>
+        <button onClick={handleExport} disabled={exporting}>
+          {exporting ? 'Exporting…' : 'Export My Data'}
+        </button>
+        {exportError && <span role="alert">{exportError}</span>}
         <button onClick={() => supabase.auth.signOut()}>Sign out</button>
       </header>
       <ContractWarningBanner status={workspaceStatus} />

@@ -39,3 +39,29 @@ export async function dismissNotification(accessToken: string, id: string): Prom
   });
   await parseJsonOrThrow(response);
 }
+
+// tb-client-lifecycle-export-001: triggers the browser's native download flow
+// for a fetch response (needed since the file requires an Authorization
+// header, so a plain <a href> to the endpoint won't carry credentials).
+export async function exportProperties(accessToken: string): Promise<void> {
+  const response = await fetch(`${BACKEND_URL}/export`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? `Export failed with status ${response.status}`);
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const filename = filenameMatch?.[1] ?? 'residoro-properties-export.csv';
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
