@@ -69,6 +69,9 @@ export function PropertiesListPage({ session }: Props) {
                   <Button asChild size="sm" variant="outline">
                     <Link to={`/properties/${property.id}/listings/new`}>Create listing</Link>
                   </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/properties/${property.id}/listings`}>Listing history</Link>
+                  </Button>
                 </td>
               </tr>
             ))}

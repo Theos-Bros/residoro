@@ -3,8 +3,25 @@ import { requireAuth } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const LISTING_TYPES = ['sale', 'rent'] as const;
-const STATUSES = ['active', 'withdrawn'] as const;
+const STATUSES = ['draft', 'active', 'under_offer', 'sold', 'expired', 'withdrawn'] as const;
 const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
+
+// tb-listings-lifecycle-001: the real state machine cap-listings-001
+// Milestone 3 names. draft/active/withdrawn-only (tb-listings-create-001)
+// allowed any status write; this closes that gap. sold/expired/withdrawn are
+// terminal -- no further transitions once a listing lands there. Reassigning
+// a listing to a new agent is NOT a transition here: it's withdrawing this
+// row (active -> withdrawn) and POSTing a brand-new listing on the same
+// property, per cap-listings-001's "closing one and creating another"
+// framing.
+const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+  draft: ['active', 'withdrawn'],
+  active: ['under_offer', 'withdrawn', 'expired'],
+  under_offer: ['sold', 'active'],
+  sold: [],
+  expired: [],
+  withdrawn: [],
+};
 const PROPERTY_TYPES = [
   'condo_unit',
   'house_and_lot',
@@ -137,6 +154,47 @@ export async function registerListingsRoutes(app: FastifyInstance) {
 
     return reply.status(201).send(property);
   });
+
+  // tb-listings-lifecycle-001: every listing a property has ever had, any
+  // status, open or closed -- listings are never deleted, so this is the
+  // "full listing history in chronological order" cap-listings-001
+  // Milestone 3 names. Tenant-scoped the same way GET /listings is.
+  app.get<{ Params: { id: string } }>(
+    '/properties/:id/listings',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { data: property, error: propertyError } = await supabaseAdmin
+        .from('properties')
+        .select('id')
+        .eq('id', request.params.id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle();
+
+      if (propertyError) {
+        request.log.error(propertyError);
+        return reply.status(500).send({ error: 'Could not verify the property' });
+      }
+      if (!property) {
+        return reply.status(404).send({ error: 'Property not found in your workspace' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('listings')
+        .select(
+          'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at',
+        )
+        .eq('tenant_id', request.user!.tenantId)
+        .eq('property_id', request.params.id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not load the listing history' });
+      }
+
+      return { listings: data ?? [] };
+    },
+  );
 
   app.get('/listings', { preHandler: requireAuth }, async (request, reply) => {
     const { data, error } = await supabaseAdmin
@@ -283,7 +341,29 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       const { status } = request.body ?? {};
 
       if (!status || !STATUSES.includes(status as (typeof STATUSES)[number])) {
-        return reply.status(400).send({ error: "status must be 'active' or 'withdrawn'" });
+        return reply.status(400).send({ error: `status must be one of: ${STATUSES.join(', ')}` });
+      }
+
+      const { data: current, error: currentError } = await supabaseAdmin
+        .from('listings')
+        .select('id, property_id, status')
+        .eq('id', request.params.id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle();
+
+      if (currentError) {
+        request.log.error(currentError);
+        return reply.status(500).send({ error: 'Could not load the listing' });
+      }
+      if (!current) {
+        return reply.status(404).send({ error: 'Listing not found in your workspace' });
+      }
+
+      const legalNext = STATUS_TRANSITIONS[current.status] ?? [];
+      if (!legalNext.includes(status)) {
+        return reply
+          .status(400)
+          .send({ error: `Cannot move a listing from '${current.status}' to '${status}'` });
       }
 
       const { data, error } = await supabaseAdmin

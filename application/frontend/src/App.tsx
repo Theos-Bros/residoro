@@ -6,6 +6,7 @@ import { PropertiesListPage } from './pages/PropertiesListPage';
 import { CreateListingForm } from './pages/CreateListingForm';
 import { NewPropertyListingForm } from './pages/NewPropertyListingForm';
 import { ListingsPage } from './pages/ListingsPage';
+import { PropertyListingHistoryPage } from './pages/PropertyListingHistoryPage';
 import { ShareDocketForm } from './pages/ShareDocketForm';
 import { SharedWithMePage } from './pages/SharedWithMePage';
 import { AdminApp } from './admin/AdminApp';
@@ -40,6 +41,10 @@ export function App() {
         <Route
           path="/properties/:propertyId/listings/new"
           element={session && <CreateListingForm session={session} />}
+        />
+        <Route
+          path="/properties/:propertyId/listings"
+          element={session && <PropertyListingHistoryPage session={session} />}
         />
         <Route path="/listings" element={session && <ListingsPage session={session} />} />
         <Route path="/listings/:listingId/share" element={session && <ShareDocketForm session={session} />} />

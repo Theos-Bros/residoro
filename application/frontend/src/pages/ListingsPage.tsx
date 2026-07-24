@@ -1,23 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { fetchListings, updateListingStatus, type Listing } from '@/lib/listingsApi';
+import {
+  fetchListings,
+  updateListingStatus,
+  LISTING_STATUS_TRANSITIONS,
+  type Listing,
+  type ListingStatus,
+} from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
 
 type Props = {
   session: Session;
 };
 
-const STATUS_LABEL: Record<Listing['status'], string> = {
+const STATUS_LABEL: Record<ListingStatus, string> = {
   draft: 'Draft',
   active: 'Active',
+  under_offer: 'Under Offer',
+  sold: 'Sold',
+  expired: 'Expired',
   withdrawn: 'Withdrawn',
 };
 
-// tb-listings-create-001: where a listing's status moves from draft to
-// active, or to withdrawn -- the only two transitions in this tracer
-// bullet's scope (no under_offer/sold/expired yet, see cap-listings-001
-// Milestone 2/3).
+// tb-listings-lifecycle-001: status actions now come from
+// LISTING_STATUS_TRANSITIONS instead of the two hardcoded active/withdrawn
+// buttons tb-listings-create-001 shipped with -- only legally-reachable next
+// states are offered, matching the backend's own transition enforcement.
 export function ListingsPage({ session }: Props) {
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +54,7 @@ export function ListingsPage({ session }: Props) {
     };
   }, [session.access_token]);
 
-  async function handleStatus(listingId: string, status: 'active' | 'withdrawn') {
+  async function handleStatus(listingId: string, status: ListingStatus) {
     setWarning(null);
     try {
       const result = await updateListingStatus(session.access_token, listingId, status);
@@ -96,18 +105,21 @@ export function ListingsPage({ session }: Props) {
                 </td>
                 <td>{STATUS_LABEL[listing.status]}</td>
                 <td>
-                  {listing.status !== 'active' && (
-                    <Button size="sm" variant="outline" onClick={() => handleStatus(listing.id, 'active')}>
-                      Mark active
+                  {LISTING_STATUS_TRANSITIONS[listing.status].map((nextStatus) => (
+                    <Button
+                      key={nextStatus}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleStatus(listing.id, nextStatus)}
+                    >
+                      Mark {STATUS_LABEL[nextStatus]}
                     </Button>
-                  )}
-                  {listing.status !== 'withdrawn' && (
-                    <Button size="sm" variant="outline" onClick={() => handleStatus(listing.id, 'withdrawn')}>
-                      Withdraw
-                    </Button>
-                  )}
+                  ))}
                   <Button asChild size="sm" variant="outline">
                     <Link to={`/listings/${listing.id}/share`}>Share as docket</Link>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/properties/${listing.property_id}/listings`}>History</Link>
                   </Button>
                 </td>
               </tr>

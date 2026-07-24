@@ -31,8 +31,23 @@ export type Listing = {
   exclusivity: 'exclusive' | 'open';
   authority_starts_at: string;
   authority_expires_at: string | null;
-  status: 'draft' | 'active' | 'withdrawn';
+  status: ListingStatus;
   created_at: string;
+};
+
+export type ListingStatus = 'draft' | 'active' | 'under_offer' | 'sold' | 'expired' | 'withdrawn';
+
+// tb-listings-lifecycle-001: mirrors the backend's STATUS_TRANSITIONS in
+// listings.ts -- kept in sync by hand since this is a small, stable state
+// machine, not generated from a shared schema. sold/expired/withdrawn are
+// terminal (empty arrays).
+export const LISTING_STATUS_TRANSITIONS: Record<ListingStatus, readonly ListingStatus[]> = {
+  draft: ['active', 'withdrawn'],
+  active: ['under_offer', 'withdrawn', 'expired'],
+  under_offer: ['sold', 'active'],
+  sold: [],
+  expired: [],
+  withdrawn: [],
 };
 
 async function parseJsonOrThrow(response: Response) {
@@ -111,7 +126,7 @@ export async function createListing(
 export async function updateListingStatus(
   accessToken: string,
   listingId: string,
-  status: 'active' | 'withdrawn',
+  status: ListingStatus,
 ): Promise<{ id: string; status: string; warning?: string }> {
   const response = await fetch(`${BACKEND_URL}/listings/${listingId}`, {
     method: 'PATCH',
@@ -120,6 +135,19 @@ export async function updateListingStatus(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ status }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-listings-lifecycle-001: full history for one property -- every listing
+// it's ever had, any status, chronological. Listings are never deleted, so
+// this is the complete record, not just the current active one.
+export async function fetchPropertyListingHistory(
+  accessToken: string,
+  propertyId: string,
+): Promise<{ listings: Listing[] }> {
+  const response = await fetch(`${BACKEND_URL}/properties/${propertyId}/listings`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);
 }
