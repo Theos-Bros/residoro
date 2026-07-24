@@ -9,6 +9,7 @@ import {
   type ListingStatus,
 } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
+import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 
 type Props = {
   session: Session;
@@ -23,14 +24,20 @@ const STATUS_LABEL: Record<ListingStatus, string> = {
   withdrawn: 'Withdrawn',
 };
 
+type OpenHistory = { propertyId: string; propertyTitle: string } | null;
+
 // tb-listings-lifecycle-001: status actions now come from
 // LISTING_STATUS_TRANSITIONS instead of the two hardcoded active/withdrawn
 // buttons tb-listings-create-001 shipped with -- only legally-reachable next
 // states are offered, matching the backend's own transition enforcement.
+//
+// UX follow-up: "History" opens a floating panel (bottom-right) instead of
+// navigating to a separate route, same as PropertiesListPage.
 export function ListingsPage({ session }: Props) {
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [openHistory, setOpenHistory] = useState<OpenHistory>(null);
 
   function reload() {
     fetchListings(session.access_token)
@@ -118,14 +125,29 @@ export function ListingsPage({ session }: Props) {
                   <Button asChild size="sm" variant="outline">
                     <Link to={`/listings/${listing.id}/share`}>Share as docket</Link>
                   </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={`/properties/${listing.property_id}/listings`}>History</Link>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setOpenHistory({ propertyId: listing.property_id, propertyTitle: listing.property_title })
+                    }
+                  >
+                    History
                   </Button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      )}
+
+      {openHistory && (
+        <ListingHistoryPanel
+          session={session}
+          propertyId={openHistory.propertyId}
+          propertyTitle={openHistory.propertyTitle}
+          onClose={() => setOpenHistory(null)}
+        />
       )}
     </div>
   );

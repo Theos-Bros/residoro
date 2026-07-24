@@ -17,9 +17,9 @@ type Props = {
 
 // tb-listings-create-001: factors BrokerageApp's session/operator gating and
 // header (previously the entire "/" route body) into a layout with <Outlet/>
-// so /properties and /properties/:id/listings/new can share it, mirroring
-// AdminLayout's shape. The header/banner/panel now render on every brokerage
-// route, not just "/", since they're workspace-wide state, not page content.
+// so /properties and its sibling routes can share it, mirroring AdminLayout's
+// shape. The header/banner/panel now render on every brokerage route, not
+// just "/", since they're workspace-wide state, not page content.
 export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   const { status: workspaceStatus, refetch: refetchWorkspaceStatus } = useWorkspaceStatus(session);
   const [exportError, setExportError] = useState<string | null>(null);

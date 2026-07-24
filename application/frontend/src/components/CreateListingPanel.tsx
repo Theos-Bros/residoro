@@ -1,21 +1,28 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { createListing } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
+import { FloatingPanel } from '@/components/FloatingPanel';
 
 type Props = {
   session: Session;
+  propertyId: string;
+  onClose: () => void;
+  onCreated: () => void;
 };
 
 const inputClass = 'w-full rounded-md border border-input px-3 py-2 text-sm';
 
-// tb-listings-create-001: creates a listing (type, price) against the
-// property selected in PropertiesListPage. Always creates as 'draft' and
-// always assigns agent_id = the caller (request.user!.id server-side) --
-// there's no cross-agent assignment in this tracer bullet's scope.
-export function CreateListingForm({ session }: Props) {
-  const { propertyId } = useParams<{ propertyId: string }>();
+// tb-listings-create-001: creates a listing (type, price) against a property.
+// Always creates as 'draft' and always assigns agent_id = the caller
+// (request.user!.id server-side) -- there's no cross-agent assignment in
+// this tracer bullet's scope.
+//
+// tb-listings-lifecycle-001 (UX follow-up): renders inside a FloatingPanel
+// (bottom-right, Messenger/Gmail-compose style) instead of a full-page route
+// -- propertyId now comes from a prop, not useParams, and success closes the
+// panel via onCreated() instead of navigating away.
+export function CreateListingPanel({ session, propertyId, onClose, onCreated }: Props) {
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [price, setPrice] = useState('');
   const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
@@ -23,7 +30,6 @@ export function CreateListingForm({ session }: Props) {
   const [authorityExpiresAt, setAuthorityExpiresAt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,14 +44,14 @@ export function CreateListingForm({ session }: Props) {
     setSubmitting(true);
     try {
       await createListing(session.access_token, {
-        property_id: propertyId!,
+        property_id: propertyId,
         listing_type: listingType,
         price: numericPrice,
         exclusivity,
         authority_starts_at: authorityStartsAt ? new Date(authorityStartsAt).toISOString() : undefined,
         authority_expires_at: authorityExpiresAt ? new Date(authorityExpiresAt).toISOString() : null,
       });
-      navigate('/properties', { replace: true });
+      onCreated();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -54,9 +60,8 @@ export function CreateListingForm({ session }: Props) {
   }
 
   return (
-    <div className="max-w-md">
-      <h1 className="text-2xl font-semibold">Create listing</h1>
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+    <FloatingPanel title="Create listing" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="listing_type" className="text-sm font-medium">
             Listing type
@@ -129,6 +134,6 @@ export function CreateListingForm({ session }: Props) {
           {submitting ? 'Creating…' : 'Create listing'}
         </Button>
       </form>
-    </div>
+    </FloatingPanel>
   );
 }
