@@ -12,6 +12,7 @@ export type Client = {
   contract_end_date: string;
   access_state: 'active' | 'read_only' | 'blocked';
   invite_status: 'pending' | 'accepted';
+  exclusivity_hard_block: boolean;
 };
 
 export type NewClientInput = {
@@ -89,6 +90,24 @@ export async function extendContract(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ contract_end_date: contractEndDate }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-listings-exclusivity-hardblock-001: operator-only toggle. Default is
+// soft-warning (false) for every workspace unless an operator opts one in.
+export async function setExclusivityHardBlock(
+  accessToken: string,
+  workspaceId: string,
+  exclusivityHardBlock: boolean,
+): Promise<{ workspace_id: string; exclusivity_hard_block: boolean }> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/listings-policy`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ exclusivity_hard_block: exclusivityHardBlock }),
   });
   return parseJsonOrThrow(response);
 }

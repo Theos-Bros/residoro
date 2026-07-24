@@ -438,6 +438,44 @@ export async function registerListingsRoutes(app: FastifyInstance) {
           .send({ error: `Cannot move a listing from '${current.status}' to '${status}'` });
       }
 
+      // tb-listings-authority-001 / tb-listings-exclusivity-hardblock-001:
+      // checked BEFORE the update below (not after, as the original
+      // soft-warning-only version did) so a hard-blocked workspace never
+      // persists the conflicting activation at all -- no write-then-rollback.
+      let conflictWarning: string | undefined;
+      if (status === 'active') {
+        const { data: conflicting, error: conflictError } = await supabaseAdmin
+          .from('listings')
+          .select('id')
+          .eq('tenant_id', request.user!.tenantId)
+          .eq('property_id', current.property_id)
+          .eq('status', 'active')
+          .eq('exclusivity', 'exclusive')
+          .neq('id', current.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (conflictError) {
+          request.log.error(conflictError);
+        } else if (conflicting) {
+          const { data: workspace, error: workspaceError } = await supabaseAdmin
+            .from('workspaces')
+            .select('exclusivity_hard_block')
+            .eq('id', request.user!.tenantId)
+            .single();
+
+          if (workspaceError) {
+            request.log.error(workspaceError);
+          } else if (workspace.exclusivity_hard_block) {
+            return reply
+              .status(409)
+              .send({ error: 'This property already has an active exclusive listing.' });
+          } else {
+            conflictWarning = 'This property already has an active exclusive listing.';
+          }
+        }
+      }
+
       const { data, error } = await supabaseAdmin
         .from('listings')
         .update({
@@ -458,29 +496,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Listing not found in your workspace' });
       }
 
-      // tb-listings-authority-001: activating a listing on a property that
-      // already has another active exclusive listing still succeeds -- soft
-      // warning only, never a block, per cap-listings-001 Decision #2.
-      if (status === 'active') {
-        const { data: conflicting, error: conflictError } = await supabaseAdmin
-          .from('listings')
-          .select('id')
-          .eq('tenant_id', request.user!.tenantId)
-          .eq('property_id', data.property_id)
-          .eq('status', 'active')
-          .eq('exclusivity', 'exclusive')
-          .neq('id', data.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (conflictError) {
-          request.log.error(conflictError);
-        } else if (conflicting) {
-          return { ...data, warning: 'This property already has an active exclusive listing.' };
-        }
-      }
-
-      return data;
+      return conflictWarning ? { ...data, warning: conflictWarning } : data;
     },
   );
 }

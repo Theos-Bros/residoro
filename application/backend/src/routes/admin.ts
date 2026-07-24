@@ -95,7 +95,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get('/admin/clients', { preHandler: requireOperator }, async (request, reply) => {
     const { data: workspaces, error: workspacesError } = await supabaseAdmin
       .from('workspaces')
-      .select('id, name, contract_start_date, contract_end_date, access_state')
+      .select('id, name, contract_start_date, contract_end_date, access_state, exclusivity_hard_block')
       .order('created_at', { ascending: false });
 
     if (workspacesError || !workspaces) {
@@ -137,6 +137,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         contract_start_date: w.contract_start_date,
         contract_end_date: w.contract_end_date,
         access_state: w.access_state,
+        exclusivity_hard_block: w.exclusivity_hard_block,
         invite_status: confirmedByTenant.get(w.id) ? 'accepted' : 'pending',
       })),
     };
@@ -171,6 +172,39 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
 
       return { workspace_id: data.id, contract_end_date: data.contract_end_date };
+    },
+  );
+
+  // tb-listings-exclusivity-hardblock-001: an operator-only per-workspace
+  // toggle. tb-listings-authority-001's soft warning stays the default for
+  // every workspace (the migration's column default is false); this route
+  // is the only way it ever becomes true. A dedicated sub-route rather than
+  // folding into PATCH /admin/clients/:id above, since that handler's
+  // body/response shape is already specific to contract_end_date -- same
+  // precedent as /admin/clients/:id/training below having its own route.
+  app.patch<{ Params: { id: string }; Body: { exclusivity_hard_block?: boolean } }>(
+    '/admin/clients/:id/listings-policy',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { exclusivity_hard_block } = request.body ?? {};
+
+      if (typeof exclusivity_hard_block !== 'boolean') {
+        return reply.status(400).send({ error: 'exclusivity_hard_block must be a boolean' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('workspaces')
+        .update({ exclusivity_hard_block })
+        .eq('id', request.params.id)
+        .select('id, exclusivity_hard_block')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not update the listings policy' });
+      }
+
+      return { workspace_id: data.id, exclusivity_hard_block: data.exclusivity_hard_block };
     },
   );
 

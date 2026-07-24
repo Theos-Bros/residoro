@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { extendContract, fetchClients, type Client } from '@/lib/adminApi';
+import { extendContract, fetchClients, setExclusivityHardBlock, type Client } from '@/lib/adminApi';
 import { Button } from '@/components/ui/button';
 
 type Props = {
@@ -27,6 +27,7 @@ export function ClientList({ session }: Props) {
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [renewDate, setRenewDate] = useState('');
   const [renewError, setRenewError] = useState<string | null>(null);
+  const [policyError, setPolicyError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +63,16 @@ export function ClientList({ session }: Props) {
     }
   }
 
+  async function handleToggleHardBlock(workspaceId: string, next: boolean) {
+    setPolicyError(null);
+    try {
+      await setExclusivityHardBlock(session.access_token, workspaceId, next);
+      reload();
+    } catch (err) {
+      setPolicyError((err as Error).message);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -90,6 +101,7 @@ export function ClientList({ session }: Props) {
               <th className="py-2 pr-4 font-medium">Contract end</th>
               <th className="py-2 pr-4 font-medium">Access</th>
               <th className="py-2 pr-4 font-medium">Invite status</th>
+              <th className="py-2 pr-4 font-medium">Hard-block exclusivity</th>
               <th className="py-2 pr-4 font-medium" />
               <th className="py-2 pr-4 font-medium" />
               <th className="py-2 pr-4 font-medium" />
@@ -103,6 +115,16 @@ export function ClientList({ session }: Props) {
                 <td className="py-2 pr-4">{client.contract_end_date}</td>
                 <td className="py-2 pr-4">{ACCESS_STATE_LABEL[client.access_state]}</td>
                 <td className="py-2 pr-4 capitalize">{client.invite_status}</td>
+                <td className="py-2 pr-4">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={client.exclusivity_hard_block}
+                      onChange={(e) => handleToggleHardBlock(client.workspace_id, e.target.checked)}
+                    />
+                    {client.exclusivity_hard_block ? 'Blocking' : 'Soft warning'}
+                  </label>
+                </td>
                 <td className="py-2 pr-4">
                   <Button asChild size="sm" variant="outline">
                     <Link to={`/admin/clients/${client.workspace_id}/migrate`}>Migrate</Link>
@@ -155,6 +177,7 @@ export function ClientList({ session }: Props) {
         </table>
       )}
       {renewError && <p className="mt-2 text-sm text-destructive">{renewError}</p>}
+      {policyError && <p className="mt-2 text-sm text-destructive">{policyError}</p>}
     </div>
   );
 }
