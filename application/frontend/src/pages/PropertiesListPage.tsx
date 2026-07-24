@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchProperties, type Property } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { cn } from '@/lib/utils';
@@ -48,56 +50,70 @@ export function PropertiesListPage({ session }: Props) {
   }, [session.access_token]);
 
   return (
-    <div>
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1>Properties</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
         <Button asChild size="sm">
           <Link to="/properties/new">Add a new listing</Link>
         </Button>
       </div>
 
-      {error && <p role="alert">{error}</p>}
-      {!error && properties === null && <p>Loading…</p>}
-      {properties?.length === 0 && <p>No properties yet.</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {!error && properties === null && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {properties?.length === 0 && <p className="text-sm text-muted-foreground">No properties yet.</p>}
 
       {properties && properties.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Price</th>
-              <th>Status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {properties.map((property) => (
-              <tr key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
-                <td>{property.title}</td>
-                <td>
-                  {property.price !== null ? `${property.price_currency} ${property.price.toLocaleString()}` : '—'}
-                </td>
-                <td>{property.status}</td>
-                <td>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setOpenPanel({ mode: 'create', propertyId: property.id, propertyTitle: property.title })}
-                  >
-                    Create listing
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setOpenPanel({ mode: 'history', propertyId: property.id, propertyTitle: property.title })}
-                  >
-                    Listing history
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {properties.map((property) => (
+                <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
+                  <TableCell className="font-medium">{property.title}</TableCell>
+                  <TableCell>
+                    {property.price !== null
+                      ? `${property.price_currency} ${property.price.toLocaleString()}`
+                      : '—'}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{property.status}</Badge>
+                  </TableCell>
+                  <TableCell className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setOpenPanel({ mode: 'create', propertyId: property.id, propertyTitle: property.title })
+                      }
+                    >
+                      Create listing
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setOpenPanel({ mode: 'history', propertyId: property.id, propertyTitle: property.title })
+                      }
+                    >
+                      Listing history
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
       {openPanel?.mode === 'create' && (

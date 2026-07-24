@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { createListing } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { FloatingPanel } from '@/components/FloatingPanel';
 
 type Props = {
@@ -12,7 +14,7 @@ type Props = {
   onCreated: () => void;
 };
 
-const inputClass = 'w-full rounded-md border border-input px-3 py-2 text-sm';
+const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
 
 // tb-listings-create-001: creates a listing (type, price) against a property.
 // Always creates as 'draft' and always assigns agent_id = the caller
@@ -63,25 +65,21 @@ export function CreateListingPanel({ session, propertyId, propertyTitle, onClose
   return (
     <FloatingPanel title="Create listing" documentTitle={`${propertyTitle} · Residoro`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="listing_type" className="text-sm font-medium">
-            Listing type
-          </label>
+        <div className="space-y-1.5">
+          <Label htmlFor="listing_type">Listing type</Label>
           <select
             id="listing_type"
             value={listingType}
             onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
-            className={inputClass}
+            className={selectClass}
           >
             <option value="sale">Sale</option>
             <option value="rent">Rent</option>
           </select>
         </div>
-        <div>
-          <label htmlFor="price" className="text-sm font-medium">
-            Price (PHP)
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="price">Price (PHP)</Label>
+          <Input
             id="price"
             type="number"
             min="0"
@@ -89,45 +87,36 @@ export function CreateListingPanel({ session, propertyId, propertyTitle, onClose
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             required
-            className={inputClass}
           />
         </div>
-        <div>
-          <label htmlFor="exclusivity" className="text-sm font-medium">
-            Exclusivity
-          </label>
+        <div className="space-y-1.5">
+          <Label htmlFor="exclusivity">Exclusivity</Label>
           <select
             id="exclusivity"
             value={exclusivity}
             onChange={(e) => setExclusivity(e.target.value as 'exclusive' | 'open')}
-            className={inputClass}
+            className={selectClass}
           >
             <option value="open">Open (non-exclusive)</option>
             <option value="exclusive">Exclusive</option>
           </select>
         </div>
-        <div>
-          <label htmlFor="authority_starts_at" className="text-sm font-medium">
-            Authority to Sell/Lease starts
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
+          <Input
             id="authority_starts_at"
             type="date"
             value={authorityStartsAt}
             onChange={(e) => setAuthorityStartsAt(e.target.value)}
-            className={inputClass}
           />
         </div>
-        <div>
-          <label htmlFor="authority_expires_at" className="text-sm font-medium">
-            Authority to Sell/Lease ends (optional)
-          </label>
-          <input
+        <div className="space-y-1.5">
+          <Label htmlFor="authority_expires_at">Authority to Sell/Lease ends (optional)</Label>
+          <Input
             id="authority_expires_at"
             type="date"
             value={authorityExpiresAt}
             onChange={(e) => setAuthorityExpiresAt(e.target.value)}
-            className={inputClass}
           />
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}

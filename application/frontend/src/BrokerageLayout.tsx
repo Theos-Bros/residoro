@@ -8,6 +8,7 @@ import { exportData } from './lib/workspaceApi';
 import { AuthPage } from './pages/AuthPage';
 import { ContractWarningBanner } from './components/ContractWarningBanner';
 import { ContractNotificationPanel } from './components/ContractNotificationPanel';
+import { Button } from './components/ui/button';
 
 type Props = {
   session: Session | null;
@@ -50,16 +51,35 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   };
 
   return (
-    <div>
-      <header>
-        <span>{session.user.email}</span>
-        <Link to="/properties">Properties</Link>
-        <Link to="/shared-with-me">Shared with me</Link>
-        <button onClick={handleExport} disabled={exporting}>
-          {exporting ? 'Exporting…' : 'Export My Data'}
-        </button>
-        {exportError && <span role="alert">{exportError}</span>}
-        <button onClick={() => supabase.auth.signOut()}>Sign out</button>
+    <div className="min-h-screen bg-background">
+      <header className="border-b bg-background">
+        <div className="mx-auto flex h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6">
+          <nav className="flex items-center gap-4">
+            <Link to="/properties" className="text-sm font-semibold tracking-tight">
+              Residoro
+            </Link>
+            <Link to="/properties" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Properties
+            </Link>
+            <Link to="/shared-with-me" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+              Shared with me
+            </Link>
+          </nav>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-sm text-muted-foreground sm:inline">{session.user.email}</span>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exporting…' : 'Export My Data'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
+              Sign out
+            </Button>
+          </div>
+        </div>
+        {exportError && (
+          <p role="alert" className="mx-auto max-w-6xl px-4 pb-2 text-sm text-destructive sm:px-6">
+            {exportError}
+          </p>
+        )}
       </header>
       <ContractWarningBanner status={workspaceStatus} />
       <ContractNotificationPanel
@@ -67,7 +87,9 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
         notifications={workspaceStatus?.notifications ?? []}
         onDismissed={refetchWorkspaceStatus}
       />
-      <Outlet />
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <Outlet />
+      </main>
     </div>
   );
 }

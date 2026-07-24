@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -54,7 +55,7 @@ export function FloatingPanel({ title, documentTitle, onClose, children, classNa
       role="dialog"
       aria-label={title}
       className={cn(
-        'fixed bottom-6 right-6 z-50 flex max-h-[32rem] w-96 flex-col overflow-hidden rounded-lg border bg-background shadow-xl',
+        'fixed bottom-6 right-6 z-50 flex max-h-[32rem] w-[calc(100vw-3rem)] max-w-96 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-xl',
         className,
       )}
     >
@@ -64,9 +65,9 @@ export function FloatingPanel({ title, documentTitle, onClose, children, classNa
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="rounded-sm text-muted-foreground hover:text-foreground"
+          className="rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
       </div>
       <div className="overflow-y-auto p-4">{children}</div>

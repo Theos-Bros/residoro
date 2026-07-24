@@ -1,4 +1,6 @@
 import type { PreviewProperty } from '../lib/migrationsApi';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 type Props = {
   property: PreviewProperty;
@@ -20,36 +22,38 @@ export function PropertyCard({ property }: Props) {
     .join(', ');
 
   return (
-    <div
-      className={`rounded-lg border p-4 shadow-sm ${hasErrors ? 'border-red-400' : 'border-gray-200'}`}
-    >
-      <p className="text-xs text-gray-500">Row {property.row_number}</p>
-      <h3 className="text-lg font-semibold">{field(property.title)}</h3>
-      <p className="text-base font-medium">{formatPrice(property.price)}</p>
-      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-gray-600">
-        <div>
-          <dt className="inline font-medium">Beds:</dt> <dd className="inline">{field(property.bedrooms)}</dd>
-        </div>
-        <div>
-          <dt className="inline font-medium">Baths:</dt> <dd className="inline">{field(property.bathrooms)}</dd>
-        </div>
-        <div>
-          <dt className="inline font-medium">Floor area:</dt>{' '}
-          <dd className="inline">{field(property.floor_area_sqm)} sqm</dd>
-        </div>
-        <div>
-          <dt className="inline font-medium">Lot area:</dt>{' '}
-          <dd className="inline">{field(property.lot_area_sqm)} sqm</dd>
-        </div>
-      </dl>
-      {location && <p className="mt-2 text-sm text-gray-700">{location}</p>}
-      {hasErrors && (
-        <ul className="mt-2 text-sm text-red-600">
-          {property.validation_errors.map((message, index) => (
-            <li key={index}>⚠️ {message}</li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <Card className={cn(hasErrors && 'border-destructive')}>
+      <CardHeader className="space-y-1 p-4 pb-0">
+        <p className="text-xs text-muted-foreground">Row {property.row_number}</p>
+        <h3 className="text-lg font-semibold leading-tight">{field(property.title)}</h3>
+        <p className="text-base font-medium">{formatPrice(property.price)}</p>
+      </CardHeader>
+      <CardContent className="space-y-2 p-4 pt-2">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <div>
+            <dt className="inline font-medium">Beds:</dt> <dd className="inline">{field(property.bedrooms)}</dd>
+          </div>
+          <div>
+            <dt className="inline font-medium">Baths:</dt> <dd className="inline">{field(property.bathrooms)}</dd>
+          </div>
+          <div>
+            <dt className="inline font-medium">Floor area:</dt>{' '}
+            <dd className="inline">{field(property.floor_area_sqm)} sqm</dd>
+          </div>
+          <div>
+            <dt className="inline font-medium">Lot area:</dt>{' '}
+            <dd className="inline">{field(property.lot_area_sqm)} sqm</dd>
+          </div>
+        </dl>
+        {location && <p className="text-sm text-muted-foreground">{location}</p>}
+        {hasErrors && (
+          <ul className="space-y-1 text-sm text-destructive">
+            {property.validation_errors.map((message, index) => (
+              <li key={index}>⚠️ {message}</li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

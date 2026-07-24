@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { dismissNotification } from '@/lib/workspaceApi';
 import type { ContractNotification } from '@/lib/workspaceApi';
+import { Button } from '@/components/ui/button';
 
 type Props = {
   session: Session;
@@ -20,13 +21,15 @@ export function ContractNotificationPanel({ session, notifications, onDismissed 
   }
 
   return (
-    <aside style={{ border: '1px solid #ddd', padding: '12px 16px', margin: '12px 0', maxWidth: 420 }}>
-      <p style={{ fontWeight: 600, margin: '0 0 8px' }}>Contract notifications</p>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+    <aside className="mx-auto my-3 max-w-6xl rounded-md border bg-card px-4 py-3 sm:mx-6 sm:px-6">
+      <p className="mb-2 text-sm font-semibold">Contract notifications</p>
+      <ul className="space-y-1">
         {notifications.map((n) => (
-          <li key={n.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0' }}>
+          <li key={n.id} className="flex items-center justify-between gap-3 text-sm">
             <span>{n.message}</span>
-            <button onClick={() => handleDismiss(n.id)}>Dismiss</button>
+            <Button size="sm" variant="ghost" onClick={() => handleDismiss(n.id)}>
+              Dismiss
+            </Button>
           </li>
         ))}
       </ul>
