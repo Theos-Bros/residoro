@@ -39,16 +39,32 @@ export type ListingStatus = 'draft' | 'active' | 'under_offer' | 'sold' | 'expir
 
 // tb-listings-lifecycle-001: mirrors the backend's STATUS_TRANSITIONS in
 // listings.ts -- kept in sync by hand since this is a small, stable state
-// machine, not generated from a shared schema. sold/expired/withdrawn are
-// terminal (empty arrays).
+// machine, not generated from a shared schema. sold/withdrawn are terminal
+// (empty arrays).
+//
+// UX follow-up (same session): 'expired' no longer reachable from
+// active/under_offer here -- the backend auto-expires a listing once its
+// authority_expires_at passes (checked on every read/write, no cron), so
+// there's no manual "Mark Expired" action to offer. 'expired' -> 'active' is
+// still listed as legal, but the UI never renders it as a plain button --
+// ListingsPage special-cases 'expired' rows into a renewal control instead
+// (see handleRenew), since reactivating without a new authority_expires_at
+// just gets auto-re-expired on the next read.
 export const LISTING_STATUS_TRANSITIONS: Record<ListingStatus, readonly ListingStatus[]> = {
   draft: ['active', 'withdrawn'],
-  active: ['under_offer', 'withdrawn', 'expired'],
+  active: ['under_offer', 'withdrawn'],
   under_offer: ['sold', 'active'],
   sold: [],
-  expired: [],
+  expired: ['active', 'withdrawn'],
   withdrawn: [],
 };
+
+// UX follow-up: an expired listing's warning names which document lapsed --
+// Authority to Sell (sale) or Authority to Lease (rent) -- so the agent
+// knows what to go re-secure, not just that "something" expired.
+export function authorityWarningLabel(listingType: 'sale' | 'rent'): string {
+  return listingType === 'rent' ? 'Needs updated ATL' : 'Needs updated ATS';
+}
 
 async function parseJsonOrThrow(response: Response) {
   const body = await response.json();
@@ -127,6 +143,7 @@ export async function updateListingStatus(
   accessToken: string,
   listingId: string,
   status: ListingStatus,
+  authorityDates?: { authority_starts_at?: string; authority_expires_at?: string | null },
 ): Promise<{ id: string; status: string; warning?: string }> {
   const response = await fetch(`${BACKEND_URL}/listings/${listingId}`, {
     method: 'PATCH',
@@ -134,7 +151,7 @@ export async function updateListingStatus(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, ...authorityDates }),
   });
   return parseJsonOrThrow(response);
 }

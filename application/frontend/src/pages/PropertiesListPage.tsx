@@ -5,6 +5,7 @@ import { fetchProperties, type Property } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
+import { cn } from '@/lib/utils';
 
 type Props = {
   session: Session;
@@ -22,7 +23,9 @@ type OpenPanel = { mode: 'create' | 'history'; propertyId: string; propertyTitle
 // tb-listings-lifecycle-001 (UX follow-up): "Create listing" and "Listing
 // history" no longer navigate to a separate route -- they open a floating
 // panel (bottom-right, Messenger/Gmail-compose style) so the agent never
-// loses their place in this list. Only one panel open at a time.
+// loses their place in this list. Only one panel open at a time. The row
+// whose panel is open gets a light-gold highlight (bg-amber-100) so it's
+// obvious which property the floating panel refers to.
 export function PropertiesListPage({ session }: Props) {
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +72,7 @@ export function PropertiesListPage({ session }: Props) {
           </thead>
           <tbody>
             {properties.map((property) => (
-              <tr key={property.id}>
+              <tr key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
                 <td>{property.title}</td>
                 <td>
                   {property.price !== null ? `${property.price_currency} ${property.price.toLocaleString()}` : '—'}

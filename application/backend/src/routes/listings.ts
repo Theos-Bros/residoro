@@ -8,18 +8,26 @@ const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
 
 // tb-listings-lifecycle-001: the real state machine cap-listings-001
 // Milestone 3 names. draft/active/withdrawn-only (tb-listings-create-001)
-// allowed any status write; this closes that gap. sold/expired/withdrawn are
+// allowed any status write; this closes that gap. sold/withdrawn are
 // terminal -- no further transitions once a listing lands there. Reassigning
 // a listing to a new agent is NOT a transition here: it's withdrawing this
 // row (active -> withdrawn) and POSTing a brand-new listing on the same
 // property, per cap-listings-001's "closing one and creating another"
 // framing.
+//
+// UX follow-up (same session): 'expired' is reachable only via
+// autoExpireLapsedListings below, never via a client-requested PATCH --
+// that's why it's absent from active/under_offer's arrays even though the
+// system itself still writes it. It's also no longer terminal: 'active' is
+// a legal move back out of it, but only actually escapes expiry if the PATCH
+// also supplies a new (future) authority_expires_at -- renewing without
+// fixing the date just gets auto-re-expired the next time listings are read.
 const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
   draft: ['active', 'withdrawn'],
-  active: ['under_offer', 'withdrawn', 'expired'],
+  active: ['under_offer', 'withdrawn'],
   under_offer: ['sold', 'active'],
   sold: [],
-  expired: [],
+  expired: ['active', 'withdrawn'],
   withdrawn: [],
 };
 const PROPERTY_TYPES = [
@@ -62,7 +70,55 @@ type CreatePropertyBody = {
 
 type UpdateListingStatusBody = {
   status?: string;
+  authority_starts_at?: string;
+  authority_expires_at?: string | null;
 };
+
+// UX follow-up: "the expiry of the authority to sell should be automatic,
+// it shouldn't be manual to mark it as expired" -- lazily swept on every
+// read/write instead of a cron job. Only active/under_offer listings with a
+// past authority_expires_at are affected; draft listings aren't yet
+// marketing the property, so an unactivated draft's dates don't matter until
+// it's activated (at which point the very next read catches it).
+async function autoExpireLapsedListings(tenantId: string) {
+  const { error } = await supabaseAdmin
+    .from('listings')
+    .update({ status: 'expired' })
+    .eq('tenant_id', tenantId)
+    .in('status', ['active', 'under_offer'])
+    .not('authority_expires_at', 'is', null)
+    .lt('authority_expires_at', new Date().toISOString());
+
+  if (error) throw error;
+}
+
+function parseAuthorityDates(
+  authorityStartsAt: string | undefined,
+  authorityExpiresAt: string | null | undefined,
+): { error: string } | { startsAt?: Date; expiresAt?: Date | null } {
+  let startsAt: Date | undefined;
+  if (authorityStartsAt !== undefined) {
+    startsAt = new Date(authorityStartsAt);
+    if (Number.isNaN(startsAt.getTime())) {
+      return { error: 'authority_starts_at must be a valid date' };
+    }
+  }
+
+  let expiresAt: Date | null | undefined;
+  if (authorityExpiresAt !== undefined && authorityExpiresAt !== null) {
+    expiresAt = new Date(authorityExpiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+      return { error: 'authority_expires_at must be a valid date' };
+    }
+    if (startsAt && expiresAt <= startsAt) {
+      return { error: 'authority_expires_at must be after authority_starts_at' };
+    }
+  } else if (authorityExpiresAt === null) {
+    expiresAt = null;
+  }
+
+  return { startsAt, expiresAt };
+}
 
 // tb-listings-create-001: the first brokerage-facing (requireAuth, not
 // requireOperator) routes beyond workspace.ts's /me/... endpoints. Properties
@@ -163,6 +219,13 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     '/properties/:id/listings',
     { preHandler: requireAuth },
     async (request, reply) => {
+      try {
+        await autoExpireLapsedListings(request.user!.tenantId);
+      } catch (err) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Could not refresh listing statuses' });
+      }
+
       const { data: property, error: propertyError } = await supabaseAdmin
         .from('properties')
         .select('id')
@@ -197,6 +260,13 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   );
 
   app.get('/listings', { preHandler: requireAuth }, async (request, reply) => {
+    try {
+      await autoExpireLapsedListings(request.user!.tenantId);
+    } catch (err) {
+      request.log.error(err);
+      return reply.status(500).send({ error: 'Could not refresh listing statuses' });
+    }
+
     const { data, error } = await supabaseAdmin
       .from('listings')
       .select(
@@ -272,26 +342,11 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "exclusivity must be 'exclusive' or 'open'" });
     }
 
-    let startsAt: Date | undefined;
-    if (authority_starts_at !== undefined) {
-      startsAt = new Date(authority_starts_at);
-      if (Number.isNaN(startsAt.getTime())) {
-        return reply.status(400).send({ error: 'authority_starts_at must be a valid date' });
-      }
+    const parsedDates = parseAuthorityDates(authority_starts_at, authority_expires_at);
+    if ('error' in parsedDates) {
+      return reply.status(400).send({ error: parsedDates.error });
     }
-
-    let expiresAt: Date | null | undefined;
-    if (authority_expires_at !== undefined && authority_expires_at !== null) {
-      expiresAt = new Date(authority_expires_at);
-      if (Number.isNaN(expiresAt.getTime())) {
-        return reply.status(400).send({ error: 'authority_expires_at must be a valid date' });
-      }
-      if (startsAt && expiresAt <= startsAt) {
-        return reply.status(400).send({ error: 'authority_expires_at must be after authority_starts_at' });
-      }
-    } else if (authority_expires_at === null) {
-      expiresAt = null;
-    }
+    const { startsAt, expiresAt } = parsedDates;
 
     const { data: property, error: propertyError } = await supabaseAdmin
       .from('properties')
@@ -338,11 +393,28 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     '/listings/:id',
     { preHandler: requireAuth },
     async (request, reply) => {
-      const { status } = request.body ?? {};
+      try {
+        await autoExpireLapsedListings(request.user!.tenantId);
+      } catch (err) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Could not refresh listing statuses' });
+      }
+
+      const { status, authority_starts_at, authority_expires_at } = request.body ?? {};
 
       if (!status || !STATUSES.includes(status as (typeof STATUSES)[number])) {
         return reply.status(400).send({ error: `status must be one of: ${STATUSES.join(', ')}` });
       }
+
+      // UX follow-up: lets a renewal (expired -> active) update the
+      // authority dates in the same request that reactivates the listing --
+      // "secure another ATS/ATL" from the warning badge. Optional for every
+      // other transition; unset fields are left alone.
+      const parsedDates = parseAuthorityDates(authority_starts_at, authority_expires_at);
+      if ('error' in parsedDates) {
+        return reply.status(400).send({ error: parsedDates.error });
+      }
+      const { startsAt, expiresAt } = parsedDates;
 
       const { data: current, error: currentError } = await supabaseAdmin
         .from('listings')
@@ -368,7 +440,11 @@ export async function registerListingsRoutes(app: FastifyInstance) {
 
       const { data, error } = await supabaseAdmin
         .from('listings')
-        .update({ status })
+        .update({
+          status,
+          ...(startsAt ? { authority_starts_at: startsAt.toISOString() } : {}),
+          ...(expiresAt !== undefined ? { authority_expires_at: expiresAt?.toISOString() ?? null } : {}),
+        })
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
         .select('id, property_id, status')

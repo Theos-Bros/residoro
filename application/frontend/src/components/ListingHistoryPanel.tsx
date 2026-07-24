@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { fetchPropertyListingHistory, type Listing, type ListingStatus } from '@/lib/listingsApi';
+import { fetchPropertyListingHistory, authorityWarningLabel, type Listing, type ListingStatus } from '@/lib/listingsApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 
 type Props = {
@@ -57,7 +57,12 @@ export function ListingHistoryPanel({ session, propertyId, propertyTitle, onClos
           {listings.map((listing) => (
             <li key={listing.id} className="rounded-md border p-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="font-medium">{STATUS_LABEL[listing.status]}</span>
+                <span className="font-medium">
+                  {STATUS_LABEL[listing.status]}
+                  {listing.status === 'expired' && (
+                    <span className="ml-2 text-destructive">{authorityWarningLabel(listing.listing_type)}</span>
+                  )}
+                </span>
                 <span className="text-muted-foreground">{new Date(listing.created_at).toLocaleDateString()}</span>
               </div>
               <div className="mt-1 text-muted-foreground">
