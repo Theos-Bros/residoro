@@ -104,6 +104,7 @@ export function PropertiesListPage({ session }: Props) {
         <CreateListingPanel
           session={session}
           propertyId={openPanel.propertyId}
+          propertyTitle={openPanel.propertyTitle}
           onClose={() => setOpenPanel(null)}
           onCreated={() => setOpenPanel(null)}
         />

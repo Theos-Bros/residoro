@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 
 type Props = {
   title: string;
+  documentTitle?: string;
   onClose: () => void;
   children: ReactNode;
   className?: string;
@@ -14,7 +15,7 @@ type Props = {
 // PropertiesListPage/ListingsPage. Plain fixed-position div, no portal:
 // this codebase's other overlay (ConfirmImportModal) is also a plain inline
 // element, not a portal-rendered one, so this follows the same precedent.
-export function FloatingPanel({ title, onClose, children, className }: Props) {
+export function FloatingPanel({ title, documentTitle, onClose, children, className }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +34,19 @@ export function FloatingPanel({ title, onClose, children, className }: Props) {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose]);
+
+  // UX follow-up: "the title bar of the window" (the browser tab) should
+  // show the property being listed/viewed while a panel is open, so it's
+  // identifiable among other tabs -- restores whatever the tab said before
+  // this panel opened once it closes.
+  useEffect(() => {
+    if (!documentTitle) return;
+    const previousTitle = document.title;
+    document.title = documentTitle;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, [documentTitle]);
 
   return (
     <div

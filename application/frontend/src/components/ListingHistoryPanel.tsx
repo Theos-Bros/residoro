@@ -47,7 +47,11 @@ export function ListingHistoryPanel({ session, propertyId, propertyTitle, onClos
   }, [session.access_token, propertyId]);
 
   return (
-    <FloatingPanel title={`Listing history: ${propertyTitle}`} onClose={onClose}>
+    <FloatingPanel
+      title={`Listing history: ${propertyTitle}`}
+      documentTitle={`${propertyTitle} · Residoro`}
+      onClose={onClose}
+    >
       {error && <p role="alert">{error}</p>}
       {!error && listings === null && <p>Loading…</p>}
       {listings?.length === 0 && <p>No listings on this property yet.</p>}

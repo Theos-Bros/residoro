@@ -7,6 +7,7 @@ import { FloatingPanel } from '@/components/FloatingPanel';
 type Props = {
   session: Session;
   propertyId: string;
+  propertyTitle: string;
   onClose: () => void;
   onCreated: () => void;
 };
@@ -22,7 +23,7 @@ const inputClass = 'w-full rounded-md border border-input px-3 py-2 text-sm';
 // (bottom-right, Messenger/Gmail-compose style) instead of a full-page route
 // -- propertyId now comes from a prop, not useParams, and success closes the
 // panel via onCreated() instead of navigating away.
-export function CreateListingPanel({ session, propertyId, onClose, onCreated }: Props) {
+export function CreateListingPanel({ session, propertyId, propertyTitle, onClose, onCreated }: Props) {
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [price, setPrice] = useState('');
   const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
@@ -60,7 +61,7 @@ export function CreateListingPanel({ session, propertyId, onClose, onCreated }: 
   }
 
   return (
-    <FloatingPanel title="Create listing" onClose={onClose}>
+    <FloatingPanel title="Create listing" documentTitle={`${propertyTitle} · Residoro`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="listing_type" className="text-sm font-medium">
