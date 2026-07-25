@@ -6,10 +6,15 @@ import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 // known password, bypassing the invite-email flow entirely (SMTP is still
 // on Supabase's default sender, deliberately deferred per project memory).
 // Run via: npm run --prefix application/backend create-mobile-test-account
-const EMAIL = 'danielbacud+residoro-mobile-verify@gmail.com';
-const PASSWORD = 'ResidoroMobileVerify123!';
+const EMAIL = process.env.MOBILE_TEST_ACCOUNT_EMAIL;
+const PASSWORD = process.env.MOBILE_TEST_ACCOUNT_PASSWORD;
 
 async function main() {
+  if (!EMAIL || !PASSWORD) {
+    console.error('Set MOBILE_TEST_ACCOUNT_EMAIL and MOBILE_TEST_ACCOUNT_PASSWORD in .env first.');
+    process.exit(1);
+  }
+
   const { data: workspace, error: workspaceError } = await supabaseAdmin
     .from('workspaces')
     .insert({
