@@ -1,4 +1,7 @@
 import type { FieldMapping } from '../lib/migrationsApi';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+
+const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
 
 // Mirrors the backend's PROPERTY_FIELDS/CONTACT_FIELDS
 // (application/backend/src/lib/transform.ts) -- the real target columns per
@@ -35,33 +38,35 @@ export function MappingReviewTable({ mappings, fieldOptions, onChange }: Props) 
   }
 
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="border-b text-left">
-          <th className="py-2 pr-4 font-medium">CSV Column</th>
-          <th className="py-2 pr-4 font-medium">Residoro Field</th>
-        </tr>
-      </thead>
-      <tbody>
-        {mappings.map((mapping, index) => (
-          <tr key={mapping.csv_column} className="border-b">
-            <td className="py-2 pr-4">{mapping.csv_column}</td>
-            <td className="py-2 pr-4">
-              <select
-                value={mapping.residoro_field}
-                onChange={(e) => updateMapping(index, e.target.value)}
-                className="rounded-md border border-input px-2 py-1 text-sm"
-              >
-                {fieldOptions.map((field) => (
-                  <option key={field} value={field}>
-                    {field}
-                  </option>
-                ))}
-              </select>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>CSV Column</TableHead>
+            <TableHead>Residoro Field</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {mappings.map((mapping, index) => (
+            <TableRow key={mapping.csv_column}>
+              <TableCell className="font-medium">{mapping.csv_column}</TableCell>
+              <TableCell>
+                <select
+                  value={mapping.residoro_field}
+                  onChange={(e) => updateMapping(index, e.target.value)}
+                  className={selectClass}
+                >
+                  {fieldOptions.map((field) => (
+                    <option key={field} value={field}>
+                      {field}
+                    </option>
+                  ))}
+                </select>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

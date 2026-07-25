@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { extendContract, fetchClients, setExclusivityHardBlock, type Client } from '@/lib/adminApi';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type Props = {
   session: Session;
@@ -74,110 +77,127 @@ export function ClientList({ session }: Props) {
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Clients</h1>
-        <Button asChild>
+        <h1 className="text-2xl font-semibold tracking-tight">Clients</h1>
+        <Button asChild size="sm">
           <Link to="/admin/clients/new">New client</Link>
         </Button>
       </div>
 
-      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
-
-      {!error && clients === null && (
-        <p className="mt-4 text-sm text-muted-foreground">Loading…</p>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
       )}
 
-      {clients?.length === 0 && (
-        <p className="mt-4 text-sm text-muted-foreground">No clients enrolled yet.</p>
-      )}
+      {!error && clients === null && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {clients?.length === 0 && <p className="text-sm text-muted-foreground">No clients enrolled yet.</p>}
 
       {clients && clients.length > 0 && (
-        <table className="mt-4 w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b text-left">
-              <th className="py-2 pr-4 font-medium">Brokerage</th>
-              <th className="py-2 pr-4 font-medium">Contract start</th>
-              <th className="py-2 pr-4 font-medium">Contract end</th>
-              <th className="py-2 pr-4 font-medium">Access</th>
-              <th className="py-2 pr-4 font-medium">Invite status</th>
-              <th className="py-2 pr-4 font-medium">Hard-block exclusivity</th>
-              <th className="py-2 pr-4 font-medium" />
-              <th className="py-2 pr-4 font-medium" />
-              <th className="py-2 pr-4 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((client) => (
-              <tr key={client.workspace_id} className="border-b">
-                <td className="py-2 pr-4">{client.brokerage_name}</td>
-                <td className="py-2 pr-4">{client.contract_start_date}</td>
-                <td className="py-2 pr-4">{client.contract_end_date}</td>
-                <td className="py-2 pr-4">{ACCESS_STATE_LABEL[client.access_state]}</td>
-                <td className="py-2 pr-4 capitalize">{client.invite_status}</td>
-                <td className="py-2 pr-4">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={client.exclusivity_hard_block}
-                      onChange={(e) => handleToggleHardBlock(client.workspace_id, e.target.checked)}
-                    />
-                    {client.exclusivity_hard_block ? 'Blocking' : 'Soft warning'}
-                  </label>
-                </td>
-                <td className="py-2 pr-4">
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={`/admin/clients/${client.workspace_id}/migrate`}>Migrate</Link>
-                  </Button>
-                </td>
-                <td className="py-2 pr-4">
-                  <Button asChild size="sm" variant="outline">
-                    <Link to={`/admin/clients/${client.workspace_id}/training`}>Training</Link>
-                  </Button>
-                </td>
-                <td className="py-2 pr-4">
-                  {renewingId === client.workspace_id ? (
-                    <div className="flex items-center gap-2">
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Brokerage</TableHead>
+                <TableHead>Contract start</TableHead>
+                <TableHead>Contract end</TableHead>
+                <TableHead>Access</TableHead>
+                <TableHead>Invite status</TableHead>
+                <TableHead>Hard-block exclusivity</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {clients.map((client) => (
+                <TableRow key={client.workspace_id}>
+                  <TableCell className="font-medium">{client.brokerage_name}</TableCell>
+                  <TableCell>{client.contract_start_date}</TableCell>
+                  <TableCell>{client.contract_end_date}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        client.access_state === 'active'
+                          ? 'secondary'
+                          : client.access_state === 'read_only'
+                            ? 'outline'
+                            : 'destructive'
+                      }
+                    >
+                      {ACCESS_STATE_LABEL[client.access_state]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="capitalize">{client.invite_status}</TableCell>
+                  <TableCell>
+                    <label className="flex items-center gap-2 text-sm">
                       <input
-                        type="date"
-                        value={renewDate}
-                        onChange={(e) => setRenewDate(e.target.value)}
-                        className="rounded-md border border-input px-2 py-1 text-sm"
+                        type="checkbox"
+                        checked={client.exclusivity_hard_block}
+                        onChange={(e) => handleToggleHardBlock(client.workspace_id, e.target.checked)}
+                        className="h-4 w-4 rounded border-input"
                       />
-                      <Button size="sm" onClick={() => handleRenew(client.workspace_id)} disabled={!renewDate}>
-                        Save
-                      </Button>
+                      {client.exclusivity_hard_block ? 'Blocking' : 'Soft warning'}
+                    </label>
+                  </TableCell>
+                  <TableCell className="flex flex-wrap justify-end gap-2">
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={`/admin/clients/${client.workspace_id}/migrate`}>Migrate</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={`/admin/clients/${client.workspace_id}/training`}>Training</Link>
+                    </Button>
+                    {renewingId === client.workspace_id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={renewDate}
+                          onChange={(e) => setRenewDate(e.target.value)}
+                          className="h-9 w-auto"
+                        />
+                        <Button size="sm" onClick={() => handleRenew(client.workspace_id)} disabled={!renewDate}>
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setRenewingId(null);
+                            setRenewError(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => {
-                          setRenewingId(null);
-                          setRenewError(null);
+                          setRenewingId(client.workspace_id);
+                          setRenewDate(client.contract_end_date);
                         }}
                       >
-                        Cancel
+                        Extend
                       </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setRenewingId(client.workspace_id);
-                        setRenewDate(client.contract_end_date);
-                      }}
-                    >
-                      Extend
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
-      {renewError && <p className="mt-2 text-sm text-destructive">{renewError}</p>}
-      {policyError && <p className="mt-2 text-sm text-destructive">{policyError}</p>}
+      {renewError && (
+        <p role="alert" className="text-sm text-destructive">
+          {renewError}
+        </p>
+      )}
+      {policyError && (
+        <p role="alert" className="text-sm text-destructive">
+          {policyError}
+        </p>
+      )}
     </div>
   );
 }

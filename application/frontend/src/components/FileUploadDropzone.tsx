@@ -26,7 +26,7 @@ export function FileUploadDropzone({ onFileSelected, disabled, label = 'property
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
-      className={`rounded-md border-2 p-8 text-center transition-colors ${
+      className={`rounded-lg border-2 p-8 text-center transition-colors ${
         isDragging ? 'border-solid border-primary bg-accent' : 'border-dashed border-input'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-accent'}`}
     >

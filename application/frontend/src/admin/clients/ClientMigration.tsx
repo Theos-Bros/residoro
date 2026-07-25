@@ -9,6 +9,7 @@ import { ContactCard } from '@/components/ContactCard';
 import { ConfirmImportModal } from '@/components/ConfirmImportModal';
 import { ImportBatchDetail } from '@/components/ImportBatchDetail';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   analyzeMappings,
   confirmImport,
@@ -137,47 +138,49 @@ export function ClientMigration({ session }: Props) {
         : 'Migrate properties from CSV';
 
   return (
-    <div>
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{heading}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{heading}</h1>
         <Button asChild variant="outline" size="sm">
           <Link to="/admin">Back to clients</Link>
         </Button>
       </div>
-      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-      {busy && <p className="mt-2 text-sm text-muted-foreground">Working…</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {busy && <p className="text-sm text-muted-foreground">Working…</p>}
 
       {step === 'upload' && !entityType && (
-        <div className="mt-4">
-          <p className="text-sm text-muted-foreground">What are you migrating for this client?</p>
-          <div className="mt-2 flex gap-2">
-            <Button onClick={() => setEntityType('property')}>Properties</Button>
-            <Button onClick={() => setEntityType('contact')}>Contacts</Button>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">What are you migrating for this client?</p>
+            <div className="mt-3 flex gap-2">
+              <Button onClick={() => setEntityType('property')}>Properties</Button>
+              <Button onClick={() => setEntityType('contact')}>Contacts</Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {step === 'upload' && entityType && (
-        <div className="mt-4">
-          <FileUploadDropzone
-            onFileSelected={handleFileSelected}
-            disabled={busy}
-            label={entityType === 'contact' ? 'contacts' : 'property'}
-          />
-        </div>
+        <FileUploadDropzone
+          onFileSelected={handleFileSelected}
+          disabled={busy}
+          label={entityType === 'contact' ? 'contacts' : 'property'}
+        />
       )}
 
       {step === 'mapping' && (
-        <div className="mt-4">
-          <h2 className="text-lg font-semibold">Review the mappings</h2>
-          <div className="mt-2">
-            <MappingReviewTable
-              mappings={mappings}
-              fieldOptions={entityType === 'contact' ? CONTACT_FIELD_OPTIONS : PROPERTY_FIELD_OPTIONS}
-              onChange={setMappings}
-            />
-          </div>
-          <div className="mt-3 flex gap-2">
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold tracking-tight">Review the mappings</h2>
+          <MappingReviewTable
+            mappings={mappings}
+            fieldOptions={entityType === 'contact' ? CONTACT_FIELD_OPTIONS : PROPERTY_FIELD_OPTIONS}
+            onChange={setMappings}
+          />
+          <div className="flex gap-2">
             <Button onClick={handleGeneratePreview} disabled={busy}>
               These look correct — show preview
             </Button>
@@ -189,22 +192,26 @@ export function ClientMigration({ session }: Props) {
       )}
 
       {step === 'preview' && (
-        <div className="mt-4">
-          <h2 className="text-lg font-semibold">Preview</h2>
-          <PreviewTable
-            properties={previewProperties}
-            totalRows={totalRows}
-            totalValidationErrors={totalValidationErrors}
-          />
-          <h3 className="mt-6 mb-2 text-lg font-semibold">Card view</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {previewProperties.map((property) =>
-              entityType === 'contact' ? (
-                <ContactCard key={property.row_number} contact={property} />
-              ) : (
-                <PropertyCard key={property.row_number} property={property} />
-              ),
-            )}
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Preview</h2>
+            <PreviewTable
+              properties={previewProperties}
+              totalRows={totalRows}
+              totalValidationErrors={totalValidationErrors}
+            />
+          </div>
+          <div>
+            <h3 className="mb-2 text-lg font-semibold tracking-tight">Card view</h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {previewProperties.map((property) =>
+                entityType === 'contact' ? (
+                  <ContactCard key={property.row_number} contact={property} />
+                ) : (
+                  <PropertyCard key={property.row_number} property={property} />
+                ),
+              )}
+            </div>
           </div>
           <ConfirmImportModal
             totalRows={totalRows}
@@ -216,11 +223,9 @@ export function ClientMigration({ session }: Props) {
       )}
 
       {step === 'imported' && batch && (
-        <div className="mt-4">
+        <div className="space-y-4">
           <ImportBatchDetail batch={batch} />
-          <Button className="mt-4" onClick={handleStartOver}>
-            Start another migration
-          </Button>
+          <Button onClick={handleStartOver}>Start another migration</Button>
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import type { PreviewProperty } from '../lib/migrationsApi';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 
 type Props = {
   properties: PreviewProperty[];
@@ -12,42 +13,38 @@ export function PreviewTable({ properties, totalRows, totalValidationErrors }: P
     : [];
 
   return (
-    <div>
+    <div className="space-y-2">
       <p className="text-sm text-muted-foreground">
         Showing {properties.length} of {totalRows} rows.{' '}
         {totalValidationErrors > 0
           ? `${totalValidationErrors} row(s) in this preview have validation errors.`
           : 'No validation errors in this preview.'}
       </p>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-max border-collapse text-sm">
-          <thead>
-            <tr className="border-b text-left">
-              <th className="py-2 pr-4 font-medium">Row</th>
+      <div className="overflow-x-auto rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Row</TableHead>
               {columns.map((col) => (
-                <th key={col} className="py-2 pr-4 font-medium">
-                  {col}
-                </th>
+                <TableHead key={col}>{col}</TableHead>
               ))}
-              <th className="py-2 pr-4 font-medium">Errors</th>
-            </tr>
-          </thead>
-          <tbody>
+              <TableHead>Errors</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {properties.map((property) => (
-              <tr key={property.row_number} className="border-b">
-                <td className="py-2 pr-4">{property.row_number}</td>
+              <TableRow key={property.row_number}>
+                <TableCell className="font-medium">{property.row_number}</TableCell>
                 {columns.map((col) => (
-                  <td key={col} className="py-2 pr-4">
-                    {String(property[col] ?? '')}
-                  </td>
+                  <TableCell key={col}>{String(property[col] ?? '')}</TableCell>
                 ))}
-                <td className="py-2 pr-4 text-destructive">{property.validation_errors.join('; ')}</td>
-              </tr>
+                <TableCell className="text-destructive">{property.validation_errors.join('; ')}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         No data has been imported to Residoro yet — this is a preview only.
       </p>
     </div>

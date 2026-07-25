@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { fetchTrainingOverview, updateTrainingStatus, type TrainingSession } from '@/lib/adminApi';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 type Props = {
   session: Session;
@@ -53,55 +55,65 @@ export function TrainingOverview({ session }: Props) {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold">Training</h1>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold tracking-tight">Training</h1>
 
-      {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
-      {!error && sessions === null && <p className="mt-4 text-sm text-muted-foreground">Loading…</p>}
+      {!error && sessions === null && <p className="text-sm text-muted-foreground">Loading…</p>}
 
       {sessions?.length === 0 && (
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           No training sessions scheduled yet -- set them from a client's row on the Clients page.
         </p>
       )}
 
       {sessions && sessions.length > 0 && (
-        <table className="mt-4 w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b text-left">
-              <th className="py-2 pr-4 font-medium">Brokerage</th>
-              <th className="py-2 pr-4 font-medium">Session</th>
-              <th className="py-2 pr-4 font-medium">Date</th>
-              <th className="py-2 pr-4 font-medium">Status</th>
-              <th className="py-2 pr-4 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((s) => (
-              <tr key={s.id} className="border-b">
-                <td className="py-2 pr-4">{s.brokerage_name}</td>
-                <td className="py-2 pr-4">Session {s.session_number}</td>
-                <td className="py-2 pr-4">{s.scheduled_date}</td>
-                <td className="py-2 pr-4">
-                  {s.overdue ? <span className="text-destructive">Overdue</span> : STATUS_LABEL[s.status]}
-                </td>
-                <td className="py-2 pr-4">
-                  {s.status === 'scheduled' && (
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleMark(s.id, 'completed')}>
-                        Mark completed
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleMark(s.id, 'missed')}>
-                        Mark missed
-                      </Button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Brokerage</TableHead>
+                <TableHead>Session</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sessions.map((s) => (
+                <TableRow key={s.id}>
+                  <TableCell className="font-medium">{s.brokerage_name}</TableCell>
+                  <TableCell>Session {s.session_number}</TableCell>
+                  <TableCell>{s.scheduled_date}</TableCell>
+                  <TableCell>
+                    {s.overdue ? (
+                      <Badge variant="destructive">Overdue</Badge>
+                    ) : (
+                      <Badge variant="secondary">{STATUS_LABEL[s.status]}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {s.status === 'scheduled' && (
+                      <div className="flex justify-end gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleMark(s.id, 'completed')}>
+                          Mark completed
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleMark(s.id, 'missed')}>
+                          Mark missed
+                        </Button>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   );
