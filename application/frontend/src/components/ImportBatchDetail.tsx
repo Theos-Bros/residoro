@@ -12,8 +12,10 @@ export function ImportBatchDetail({ batch }: Props) {
       <CardContent className="space-y-1 pt-6">
         <h2 className="text-xl font-semibold tracking-tight">Import complete</h2>
         <p className="text-sm">
-          {batch.successful_imports} succeeded, {batch.failed_rows} failed (of {batch.total_rows}{' '}
-          total rows in {batch.filename}).
+          {batch.successful_imports} succeeded, {batch.failed_rows} failed
+          {batch.skipped_rows > 0 ? `, ${batch.skipped_rows} skipped (already existed)` : ''}
+          {batch.updated_rows > 0 ? `, ${batch.updated_rows} updated (overwritten)` : ''} (of{' '}
+          {batch.total_rows} total rows in {batch.filename}).
         </p>
         <p className="text-sm text-muted-foreground">
           Rollback window ends: {new Date(batch.rollback_deadline).toLocaleString()}

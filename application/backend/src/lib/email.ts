@@ -12,6 +12,8 @@ export async function sendImportSummaryEmail(params: {
   totalRows: number;
   successfulImports: number;
   failedRows: number;
+  skippedRows?: number;
+  updatedRows?: number;
   batchDetailUrl: string;
 }) {
   if (!RESEND_API_KEY) {
@@ -30,6 +32,12 @@ export async function sendImportSummaryEmail(params: {
       to: [params.to],
       subject: `Import complete: ${params.successfulImports} properties added to Residoro`,
       html: `<p>Successfully imported ${params.successfulImports} of ${params.totalRows} properties from ${params.filename}.</p>` +
+        (params.updatedRows
+          ? `<p>${params.updatedRows} existing propert${params.updatedRows === 1 ? 'y was' : 'ies were'} updated instead of duplicated.</p>`
+          : '') +
+        (params.skippedRows
+          ? `<p>${params.skippedRows} row${params.skippedRows === 1 ? '' : 's'} skipped — already existed in Residoro.</p>`
+          : '') +
         (params.failedRows > 0
           ? `<p>${params.failedRows} row${params.failedRows === 1 ? '' : 's'} had errors — <a href="${params.batchDetailUrl}">view details</a>.</p>`
           : '') +

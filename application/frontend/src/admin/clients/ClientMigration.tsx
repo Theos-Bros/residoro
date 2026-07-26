@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import { FileUploadDropzone } from '@/components/FileUploadDropzone';
 import { MappingReviewTable, PROPERTY_FIELD_OPTIONS, CONTACT_FIELD_OPTIONS } from '@/components/MappingReviewTable';
 import { PreviewTable } from '@/components/PreviewTable';
+import { ConflictReviewTable } from '@/components/ConflictReviewTable';
 import { PropertyCard } from '@/components/PropertyCard';
 import { ContactCard } from '@/components/ContactCard';
 import { ConfirmImportModal } from '@/components/ConfirmImportModal';
@@ -17,8 +18,10 @@ import {
   previewMappings,
   uploadCsv,
   type BatchDetail,
+  type ConflictResolution,
   type EntityType,
   type FieldMapping,
+  type PreviewConflict,
   type PreviewProperty,
 } from '@/lib/migrationsApi';
 
@@ -56,6 +59,7 @@ export function ClientMigration({ session }: Props) {
   const [previewProperties, setPreviewProperties] = useState<PreviewProperty[]>([]);
   const [totalRows, setTotalRows] = useState(0);
   const [totalValidationErrors, setTotalValidationErrors] = useState(0);
+  const [conflicts, setConflicts] = useState<PreviewConflict[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [batch, setBatch] = useState<BatchDetail | null>(null);
 
@@ -96,6 +100,7 @@ export function ClientMigration({ session }: Props) {
       setPreviewProperties(result.sample_properties);
       setTotalRows(result.total_rows);
       setTotalValidationErrors(result.total_validation_errors);
+      setConflicts(result.conflicts);
       setStep('preview');
     } catch (err) {
       setError((err as Error).message);
@@ -104,12 +109,17 @@ export function ClientMigration({ session }: Props) {
     }
   }
 
+  function handleConflictResolutionChange(rowNumber: number, resolution: ConflictResolution) {
+    setConflicts((prev) => prev.map((c) => (c.row_number === rowNumber ? { ...c, resolution } : c)));
+  }
+
   async function handleConfirmImport() {
     if (!fileId) return;
     setError(null);
     setConfirming(true);
     try {
-      const result = await confirmImport(accessToken, fileId, tenantId);
+      const resolutions = Object.fromEntries(conflicts.map((c) => [c.row_number, c.resolution]));
+      const result = await confirmImport(accessToken, fileId, tenantId, resolutions);
       const detail = await fetchImportBatch(accessToken, result.batch_id, tenantId);
       setBatch(detail);
       setStep('imported');
@@ -126,6 +136,7 @@ export function ClientMigration({ session }: Props) {
     setFileId(null);
     setMappings([]);
     setPreviewProperties([]);
+    setConflicts([]);
     setBatch(null);
     setError(null);
   }
@@ -201,6 +212,7 @@ export function ClientMigration({ session }: Props) {
               totalValidationErrors={totalValidationErrors}
             />
           </div>
+          <ConflictReviewTable totalRows={totalRows} conflicts={conflicts} onChange={handleConflictResolutionChange} />
           <div>
             <h3 className="mb-2 text-lg font-semibold tracking-tight">Card view</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

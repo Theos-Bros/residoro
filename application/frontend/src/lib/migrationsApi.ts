@@ -31,11 +31,29 @@ export type PreviewProperty = {
   [field: string]: unknown;
 };
 
+// tb-migration-deduplication-001: 'skip' (default) leaves the existing
+// property untouched, 'create_new' imports the row as a duplicate anyway,
+// 'overwrite' updates the existing property's fields in place. Properties
+// only -- a contacts migration's conflicts array is always empty.
+export type ConflictResolution = 'skip' | 'create_new' | 'overwrite';
+
+export type PreviewConflict = {
+  row_number: number;
+  address: unknown;
+  city: unknown;
+  province: unknown;
+  existing_property_id: string;
+  existing_title: string;
+  resolution: ConflictResolution;
+};
+
 export type PreviewResult = {
   file_id: string;
   total_rows: number;
   sample_properties: PreviewProperty[];
   total_validation_errors: number;
+  total_conflicts: number;
+  conflicts: PreviewConflict[];
   status: string;
 };
 
@@ -107,6 +125,8 @@ export type ImportResult = {
   total_rows: number;
   successful_imports: number;
   failed_rows: number;
+  skipped_rows: number;
+  updated_rows: number;
 };
 
 export type FailedRowDetail = {
@@ -121,16 +141,30 @@ export type BatchDetail = {
   total_rows: number;
   successful_imports: number;
   failed_rows: number;
+  skipped_rows: number;
+  updated_rows: number;
   rollback_deadline: string;
   failed_row_details: FailedRowDetail[];
 };
 
 // tb-migration-preview-001: the confirm step tb-migration-csv-001 stubbed out
 // ("Importing into Residoro is not built yet") -- this is that build.
-export async function confirmImport(accessToken: string, fileId: string, tenantId?: string): Promise<ImportResult> {
+// tb-migration-deduplication-001: resolutions carries the operator's per-row
+// skip/create_new/overwrite choice for any row the preview step flagged as a
+// conflict, keyed by row_number; omitted entirely for a contacts migration.
+export async function confirmImport(
+  accessToken: string,
+  fileId: string,
+  tenantId?: string,
+  resolutions?: Record<number, ConflictResolution>,
+): Promise<ImportResult> {
   const response = await fetch(withTenant(`/migrations/${fileId}/import`, tenantId), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ resolutions: resolutions ?? {} }),
   });
   return parseJsonOrThrow(response);
 }

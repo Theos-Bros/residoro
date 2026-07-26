@@ -6,6 +6,7 @@ import { parseCsv } from '../lib/csv.js';
 import { directMatchHeaders } from '../lib/mapping.js';
 import { transformSample, type EntityType, type MappingEntry } from '../lib/transform.js';
 import { sendImportSummaryEmail } from '../lib/email.js';
+import { findPropertyConflicts, resolveAction, type ConflictResolution } from '../lib/dedupe.js';
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_ROWS = 10_000;
@@ -221,11 +222,57 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not save the preview' });
       }
 
+      // tb-migration-deduplication-001: conflict detection needs the FULL row
+      // set, not just the PREVIEW_ROW_COUNT sample above -- otherwise "N
+      // already exist" would only ever be able to see conflicts among the
+      // first 5 rows. Properties only (see this tracer bullet's
+      // semantic_scope); contacts get an empty conflict list.
+      let totalConflicts = 0;
+      let conflictSummaries: {
+        row_number: number;
+        address: unknown;
+        city: unknown;
+        province: unknown;
+        existing_property_id: string;
+        existing_title: string;
+        resolution: ConflictResolution;
+      }[] = [];
+
+      if (row.entity_type === 'property') {
+        const { sampleProperties: allTransformed } = transformSample(rows, mappings, row.entity_type);
+        const conflicts = await findPropertyConflicts(
+          request.user!.tenantId,
+          allTransformed.map((item) => ({
+            row_number: item.row_number as number,
+            address: item.address,
+            city: item.city,
+            province: item.province,
+          })),
+        );
+        totalConflicts = conflicts.size;
+        conflictSummaries = allTransformed
+          .filter((item) => conflicts.has(item.row_number as number))
+          .map((item) => {
+            const match = conflicts.get(item.row_number as number)!;
+            return {
+              row_number: item.row_number as number,
+              address: item.address,
+              city: item.city,
+              province: item.province,
+              existing_property_id: match.existing_property_id,
+              existing_title: match.existing_title,
+              resolution: 'skip' as const,
+            };
+          });
+      }
+
       return {
         file_id: row.id,
         total_rows: row.row_count,
         sample_properties: sampleProperties,
         total_validation_errors: errorCount,
+        total_conflicts: totalConflicts,
+        conflicts: conflictSummaries,
         status: 'ready_for_confirmation',
       };
     },
@@ -237,10 +284,11 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
   // tracer bullet. Runs synchronously in the request (no job queue exists
   // yet in this codebase) -- acceptable for a tracer bullet at the existing
   // 10,000-row cap, revisit if that proves too slow in practice.
-  app.post<{ Params: { fileId: string } }>(
+  app.post<{ Params: { fileId: string }; Body: { resolutions?: Record<number, ConflictResolution> } }>(
     '/migrations/:fileId/import',
     { preHandler: requireMigrationAccess },
     async (request, reply) => {
+      const resolutions = request.body?.resolutions ?? {};
       const { data: row, error } = await supabaseAdmin
         .from('migration_temp_files')
         .select(
@@ -262,6 +310,26 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
       const config = ENTITY_CONFIG[row.entity_type];
       const { rows } = parseCsv(row.raw_content);
       const { sampleProperties: transformed } = transformSample(rows, row.user_confirmed_mappings, row.entity_type);
+
+      // tb-migration-deduplication-001: re-run conflict detection at confirm
+      // time rather than trusting what the preview step showed -- properties
+      // may have changed (or been imported by a concurrent migration) between
+      // preview and confirm. resolutions is keyed by the row_number the
+      // preview step returned; a row the operator never saw as a conflict is
+      // treated as create_new regardless of what's in resolutions, and a row
+      // that's no longer a conflict ignores any resolution sent for it.
+      const conflicts =
+        row.entity_type === 'property'
+          ? await findPropertyConflicts(
+              request.user!.tenantId,
+              transformed.map((item) => ({
+                row_number: item.row_number as number,
+                address: item.address,
+                city: item.city,
+                province: item.province,
+              })),
+            )
+          : new Map();
 
       const { data: batch, error: batchError } = await supabaseAdmin
         .from('import_batches')
@@ -285,6 +353,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
 
       let successCount = 0;
       let failCount = 0;
+      let skippedCount = 0;
+      let updatedCount = 0;
 
       for (const item of transformed) {
         const { row_number, validation_errors, ...mappedData } = item as Record<string, unknown> & {
@@ -309,6 +379,56 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           continue;
         }
 
+        const action = resolveAction(row_number, conflicts, resolutions);
+
+        if (action === 'skip') {
+          skippedCount += 1;
+          const existing = conflicts.get(row_number);
+          await supabaseAdmin.from(config.trackingTable).insert({
+            batch_id: batch.id,
+            property_id: existing?.existing_property_id ?? null,
+            original_row: originalRow,
+            mapped_data: mappedData,
+            status: 'skipped',
+          });
+          continue;
+        }
+
+        if (action === 'overwrite') {
+          const existing = conflicts.get(row_number)!;
+          const { data: record, error: updateError } = await supabaseAdmin
+            .from(config.targetTable)
+            .update(mappedData)
+            .eq('id', existing.existing_property_id)
+            .select('id')
+            .single();
+
+          if (updateError || !record) {
+            failCount += 1;
+            request.log.error(updateError);
+            await supabaseAdmin.from(config.trackingTable).insert({
+              batch_id: batch.id,
+              original_row: originalRow,
+              mapped_data: mappedData,
+              status: 'error',
+              error_message: updateError?.message ?? `Could not update existing ${row.entity_type}`,
+            });
+            continue;
+          }
+
+          updatedCount += 1;
+          await supabaseAdmin.from(config.trackingTable).insert({
+            batch_id: batch.id,
+            [config.trackingIdColumn]: record.id,
+            original_row: originalRow,
+            mapped_data: mappedData,
+            status: 'updated',
+          });
+          continue;
+        }
+
+        // action === 'create_new': either no conflict, or the operator chose
+        // to create a duplicate anyway.
         const { data: record, error: recordError } = await supabaseAdmin
           .from(config.targetTable)
           .insert({ ...mappedData, tenant_id: request.user!.tenantId })
@@ -345,6 +465,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           imported_at: new Date().toISOString(),
           successful_imports: successCount,
           failed_rows: failCount,
+          skipped_rows: skippedCount,
+          updated_rows: updatedCount,
         })
         .eq('id', batch.id);
 
@@ -359,6 +481,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           totalRows: row.row_count,
           successfulImports: successCount,
           failedRows: failCount,
+          skippedRows: skippedCount,
+          updatedRows: updatedCount,
           batchDetailUrl: `${frontendUrl}/migrations/batches/${batch.id}`,
         });
       } else {
@@ -371,6 +495,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         total_rows: row.row_count,
         successful_imports: successCount,
         failed_rows: failCount,
+        skipped_rows: skippedCount,
+        updated_rows: updatedCount,
       };
     },
   );
@@ -381,7 +507,9 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { data: batch, error } = await supabaseAdmin
         .from('import_batches')
-        .select('id, filename, status, total_rows, successful_imports, failed_rows, rollback_deadline, entity_type')
+        .select(
+          'id, filename, status, total_rows, successful_imports, failed_rows, skipped_rows, updated_rows, rollback_deadline, entity_type',
+        )
         .eq('id', request.params.batchId)
         .eq('tenant_id', request.user!.tenantId)
         .single<{
@@ -391,6 +519,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           total_rows: number;
           successful_imports: number;
           failed_rows: number;
+          skipped_rows: number;
+          updated_rows: number;
           rollback_deadline: string;
           entity_type: EntityType;
         }>();
@@ -417,6 +547,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         total_rows: batch.total_rows,
         successful_imports: batch.successful_imports,
         failed_rows: batch.failed_rows,
+        skipped_rows: batch.skipped_rows,
+        updated_rows: batch.updated_rows,
         rollback_deadline: batch.rollback_deadline,
         failed_row_details: (failedRows ?? []).map((r) => ({
           original_row: r.original_row,
