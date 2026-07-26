@@ -42,7 +42,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/properties/:id', { preHandler: requireAuth }, async (request, reply) => {
     const { data: property, error } = await supabaseAdmin
       .from('properties')
-      .select('id, title, type, address, city, province, price, price_currency, status')
+      .select('id, title, type, address, city, province, price, price_currency, status, verification_status')
       .eq('id', request.params.id)
       .eq('tenant_id', request.user!.tenantId)
       .maybeSingle();

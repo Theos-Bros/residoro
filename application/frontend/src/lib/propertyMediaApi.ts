@@ -1,3 +1,5 @@
+import type { VerificationStatus } from './listingsApi';
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
 export type PropertyDetail = {
@@ -10,6 +12,7 @@ export type PropertyDetail = {
   price: number | null;
   price_currency: string;
   status: string;
+  verification_status: VerificationStatus;
 };
 
 export type PropertyMedia = {

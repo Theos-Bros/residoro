@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchProperty, fetchPropertyMedia, type PropertyDetail, type PropertyMedia } from '@/lib/propertyMediaApi';
 import { fetchPropertyDocuments, type PropertyDocument } from '@/lib/propertyDocumentsApi';
+import { updatePropertyVerification, VERIFICATION_STATUSES, type VerificationStatus } from '@/lib/listingsApi';
+import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { PropertyPhotoGallery } from '@/components/PropertyPhotoGallery';
 import { PropertyDocumentsSection } from '@/components/PropertyDocumentsSection';
 import { Button } from '@/components/ui/button';
@@ -11,6 +13,9 @@ import { Badge } from '@/components/ui/badge';
 type Props = {
   session: Session;
 };
+
+const verificationSelectClass =
+  'h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm';
 
 function formatPrice(value: number | null, currency: string): string {
   return value === null ? '—' : `${currency} ${value.toLocaleString()}`;
@@ -27,6 +32,20 @@ export function PropertyDetailPage({ session }: Props) {
   const [media, setMedia] = useState<PropertyMedia[] | null>(null);
   const [documents, setDocuments] = useState<PropertyDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { status: workspaceStatus } = useWorkspaceStatus(session);
+  const isAdmin = workspaceStatus?.role === 'admin';
+
+  async function handleVerificationChange(verificationStatus: VerificationStatus) {
+    if (!id) return;
+    setError(null);
+    try {
+      await updatePropertyVerification(session.access_token, id, verificationStatus);
+      const refreshed = await fetchProperty(session.access_token, id);
+      setProperty(refreshed);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -75,6 +94,22 @@ export function PropertyDetailPage({ session }: Props) {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">{property.title}</h1>
               <Badge variant="outline">{property.status}</Badge>
+              {isAdmin ? (
+                <select
+                  aria-label={`Verification status for ${property.title}`}
+                  value={property.verification_status}
+                  onChange={(e) => handleVerificationChange(e.target.value as VerificationStatus)}
+                  className={verificationSelectClass}
+                >
+                  {VERIFICATION_STATUSES.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Badge variant="secondary">{property.verification_status}</Badge>
+              )}
             </div>
             <p className="text-lg font-medium">{formatPrice(property.price, property.price_currency)}</p>
             <p className="text-sm text-muted-foreground">
