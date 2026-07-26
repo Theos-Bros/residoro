@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import { Link, Navigate, Outlet } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from './lib/supabaseClient';
 import { useState } from 'react';
 import { Menu } from 'lucide-react';
@@ -11,6 +11,7 @@ import { ContractWarningBanner } from './components/ContractWarningBanner';
 import { ContractNotificationPanel } from './components/ContractNotificationPanel';
 import { Button } from './components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from './components/ui/sheet';
+import { cn } from './lib/utils';
 
 type Props = {
   session: Session | null;
@@ -34,6 +35,8 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const location = useLocation();
+  const isActiveLink = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
 
   if (loading || (session && operatorStatus === 'loading')) {
     return null;
@@ -98,7 +101,11 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
             <Link
               key={link.to}
               to={link.to}
-              className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              aria-current={isActiveLink(link.to) ? 'page' : undefined}
+              className={cn(
+                'rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
+                isActiveLink(link.to) && 'bg-accent text-foreground',
+              )}
             >
               {link.label}
             </Link>
@@ -136,7 +143,11 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
                 key={link.to}
                 to={link.to}
                 onClick={() => setMobileNavOpen(false)}
-                className="rounded-md px-3 py-3 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-current={isActiveLink(link.to) ? 'page' : undefined}
+                className={cn(
+                  'rounded-md px-3 py-3 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
+                  isActiveLink(link.to) && 'bg-accent text-foreground',
+                )}
               >
                 {link.label}
               </Link>
