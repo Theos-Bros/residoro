@@ -144,7 +144,17 @@ export type BatchDetail = {
   skipped_rows: number;
   updated_rows: number;
   rollback_deadline: string;
+  rolled_back_at: string | null;
+  could_not_revert: string[];
   failed_row_details: FailedRowDetail[];
+};
+
+// tb-migration-rollback-001
+export type RollbackResult = {
+  batch_id: string;
+  deleted: number;
+  reverted: number;
+  could_not_revert: string[];
 };
 
 // tb-migration-preview-001: the confirm step tb-migration-csv-001 stubbed out
@@ -171,6 +181,20 @@ export async function confirmImport(
 
 export async function fetchImportBatch(accessToken: string, batchId: string, tenantId?: string): Promise<BatchDetail> {
   const response = await fetch(withTenant(`/migrations/batches/${batchId}`, tenantId), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-migration-rollback-001: undoes a completed batch within its
+// rollback_deadline -- deletes rows it created, restores rows it overwrote.
+export async function rollbackImportBatch(
+  accessToken: string,
+  batchId: string,
+  tenantId?: string,
+): Promise<RollbackResult> {
+  const response = await fetch(withTenant(`/migrations/batches/${batchId}/rollback`, tenantId), {
+    method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);

@@ -396,6 +396,18 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
 
         if (action === 'overwrite') {
           const existing = conflicts.get(row_number)!;
+
+          // tb-migration-rollback-001: snapshot the row's full pre-overwrite
+          // state before it's changed, so a later rollback has something to
+          // restore. Best-effort -- a failed select here just means this row
+          // can't be reverted later (see previous_data ?? null below), it
+          // shouldn't block the overwrite itself.
+          const { data: previousData } = await supabaseAdmin
+            .from(config.targetTable)
+            .select('*')
+            .eq('id', existing.existing_property_id)
+            .single();
+
           const { data: record, error: updateError } = await supabaseAdmin
             .from(config.targetTable)
             .update(mappedData)
@@ -422,6 +434,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
             [config.trackingIdColumn]: record.id,
             original_row: originalRow,
             mapped_data: mappedData,
+            previous_data: previousData ?? null,
             status: 'updated',
           });
           continue;
@@ -508,7 +521,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
       const { data: batch, error } = await supabaseAdmin
         .from('import_batches')
         .select(
-          'id, filename, status, total_rows, successful_imports, failed_rows, skipped_rows, updated_rows, rollback_deadline, entity_type',
+          'id, filename, status, total_rows, successful_imports, failed_rows, skipped_rows, updated_rows, rollback_deadline, rolled_back_at, could_not_revert, entity_type',
         )
         .eq('id', request.params.batchId)
         .eq('tenant_id', request.user!.tenantId)
@@ -522,6 +535,8 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           skipped_rows: number;
           updated_rows: number;
           rollback_deadline: string;
+          rolled_back_at: string | null;
+          could_not_revert: string[];
           entity_type: EntityType;
         }>();
 
@@ -550,10 +565,110 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
         skipped_rows: batch.skipped_rows,
         updated_rows: batch.updated_rows,
         rollback_deadline: batch.rollback_deadline,
+        rolled_back_at: batch.rolled_back_at,
+        could_not_revert: batch.could_not_revert ?? [],
         failed_row_details: (failedRows ?? []).map((r) => ({
           original_row: r.original_row,
           error_message: r.error_message,
         })),
+      };
+    },
+  );
+
+  // tb-migration-rollback-001: undoes a completed batch within its
+  // rollback_deadline -- deletes rows this batch created, restores rows it
+  // overwrote from their captured previous_data snapshot. Marks the batch
+  // rolled_back so a second attempt 409s instead of double-applying.
+  app.post<{ Params: { batchId: string } }>(
+    '/migrations/batches/:batchId/rollback',
+    { preHandler: requireMigrationAccess },
+    async (request, reply) => {
+      const { data: batch, error } = await supabaseAdmin
+        .from('import_batches')
+        .select('id, status, rollback_deadline, entity_type')
+        .eq('id', request.params.batchId)
+        .eq('tenant_id', request.user!.tenantId)
+        .single<{ id: string; status: string; rollback_deadline: string; entity_type: EntityType }>();
+
+      if (error || !batch) {
+        return reply.status(404).send({ error: 'Import batch not found' });
+      }
+      if (batch.status === 'rolled_back') {
+        return reply.status(409).send({ error: 'This batch has already been rolled back' });
+      }
+      if (new Date(batch.rollback_deadline).getTime() < Date.now()) {
+        return reply.status(410).send({ error: 'The rollback window for this batch has passed' });
+      }
+
+      const config = ENTITY_CONFIG[batch.entity_type];
+      const { data: rows, error: rowsError } = await supabaseAdmin
+        .from(config.trackingTable)
+        .select(`id, status, previous_data, ${config.trackingIdColumn}`)
+        .eq('batch_id', batch.id)
+        .in('status', ['success', 'updated']);
+
+      if (rowsError) {
+        request.log.error(rowsError);
+        return reply.status(500).send({ error: "Could not load this batch's imported rows" });
+      }
+
+      let deletedCount = 0;
+      let revertedCount = 0;
+      const couldNotRevert: string[] = [];
+
+      for (const trackingRow of (rows ?? []) as Record<string, unknown>[]) {
+        const trackingRowId = trackingRow.id as string;
+        const targetId = trackingRow[config.trackingIdColumn] as string | null;
+        if (!targetId) continue;
+
+        if (trackingRow.status === 'success') {
+          // imported_properties/imported_contacts reference properties/
+          // contacts with no ON DELETE clause -- deleting the target row
+          // while this tracking row still points at it violates that FK, so
+          // null the tracking row's own FK column first (same as an 'error'
+          // row's already-null property_id/contact_id -- the tracking row
+          // itself, and its original_row/mapped_data audit trail, stays).
+          await supabaseAdmin
+            .from(config.trackingTable)
+            .update({ [config.trackingIdColumn]: null })
+            .eq('id', trackingRowId);
+
+          const { error: deleteError } = await supabaseAdmin.from(config.targetTable).delete().eq('id', targetId);
+          if (deleteError) {
+            request.log.error(deleteError);
+            couldNotRevert.push(targetId);
+          } else {
+            deletedCount += 1;
+          }
+        } else if (trackingRow.status === 'updated') {
+          const previousData = trackingRow.previous_data as Record<string, unknown> | null;
+          if (!previousData) {
+            couldNotRevert.push(targetId);
+            continue;
+          }
+          const { error: revertError } = await supabaseAdmin
+            .from(config.targetTable)
+            .update(previousData)
+            .eq('id', targetId);
+          if (revertError) {
+            request.log.error(revertError);
+            couldNotRevert.push(targetId);
+          } else {
+            revertedCount += 1;
+          }
+        }
+      }
+
+      await supabaseAdmin
+        .from('import_batches')
+        .update({ status: 'rolled_back', rolled_back_at: new Date().toISOString(), could_not_revert: couldNotRevert })
+        .eq('id', batch.id);
+
+      return {
+        batch_id: batch.id,
+        deleted: deletedCount,
+        reverted: revertedCount,
+        could_not_revert: couldNotRevert,
       };
     },
   );

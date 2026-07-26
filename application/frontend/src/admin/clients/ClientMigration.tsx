@@ -237,7 +237,7 @@ export function ClientMigration({ session }: Props) {
 
       {step === 'imported' && batch && (
         <div className="space-y-4">
-          <ImportBatchDetail batch={batch} />
+          <ImportBatchDetail batch={batch} accessToken={accessToken} tenantId={tenantId} onBatchUpdated={setBatch} />
           <Button onClick={handleStartOver}>Start another migration</Button>
         </div>
       )}
