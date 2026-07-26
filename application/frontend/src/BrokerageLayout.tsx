@@ -79,26 +79,31 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
         notifications={workspaceStatus?.notifications ?? []}
         onDismissed={refetchWorkspaceStatus}
       />
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6 sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:gap-6 sm:px-6">
         {/* Nav moved off the top bar into a side panel, mirroring AdminLayout's
             sidebar shape -- Listings is a new link here (the /listings route
-            already existed, it just had no nav entry pointing at it). */}
-        <nav className="flex w-48 shrink-0 flex-col gap-1">
+            already existed, it just had no nav entry pointing at it). A fixed
+            sidebar column ate half the viewport at phone width (tested at
+            390px), so below sm: it collapses into a horizontally-scrolling
+            pill row instead of a vertical column, matching this app's
+            existing mobile-responsive requirement (tb-design-system-
+            brokerage-001) rather than only looking right on desktop. */}
+        <nav className="flex gap-1 overflow-x-auto sm:w-48 sm:shrink-0 sm:flex-col sm:overflow-visible">
           <Link
             to="/properties"
-            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="shrink-0 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             Properties
           </Link>
           <Link
             to="/listings"
-            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="shrink-0 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             Listings
           </Link>
           <Link
             to="/shared-with-me"
-            className="rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            className="shrink-0 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             Shared with me
           </Link>
