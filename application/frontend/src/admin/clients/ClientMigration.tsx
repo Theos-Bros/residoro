@@ -215,6 +215,7 @@ export function ClientMigration({ session }: Props) {
           </div>
           <ConfirmImportModal
             totalRows={totalRows}
+            entityLabel={entityType === 'contact' ? 'contact' : 'property'}
             busy={confirming}
             onConfirm={handleConfirmImport}
             onCancel={() => setStep('mapping')}
