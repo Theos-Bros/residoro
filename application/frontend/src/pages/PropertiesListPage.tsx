@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { fetchProperties, type Property } from '@/lib/listingsApi';
+import {
+  fetchProperties,
+  updatePropertyVerification,
+  VERIFICATION_STATUSES,
+  type Property,
+  type VerificationStatus,
+} from '@/lib/listingsApi';
+import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { cn } from '@/lib/utils';
+
+const verificationSelectClass =
+  'h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm';
 
 type Props = {
   session: Session;
@@ -32,6 +42,14 @@ export function PropertiesListPage({ session }: Props) {
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
+  const { status: workspaceStatus } = useWorkspaceStatus(session);
+  const isAdmin = workspaceStatus?.role === 'admin';
+
+  function reload() {
+    fetchProperties(session.access_token)
+      .then(({ properties }) => setProperties(properties))
+      .catch((err: Error) => setError(err.message));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +66,16 @@ export function PropertiesListPage({ session }: Props) {
       cancelled = true;
     };
   }, [session.access_token]);
+
+  async function handleVerificationChange(propertyId: string, verificationStatus: VerificationStatus) {
+    setError(null);
+    try {
+      await updatePropertyVerification(session.access_token, propertyId, verificationStatus);
+      reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -75,6 +103,7 @@ export function PropertiesListPage({ session }: Props) {
                 <TableHead>Title</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Verification</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -104,6 +133,26 @@ export function PropertiesListPage({ session }: Props) {
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{property.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {isAdmin ? (
+                      <select
+                        aria-label={`Verification status for ${property.title}`}
+                        value={property.verification_status}
+                        onChange={(e) =>
+                          handleVerificationChange(property.id, e.target.value as VerificationStatus)
+                        }
+                        className={verificationSelectClass}
+                      >
+                        {VERIFICATION_STATUSES.map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Badge variant="secondary">{property.verification_status}</Badge>
+                    )}
                   </TableCell>
                   <TableCell className="flex flex-wrap justify-end gap-2">
                     <Button size="sm" variant="outline" asChild>

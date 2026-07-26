@@ -40,6 +40,7 @@ export async function registerWorkspaceRoutes(app: FastifyInstance) {
       contract_end_date: workspace.contract_end_date,
       active_warning: workspace.access_state === 'active' ? activeWarningTier(days) : null,
       notifications: notifications ?? [],
+      role: request.user!.role,
     };
   });
 

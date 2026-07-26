@@ -15,6 +15,7 @@ export type WorkspaceStatus = {
   contract_end_date: string;
   active_warning: WarningTier | null;
   notifications: ContractNotification[];
+  role: string;
 };
 
 async function parseJsonOrThrow(response: Response) {

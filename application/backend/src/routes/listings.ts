@@ -41,6 +41,7 @@ const PROPERTY_TYPES = [
   'industrial',
 ] as const;
 const OWNER_TYPES = ['developer', 'individual', 'company'] as const;
+const VERIFICATION_STATUSES = ['unverified', 'pending', 'verified', 'flagged'] as const;
 
 type CreateListingBody = {
   property_id?: string;
@@ -72,6 +73,10 @@ type UpdateListingStatusBody = {
   status?: string;
   authority_starts_at?: string;
   authority_expires_at?: string | null;
+};
+
+type UpdatePropertyVerificationBody = {
+  verification_status?: string;
 };
 
 // UX follow-up: "the expiry of the authority to sell should be automatic,
@@ -156,7 +161,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   app.get('/properties', { preHandler: requireAuth }, async (request, reply) => {
     const { data, error } = await supabaseAdmin
       .from('properties')
-      .select('id, title, price, price_currency, status')
+      .select('id, title, price, price_currency, status, verification_status')
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
 
@@ -246,6 +251,46 @@ export async function registerListingsRoutes(app: FastifyInstance) {
 
     return reply.status(201).send(property);
   });
+
+  // tb-properties-verification-001: the verification_status column has
+  // existed since mil-platform-foundation-001's migration but nothing wrote
+  // it until now. Admin-only in code, not RLS -- every properties route uses
+  // supabaseAdmin (service-role), which bypasses RLS entirely, so the
+  // properties_delete_admin policy has never actually been enforced for any
+  // route. This is the first route in the codebase to check
+  // request.user.role directly.
+  app.patch<{ Params: { id: string }; Body: UpdatePropertyVerificationBody }>(
+    '/properties/:id/verification',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      if (request.user!.role !== 'admin') {
+        return reply.status(403).send({ error: 'Only an admin can change verification status' });
+      }
+
+      const { verification_status } = request.body ?? {};
+
+      if (!verification_status || !VERIFICATION_STATUSES.includes(verification_status as (typeof VERIFICATION_STATUSES)[number])) {
+        return reply
+          .status(400)
+          .send({ error: `verification_status must be one of: ${VERIFICATION_STATUSES.join(', ')}` });
+      }
+
+      const { data: property, error } = await supabaseAdmin
+        .from('properties')
+        .update({ verification_status })
+        .eq('id', request.params.id)
+        .eq('tenant_id', request.user!.tenantId)
+        .select('id, verification_status')
+        .single();
+
+      if (error || !property) {
+        request.log.error(error);
+        return reply.status(404).send({ error: 'Property not found' });
+      }
+
+      return property;
+    },
+  );
 
   // tb-listings-lifecycle-001: every listing a property has ever had, any
   // status, open or closed -- listings are never deleted, so this is the

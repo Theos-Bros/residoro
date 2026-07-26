@@ -1,11 +1,21 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
+export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'flagged';
+
+export const VERIFICATION_STATUSES: readonly VerificationStatus[] = [
+  'unverified',
+  'pending',
+  'verified',
+  'flagged',
+];
+
 export type Property = {
   id: string;
   title: string;
   price: number | null;
   price_currency: string;
   status: string;
+  verification_status: VerificationStatus;
   cover_photo_url?: string;
 };
 
@@ -85,6 +95,22 @@ export async function fetchProperties(accessToken: string): Promise<{ properties
 export async function fetchListings(accessToken: string): Promise<{ listings: Listing[] }> {
   const response = await fetch(`${BACKEND_URL}/listings`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-properties-verification-001: admin-only, enforced server-side (403 for
+// non-admins) -- the frontend only hides the control for non-admins, it
+// doesn't rely on that hiding for the actual authorization.
+export async function updatePropertyVerification(
+  accessToken: string,
+  propertyId: string,
+  verificationStatus: VerificationStatus,
+): Promise<{ id: string; verification_status: VerificationStatus }> {
+  const response = await fetch(`${BACKEND_URL}/properties/${propertyId}/verification`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ verification_status: verificationStatus }),
   });
   return parseJsonOrThrow(response);
 }
