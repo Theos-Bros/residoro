@@ -12,7 +12,10 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 const MAX_ROWS = 10_000;
 const SAMPLE_ROW_COUNT = 3;
 const PREVIEW_ROW_COUNT = 5;
-const ROLLBACK_WINDOW_MS = 24 * 60 * 60 * 1000;
+// tb-migration-rollback-window-001: fallback only, used if a workspace
+// somehow has no rollback_window_hours set. The real per-tenant value is
+// read from public.workspaces at batch-creation time below.
+const DEFAULT_ROLLBACK_WINDOW_HOURS = 24;
 
 // Columns properties/contacts NOT NULL requires that transformSample doesn't
 // already surface a validation error for when unmapped (transformSample only
@@ -331,6 +334,18 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
             )
           : new Map();
 
+      // tb-migration-rollback-window-001: rollback_window_hours is read once,
+      // here, at batch-creation time -- an operator changing the setting
+      // later never retroactively changes an already-created batch's
+      // rollback_deadline.
+      const { data: workspace } = await supabaseAdmin
+        .from('workspaces')
+        .select('rollback_window_hours')
+        .eq('id', request.user!.tenantId)
+        .single();
+
+      const rollbackWindowHours = workspace?.rollback_window_hours ?? DEFAULT_ROLLBACK_WINDOW_HOURS;
+
       const { data: batch, error: batchError } = await supabaseAdmin
         .from('import_batches')
         .insert({
@@ -340,7 +355,7 @@ export async function registerMigrationRoutes(app: FastifyInstance) {
           total_rows: row.row_count,
           mapping_config: row.user_confirmed_mappings,
           entity_type: row.entity_type,
-          rollback_deadline: new Date(Date.now() + ROLLBACK_WINDOW_MS).toISOString(),
+          rollback_deadline: new Date(Date.now() + rollbackWindowHours * 60 * 60 * 1000).toISOString(),
           created_by: request.user!.id,
         })
         .select('id')

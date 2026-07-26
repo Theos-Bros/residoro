@@ -95,7 +95,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   app.get('/admin/clients', { preHandler: requireOperator }, async (request, reply) => {
     const { data: workspaces, error: workspacesError } = await supabaseAdmin
       .from('workspaces')
-      .select('id, name, contract_start_date, contract_end_date, access_state, exclusivity_hard_block')
+      .select('id, name, contract_start_date, contract_end_date, access_state, exclusivity_hard_block, rollback_window_hours')
       .order('created_at', { ascending: false });
 
     if (workspacesError || !workspaces) {
@@ -138,6 +138,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         contract_end_date: w.contract_end_date,
         access_state: w.access_state,
         exclusivity_hard_block: w.exclusivity_hard_block,
+        rollback_window_hours: w.rollback_window_hours,
         invite_status: confirmedByTenant.get(w.id) ? 'accepted' : 'pending',
       })),
     };
@@ -205,6 +206,44 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       }
 
       return { workspace_id: data.id, exclusivity_hard_block: data.exclusivity_hard_block };
+    },
+  );
+
+  // tb-migration-rollback-window-001: an operator-only per-workspace
+  // rollback window override, read by migrations.ts at import-batch-creation
+  // time only -- changing this does not retroactively affect a batch's
+  // already-stored rollback_deadline. Default (24, the migration's column
+  // default) preserves tb-migration-rollback-001's existing fixed-24h
+  // behavior for every workspace unless an operator explicitly sets a
+  // different value. Same dedicated-sub-route precedent as
+  // /admin/clients/:id/listings-policy above.
+  app.patch<{ Params: { id: string }; Body: { rollback_window_hours?: number } }>(
+    '/admin/clients/:id/rollback-policy',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { rollback_window_hours } = request.body ?? {};
+
+      if (
+        typeof rollback_window_hours !== 'number' ||
+        !Number.isInteger(rollback_window_hours) ||
+        rollback_window_hours <= 0
+      ) {
+        return reply.status(400).send({ error: 'rollback_window_hours must be a positive integer' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('workspaces')
+        .update({ rollback_window_hours })
+        .eq('id', request.params.id)
+        .select('id, rollback_window_hours')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not update the rollback policy' });
+      }
+
+      return { workspace_id: data.id, rollback_window_hours: data.rollback_window_hours };
     },
   );
 

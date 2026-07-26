@@ -13,6 +13,7 @@ export type Client = {
   access_state: 'active' | 'read_only' | 'blocked';
   invite_status: 'pending' | 'accepted';
   exclusivity_hard_block: boolean;
+  rollback_window_hours: number;
 };
 
 export type NewClientInput = {
@@ -108,6 +109,26 @@ export async function setExclusivityHardBlock(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ exclusivity_hard_block: exclusivityHardBlock }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-migration-rollback-window-001: operator-only override. Default (24)
+// preserves tb-migration-rollback-001's existing fixed-window behavior for
+// every workspace unless an operator explicitly sets a different value; only
+// affects import batches created after the change.
+export async function setRollbackWindowHours(
+  accessToken: string,
+  workspaceId: string,
+  rollbackWindowHours: number,
+): Promise<{ workspace_id: string; rollback_window_hours: number }> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/rollback-policy`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ rollback_window_hours: rollbackWindowHours }),
   });
   return parseJsonOrThrow(response);
 }

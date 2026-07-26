@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { extendContract, fetchClients, setExclusivityHardBlock, type Client } from '@/lib/adminApi';
+import { extendContract, fetchClients, setExclusivityHardBlock, setRollbackWindowHours, type Client } from '@/lib/adminApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -76,6 +76,17 @@ export function ClientList({ session }: Props) {
     }
   }
 
+  async function handleRollbackWindowChange(workspaceId: string, next: number) {
+    if (!Number.isInteger(next) || next <= 0) return;
+    setPolicyError(null);
+    try {
+      await setRollbackWindowHours(session.access_token, workspaceId, next);
+      reload();
+    } catch (err) {
+      setPolicyError((err as Error).message);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -106,6 +117,7 @@ export function ClientList({ session }: Props) {
                 <TableHead>Access</TableHead>
                 <TableHead>Invite status</TableHead>
                 <TableHead>Hard-block exclusivity</TableHead>
+                <TableHead>Rollback window (hrs)</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -139,6 +151,20 @@ export function ClientList({ session }: Props) {
                       />
                       {client.exclusivity_hard_block ? 'Blocking' : 'Soft warning'}
                     </label>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min={1}
+                      defaultValue={client.rollback_window_hours}
+                      onBlur={(e) => {
+                        const next = Number(e.target.value);
+                        if (next !== client.rollback_window_hours) {
+                          handleRollbackWindowChange(client.workspace_id, next);
+                        }
+                      }}
+                      className="h-9 w-20"
+                    />
                   </TableCell>
                   <TableCell className="flex flex-wrap justify-end gap-2">
                     <Button asChild size="sm" variant="outline">
