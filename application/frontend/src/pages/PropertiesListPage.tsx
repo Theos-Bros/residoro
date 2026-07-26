@@ -71,6 +71,7 @@ export function PropertiesListPage({ session }: Props) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16" />
                 <TableHead>Title</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Status</TableHead>
@@ -80,7 +81,22 @@ export function PropertiesListPage({ session }: Props) {
             <TableBody>
               {properties.map((property) => (
                 <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
-                  <TableCell className="font-medium">{property.title}</TableCell>
+                  <TableCell>
+                    {property.cover_photo_url ? (
+                      <img
+                        src={property.cover_photo_url}
+                        alt=""
+                        className="h-10 w-10 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded bg-muted" />
+                    )}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    <Link to={`/properties/${property.id}`} className="hover:underline">
+                      {property.title}
+                    </Link>
+                  </TableCell>
                   <TableCell>
                     {property.price !== null
                       ? `${property.price_currency} ${property.price.toLocaleString()}`
@@ -90,6 +106,9 @@ export function PropertiesListPage({ session }: Props) {
                     <Badge variant="secondary">{property.status}</Badge>
                   </TableCell>
                   <TableCell className="flex flex-wrap justify-end gap-2">
+                    <Button size="sm" variant="outline" asChild>
+                      <Link to={`/properties/${property.id}`}>View</Link>
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"

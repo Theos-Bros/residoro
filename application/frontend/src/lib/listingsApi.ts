@@ -6,6 +6,7 @@ export type Property = {
   price: number | null;
   price_currency: string;
   status: string;
+  cover_photo_url?: string;
 };
 
 export type PropertyType =

@@ -3,6 +3,7 @@ import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { useOperatorStatus } from './hooks/useOperatorStatus';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { PropertiesListPage } from './pages/PropertiesListPage';
+import { PropertyDetailPage } from './pages/PropertyDetailPage';
 import { NewPropertyListingForm } from './pages/NewPropertyListingForm';
 import { ListingsPage } from './pages/ListingsPage';
 import { ShareDocketForm } from './pages/ShareDocketForm';
@@ -42,6 +43,7 @@ export function App() {
         <Route path="/" element={<Navigate to="/properties" replace />} />
         <Route path="/properties" element={session && <PropertiesListPage session={session} />} />
         <Route path="/properties/new" element={session && <NewPropertyListingForm session={session} />} />
+        <Route path="/properties/:id" element={session && <PropertyDetailPage session={session} />} />
         <Route path="/listings" element={session && <ListingsPage session={session} />} />
         <Route path="/listings/:listingId/share" element={session && <ShareDocketForm session={session} />} />
         <Route path="/shared-with-me" element={session && <SharedWithMePage session={session} />} />

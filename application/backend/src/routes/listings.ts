@@ -120,6 +120,34 @@ function parseAuthorityDates(
   return { startsAt, expiresAt };
 }
 
+// tb-properties-photos-001: a cover photo thumbnail for the list, batched in
+// one query + one Promise.all of signed-URL calls rather than N round trips.
+// property_media doesn't exist for most properties yet (migrated data has
+// none), so this returns undefined for any property with no cover row --
+// callers render a placeholder in that case, not an error.
+async function coverPhotoUrlsByProperty(propertyIds: string[]): Promise<Map<string, string>> {
+  if (propertyIds.length === 0) return new Map();
+
+  const { data: covers, error } = await supabaseAdmin
+    .from('property_media')
+    .select('property_id, storage_path')
+    .in('property_id', propertyIds)
+    .eq('is_cover', true);
+
+  if (error || !covers) return new Map();
+
+  const urls = await Promise.all(
+    covers.map(async (cover) => {
+      const { data: signed } = await supabaseAdmin.storage
+        .from('property-media')
+        .createSignedUrl(cover.storage_path, 3600);
+      return [cover.property_id, signed?.signedUrl] as const;
+    }),
+  );
+
+  return new Map(urls.filter(([, url]) => url !== undefined) as [string, string][]);
+}
+
 // tb-listings-create-001: the first brokerage-facing (requireAuth, not
 // requireOperator) routes beyond workspace.ts's /me/... endpoints. Properties
 // only had an admin-facing export path before this -- GET /properties is the
@@ -137,7 +165,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load properties' });
     }
 
-    return { properties: data ?? [] };
+    const properties = data ?? [];
+    const coverUrls = await coverPhotoUrlsByProperty(properties.map((p) => p.id));
+
+    return {
+      properties: properties.map((property) => ({
+        ...property,
+        cover_photo_url: coverUrls.get(property.id),
+      })),
+    };
   });
 
   // tb-listings-new-property-001: the only other way a property enters
