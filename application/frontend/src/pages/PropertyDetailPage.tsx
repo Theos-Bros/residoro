@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchProperty, fetchPropertyMedia, type PropertyDetail, type PropertyMedia } from '@/lib/propertyMediaApi';
+import { fetchPropertyDocuments, type PropertyDocument } from '@/lib/propertyDocumentsApi';
 import { PropertyPhotoGallery } from '@/components/PropertyPhotoGallery';
+import { PropertyDocumentsSection } from '@/components/PropertyDocumentsSection';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -23,17 +25,23 @@ export function PropertyDetailPage({ session }: Props) {
   const { id } = useParams<{ id: string }>();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [media, setMedia] = useState<PropertyMedia[] | null>(null);
+  const [documents, setDocuments] = useState<PropertyDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
 
-    Promise.all([fetchProperty(session.access_token, id), fetchPropertyMedia(session.access_token, id)])
-      .then(([propertyResult, mediaResult]) => {
+    Promise.all([
+      fetchProperty(session.access_token, id),
+      fetchPropertyMedia(session.access_token, id),
+      fetchPropertyDocuments(session.access_token, id),
+    ])
+      .then(([propertyResult, mediaResult, documentsResult]) => {
         if (cancelled) return;
         setProperty(propertyResult);
         setMedia(mediaResult.media);
+        setDocuments(documentsResult.documents);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -80,6 +88,20 @@ export function PropertyDetailPage({ session }: Props) {
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
               <PropertyPhotoGallery session={session} propertyId={id} media={media} onChange={setMedia} />
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold tracking-tight">Documents</h2>
+            {documents === null ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <PropertyDocumentsSection
+                session={session}
+                propertyId={id}
+                documents={documents}
+                onChange={setDocuments}
+              />
             )}
           </div>
         </>
