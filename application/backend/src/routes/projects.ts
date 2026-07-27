@@ -98,16 +98,25 @@ async function loadOwnedProject(supabase: SupabaseClient, tenantId: string, proj
     .maybeSingle<{ id: string; name: string; developer_id: string; total_units: number | null }>();
 }
 
-// tb-properties-project-001: developers is a minimal placeholder entity
-// (cap-properties-001 Decision #2) -- just enough to unblock Project's FK.
-// No PATCH/DELETE routes yet -- not needed until something asks to edit a
-// developer's own details, which this tracer bullet's DoD doesn't require.
+// tb-crm-developer-consolidation-001: developers used to be its own minimal
+// placeholder table (tb-properties-project-001, cap-properties-001 Decision #2);
+// it's now folded into contacts via is_company, per cap-crm-001 Milestone 1.
+// contact_info in the request/response bodies below is a compatibility shape
+// over contacts' discrete email/phone/notes columns -- no PATCH/DELETE routes
+// yet, same as before.
+function toContactInfo(row: { email: string | null; phone: string | null; notes: string | null }) {
+  return row.email || row.phone || row.notes
+    ? { email: row.email, phone: row.phone, notes: row.notes }
+    : null;
+}
+
 export async function registerProjectsRoutes(app: FastifyInstance) {
   app.get('/developers', { preHandler: requireAuth }, async (request, reply) => {
     const { data, error } = await getScopedClient(request)
-      .from('developers')
-      .select('id, name, contact_info')
+      .from('contacts')
+      .select('id, name, email, phone, notes')
       .eq('tenant_id', request.user!.tenantId)
+      .eq('is_company', true)
       .order('name', { ascending: true });
 
     if (error) {
@@ -115,7 +124,13 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load developers' });
     }
 
-    return { developers: data ?? [] };
+    const developers = (data ?? []).map((row) => ({
+      id: row.id,
+      name: row.name,
+      contact_info: toContactInfo(row),
+    }));
+
+    return { developers };
   });
 
   app.post<{ Body: CreateDeveloperBody }>('/developers', { preHandler: requireAuth }, async (request, reply) => {
@@ -126,14 +141,18 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     }
 
     const { data: developer, error } = await getScopedClient(request)
-      .from('developers')
+      .from('contacts')
       .insert({
         tenant_id: request.user!.tenantId,
         created_by: request.user!.id,
         name: name.trim(),
-        contact_info: contact_info ?? null,
+        type: 'developer',
+        is_company: true,
+        email: (contact_info?.email as string | undefined) ?? null,
+        phone: (contact_info?.phone as string | undefined) ?? null,
+        notes: (contact_info?.notes as string | undefined) ?? null,
       })
-      .select('id, name, contact_info')
+      .select('id, name, email, phone, notes')
       .single();
 
     if (error || !developer) {
@@ -141,13 +160,13 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not create the developer' });
     }
 
-    return reply.status(201).send(developer);
+    return reply.status(201).send({ id: developer.id, name: developer.name, contact_info: toContactInfo(developer) });
   });
 
   app.get('/projects', { preHandler: requireAuth }, async (request, reply) => {
     const { data, error } = await getScopedClient(request)
       .from('projects')
-      .select('id, developer_id, name, project_type, location, total_units, status, developers(name)')
+      .select('id, developer_id, name, project_type, location, total_units, status, contacts(name)')
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
 
@@ -164,11 +183,11 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       location: string | null;
       total_units: number | null;
       status: string;
-      developers: { name: string } | null;
+      contacts: { name: string } | null;
     }>).map((p) => ({
       id: p.id,
       developer_id: p.developer_id,
-      developer_name: p.developers?.name ?? '',
+      developer_name: p.contacts?.name ?? '',
       name: p.name,
       project_type: p.project_type,
       location: p.location,
@@ -182,7 +201,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/projects/:id', { preHandler: requireAuth }, async (request, reply) => {
     const { data: project, error } = await getScopedClient(request)
       .from('projects')
-      .select('id, developer_id, name, project_type, location, total_units, status, developers(name)')
+      .select('id, developer_id, name, project_type, location, total_units, status, contacts(name)')
       .eq('id', request.params.id)
       .eq('tenant_id', request.user!.tenantId)
       .maybeSingle();
@@ -203,13 +222,13 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       location: string | null;
       total_units: number | null;
       status: string;
-      developers: { name: string } | null;
+      contacts: { name: string } | null;
     };
 
     return {
       id: row.id,
       developer_id: row.developer_id,
-      developer_name: row.developers?.name ?? '',
+      developer_name: row.contacts?.name ?? '',
       name: row.name,
       project_type: row.project_type,
       location: row.location,
@@ -240,10 +259,11 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     }
 
     const { data: developer, error: developerError } = await supabase
-      .from('developers')
+      .from('contacts')
       .select('id')
       .eq('id', developer_id)
       .eq('tenant_id', request.user!.tenantId)
+      .eq('is_company', true)
       .maybeSingle();
 
     if (developerError) {

@@ -65,23 +65,14 @@ function commonFields(property: PropertyRow, listing: ListingRow): Record<string
   };
 }
 
-// Internal-only: resolves properties.owner_type/owner_id to a display name +
-// contact string, per cap-properties-001's polymorphic ownership model.
+// Internal-only: resolves properties.owner_id to a display name + contact string.
+// tb-crm-developer-consolidation-001: owner_type no longer needs to branch here --
+// every owner_type ('developer', 'individual', 'company') now resolves through the
+// same contacts table (developers was folded into contacts via is_company).
 async function resolveOwner(
   supabase: SupabaseClient,
-  ownerType: string,
   ownerId: string,
 ): Promise<{ owner_name: string; owner_contact: string }> {
-  if (ownerType === 'developer') {
-    const { data } = await supabase.from('developers').select('name, contact_info').eq('id', ownerId).maybeSingle();
-    if (!data) return { owner_name: '', owner_contact: '' };
-    const info = (data.contact_info ?? {}) as Record<string, unknown>;
-    const contact = Object.entries(info)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join(', ');
-    return { owner_name: data.name, owner_contact: contact };
-  }
-
   const { data } = await supabase.from('contacts').select('name, email, phone, company').eq('id', ownerId).maybeSingle();
   if (!data) return { owner_name: '', owner_contact: '' };
   const contact = [data.phone, data.email, data.company].filter(Boolean).join(', ');
@@ -196,7 +187,7 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
       const fields = commonFields(property, listing);
 
       if (audience === 'internal') {
-        const { owner_name, owner_contact } = await resolveOwner(supabase, property.owner_type, property.owner_id);
+        const { owner_name, owner_contact } = await resolveOwner(supabase, property.owner_id);
         const lines = [
           `${fields.title} (${fields.type})`,
           `${fields.address} ${fields.city} ${fields.province}`.trim(),
