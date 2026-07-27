@@ -48,6 +48,8 @@ export type Listing = {
   authority_expires_at: string | null;
   status: ListingStatus;
   created_at: string;
+  buyer_contact_id: string | null;
+  buyer_name: string | null;
 };
 
 export type ListingStatus = 'draft' | 'active' | 'under_offer' | 'sold' | 'expired' | 'withdrawn';
@@ -212,15 +214,15 @@ export async function updateListingStatus(
   accessToken: string,
   listingId: string,
   status: ListingStatus,
-  authorityDates?: { authority_starts_at?: string; authority_expires_at?: string | null },
-): Promise<{ id: string; status: string; warning?: string }> {
+  extra?: { authority_starts_at?: string; authority_expires_at?: string | null; buyer_contact_id?: string },
+): Promise<{ id: string; status: string; buyer_contact_id?: string | null; warning?: string }> {
   const response = await fetch(`${BACKEND_URL}/listings/${listingId}`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ status, ...authorityDates }),
+    body: JSON.stringify({ status, ...extra }),
   });
   return parseJsonOrThrow(response);
 }

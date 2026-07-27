@@ -9,6 +9,7 @@ import {
   type Listing,
   type ListingStatus,
 } from '@/lib/listingsApi';
+import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -52,6 +53,8 @@ export function ListingsPage({ session }: Props) {
   const [openHistory, setOpenHistory] = useState<OpenHistory>(null);
   const [openShare, setOpenShare] = useState<OpenShare>(null);
   const [renewDates, setRenewDates] = useState<Record<string, string>>({});
+  const [contacts, setContacts] = useState<Contact[] | null>(null);
+  const [buyerSelections, setBuyerSelections] = useState<Record<string, string>>({});
 
   function reload() {
     fetchListings(session.access_token)
@@ -75,10 +78,50 @@ export function ListingsPage({ session }: Props) {
     };
   }, [session.access_token]);
 
+  // tb-crm-buyer-ui-001: lazy-fetch contacts only once a listing actually
+  // needs a buyer picker -- mirrors NewPropertyListingForm's own
+  // fetch-on-condition pattern rather than loading contacts unconditionally.
+  useEffect(() => {
+    if (contacts !== null) return;
+    if (!listings?.some((l) => l.status === 'under_offer')) return;
+    let cancelled = false;
+
+    fetchContacts(session.access_token)
+      .then(({ contacts }) => {
+        if (!cancelled) setContacts(contacts);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [listings, contacts, session.access_token]);
+
   async function handleStatus(listingId: string, status: ListingStatus) {
     setWarning(null);
     try {
       const result = await updateListingStatus(session.access_token, listingId, status);
+      if (result.warning) setWarning(result.warning);
+      reload();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function handleMarkSold(listingId: string) {
+    const buyerContactId = buyerSelections[listingId];
+    if (!buyerContactId) {
+      setError('Select a buyer before marking this listing sold.');
+      return;
+    }
+    setError(null);
+    setWarning(null);
+    try {
+      const result = await updateListingStatus(session.access_token, listingId, 'sold', {
+        buyer_contact_id: buyerContactId,
+      });
       if (result.warning) setWarning(result.warning);
       reload();
     } catch (err) {
@@ -168,6 +211,9 @@ export function ListingsPage({ session }: Props) {
                     {listing.status === 'expired' && (
                       <p className="mt-1 text-xs text-destructive">{authorityWarningLabel(listing.listing_type)}</p>
                     )}
+                    {listing.status === 'sold' && listing.buyer_name && (
+                      <p className="mt-1 text-xs text-muted-foreground">Buyer: {listing.buyer_name}</p>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap justify-end gap-2">
@@ -187,16 +233,43 @@ export function ListingsPage({ session }: Props) {
                           </Button>
                         </>
                       ) : (
-                        LISTING_STATUS_TRANSITIONS[listing.status].map((nextStatus) => (
-                          <Button
-                            key={nextStatus}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleStatus(listing.id, nextStatus)}
-                          >
-                            Mark {STATUS_LABEL[nextStatus]}
-                          </Button>
-                        ))
+                        LISTING_STATUS_TRANSITIONS[listing.status].map((nextStatus) =>
+                          nextStatus === 'sold' ? (
+                            <div key="sold" className="flex items-center gap-2">
+                              <select
+                                value={buyerSelections[listing.id] ?? ''}
+                                onChange={(e) =>
+                                  setBuyerSelections((prev) => ({ ...prev, [listing.id]: e.target.value }))
+                                }
+                                className="h-8 rounded-md border border-input px-2 text-sm"
+                              >
+                                <option value="">Select buyer…</option>
+                                {contacts?.map((contact) => (
+                                  <option key={contact.id} value={contact.id}>
+                                    {contact.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!buyerSelections[listing.id]}
+                                onClick={() => handleMarkSold(listing.id)}
+                              >
+                                Mark Sold
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              key={nextStatus}
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleStatus(listing.id, nextStatus)}
+                            >
+                              Mark {STATUS_LABEL[nextStatus]}
+                            </Button>
+                          ),
+                        )
                       )}
                       <Button asChild size="sm" variant="outline">
                         <Link to={`/listings/${listing.id}/share`}>Share as docket</Link>
