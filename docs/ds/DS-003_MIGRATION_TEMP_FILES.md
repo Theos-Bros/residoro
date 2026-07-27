@@ -1,10 +1,10 @@
 # DS-003 — Migration Temp Files
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -22,10 +22,10 @@ the decision already exists elsewhere.
 
 Covers only `migration_temp_files` — a per-tenant, time-boxed staging row that holds one
 uploaded CSV (raw content + parsed headers/sample rows) through the upload → analyze → preview
-flow defined by `tb-migration-csv-001`. Does **not** cover: writing to `properties` (that's
-`tb-migration-preview-001` / `mil-migration-import-001`), `ImportBatch` tracking (same,
-deferred), deduplication/conflict handling (`mil-migration-deduplication-001`), or Excel/JSON/API
-import formats (future tracer bullets per `cap-migration-001`'s "CSV only for v1" scope).
+→ confirm flow. Writing to `properties`/`contacts`, `ImportBatch` tracking, and
+deduplication/rollback — originally deferred here — have all since shipped; see DS-009/DD-004
+for that pipeline. This document's scope remains the staging row only. Excel/JSON/API import
+formats remain future work, unstarted.
 
 ---
 
@@ -39,10 +39,14 @@ Registry) and `tb-migration-csv-001`'s Technical Design + Definition of Done. Su
   `profiles.tenant_id` (see ADR-002; DD-002 established this pattern for the migration
   importer's trusted-backend-context access).
 - Fixed MVP limits from `cap-migration-001`'s Decisions: **10 MB** file size, **10,000 rows**.
-- Row lifecycle: `uploaded` → `analyzed` (Claude's suggested mappings stored) → `previewed`
-  (user's confirmed mappings + transformed sample stored). No further state in this tracer
-  bullet — the row is never applied to `properties`; that happens in a later tracer bullet
-  which reads this same row.
+- Row lifecycle: `uploaded` → `analyzed` (mapping suggestions stored — see note below) →
+  `previewed` (user's confirmed mappings + transformed sample stored) → `confirmed` (added
+  2026-07-22 by `tb-migration-preview-001`; the row has been applied to `properties`/`contacts`
+  via the DS-009 pipeline). **Note:** the `/analyze` step's suggestions are not Claude/LLM-
+  generated in the current implementation — it's a deterministic header-string matcher
+  (`directMatchHeaders()`); real AI-assisted mapping happens in an external Claude session
+  outside the app, per `tb-migration-manual-mapping-001`/`tb-migration-detail-extraction-001`.
+  See DD-003 for the column-naming note this leaves behind.
 - `expires_at` (24h from creation, per DoD) is enforced by checking the timestamp on every read
   and treating an expired row as gone (user re-uploads) — no scheduled deletion job exists yet.
   See DD-003 Deviations for why, and for the deferred cron follow-up.
@@ -70,7 +74,9 @@ without a separate Storage bucket + policies). See DD-003 for the exact column d
 - ADR-001 — Shared-Schema Multi-Tenant Architecture (this table's `tenant_id` column)
 - ADR-002 — Workspace Isolation & Row-Level Security (this table's RLS policies, trusted-backend
   access pattern)
+- ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 - DD-003 — Migration Temp Files (implements this doc)
+- DS-009 — Import Batches & Row Tracking (the confirm/write pipeline this table's terminal state feeds)
 
 ---
 
@@ -79,3 +85,4 @@ without a separate Storage bucket + policies). See DD-003 for the exact column d
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial draft, written alongside DD-003 and the migration_temp_files SQL migration. |
+| 1.1.0 | 2026-07-27 | Refreshed from a birds-eye technical review: documented the `confirmed` status and corrected the "Claude's suggested mappings" description (deterministic matcher, not an LLM call). |

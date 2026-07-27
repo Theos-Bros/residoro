@@ -1,10 +1,14 @@
 # CTX-006 — Roadmap
 
-**Status:** Approved
+**Status:** Deprecated
 **Version:** 1.0.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-20
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-27
+**Superseded By:** CTX-005 — Status & Roadmap. This document was merged into CTX-005 on
+2026-07-27 (a birds-eye technical review found the original CTX-005/006 split had gone stale —
+see CTX-005's Purpose section for why merging fixes that). Content below is left as originally
+written for history; read CTX-005 for the current, corrected phase status.
 
 ---
 

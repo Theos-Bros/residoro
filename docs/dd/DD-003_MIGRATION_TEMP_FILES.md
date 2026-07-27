@@ -1,24 +1,26 @@
 # DD-003 — Migration Temp Files
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
 
 ---
 
 ## Purpose
 
 Exact table/column/constraint definitions for `migration_temp_files`, as implemented by
-`supabase/migrations/20260721190000_migration_temp_files.sql`.
+`supabase/migrations/20260721190000_migration_temp_files.sql` and one follow-up migration
+through 2026-07-22.
 
 ---
 
 ## Scope
 
-Covers only the `public.migration_temp_files` table. Does not cover writes to `properties` (a
-later tracer bullet reads this table's confirmed state to perform those writes).
+Covers only the `public.migration_temp_files` table. Writes to `properties`/`contacts` and their
+own tracking tables (`import_batches`, `imported_properties`, `imported_contacts`) — the "later
+tracer bullet" this doc originally deferred to — are now shipped; see DD-004.
 
 ---
 
@@ -34,10 +36,11 @@ later tracer bullet reads this table's confirmed state to perform those writes).
 | `headers` | `jsonb` | not null | CSV column names, as detected on upload |
 | `sample_rows` | `jsonb` | not null | First 3 data rows, used to build the Claude prompt |
 | `row_count` | `int` | not null, `CHECK (row_count <= 10000)` | 10,000-row cap per `cap-migration-001` Decisions |
-| `claude_suggested_mappings` | `jsonb` | nullable | Set by the `/analyze` step |
+| `claude_suggested_mappings` | `jsonb` | nullable | Set by the `/analyze` step. **Naming is misleading as of `tb-migration-manual-mapping-001`**: `/analyze` now runs `directMatchHeaders()` (`application/backend/src/lib/mapping.ts`), a deterministic exact-header-string matcher — no Claude/LLM call happens in this codepath. The column name is a holdover from `tb-migration-csv-001`'s original design (external Claude pre-mapping happens outside the app now, per `tb-migration-manual-mapping-001` and `tb-migration-detail-extraction-001`); left unrenamed to avoid an unnecessary migration, but flagging so it isn't read as implying a live AI dependency that isn't wired up |
 | `user_confirmed_mappings` | `jsonb` | nullable | Set by the `/preview` step |
 | `preview_data` | `jsonb` | nullable | Transformed sample properties, set by the `/preview` step |
-| `status` | `text` | not null, default `'uploaded'`, `CHECK` in (`uploaded`, `analyzed`, `previewed`) | Linear lifecycle for this tracer bullet only — no `imported` state yet |
+| `entity_type` | `text` | not null, default `'property'`, `CHECK` in (`property`, `contact`) | Added by `tb-migration-contacts-001`. Every pre-existing row backfilled to `'property'` (no data migration needed — that was the only entity type before this column existed) |
+| `status` | `text` | not null, default `'uploaded'`, `CHECK` in (`uploaded`, `analyzed`, `previewed`, `confirmed`) | `'confirmed'` added by `tb-migration-preview-001`'s import-batches migration — see Deviations below, "no imported state yet" is no longer true |
 | `created_by` | `uuid` | not null, FK → `auth.users(id)` | Not null (unlike `properties.created_by`) — every row is created by an authenticated upload request, never a service-role bulk path |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger, reused from `DD-001` |
@@ -69,7 +72,14 @@ prompting re-upload. This satisfies `tb-migration-csv-001`'s Definition of Done
 scheduler infrastructure that doesn't exist yet in residoro. **Follow-up, not built here:** a
 `pg_cron` job (or equivalent) to actually `DELETE` expired rows — until that exists, expired
 rows remain in the table (inert, inaccessible via the API) rather than being purged. Flagging so
-this isn't mistaken for an oversight.
+this isn't mistaken for an oversight. **Still true as of 2026-07-27** — three `pg_cron` jobs
+exist in the schema now (contract-expiry, training-reminder, listing-authority-expiry), so the
+infrastructure to add this exists, but no job targets this table's cleanup.
+
+**Update, 2026-07-27:** the confirm/import step this doc originally deferred to "a later tracer
+bullet" has shipped (`tb-migration-preview-001`) — `status` now reaches `'confirmed'`, and
+confirmed rows drive real writes into `import_batches`/`imported_properties`/`imported_contacts`
+and, through those, `properties`/`contacts`. See DD-004 for that full pipeline.
 
 ---
 
@@ -89,14 +99,18 @@ tenant-scoped policies then rather than pre-building unused ones now.
 ## Related Documents
 
 - DS-003 — Migration Temp Files (business-entity source for this DD)
+- DD-004 — Import Batches & Row Tracking (the write pipeline this table's `'confirmed'` state feeds)
+- DD-005 — Contacts (the second `entity_type`)
 - `cap-migration-001` (Theos Registry) — MVP Decisions (file/row limits, CSV-only scope)
 - `tb-migration-csv-001` (Theos Registry) — full end-to-end flow and Definition of Done this
   table supports
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation & Row-Level Security
 - DD-001 — Workspaces & Profiles (`set_updated_at()` trigger reused here)
-- DD-002 — Properties (the eventual write target once `tb-migration-preview-001` is built)
-- `supabase/migrations/20260721190000_migration_temp_files.sql` — implements this doc
+- DD-002 — Properties (a write target via DD-004's pipeline)
+- `supabase/migrations/20260721190000_migration_temp_files.sql` — implements the original table shape
+- `supabase/migrations/20260722130000_import_batches.sql` — `'confirmed'` status
+- `supabase/migrations/20260722140000_contacts.sql` — `entity_type`
 
 ---
 
@@ -105,3 +119,4 @@ tenant-scoped policies then rather than pre-building unused ones now.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial version, matching the migration_temp_files migration for tb-migration-csv-001. |
+| 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: `entity_type` and `'confirmed'` status added; corrected the "no imported state yet" claim (now false, see DD-004); flagged `claude_suggested_mappings` as a misleading column name (no LLM call in that codepath). Structural revision, hence major version bump per STD-002. |

@@ -1,10 +1,10 @@
 # STD-002 — Documentation Standards
 
 **Status:** Approved  
-**Version:** 1.0.0  
+**Version:** 1.2.0  
 **Owner:** Residoro Engineering  
 **Created:** 2026-07-20  
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -28,6 +28,8 @@ This standard applies to every engineering document in the repository, including
 - DS
 - DD
 - TS
+- API
+- RFC
 
 ---
 
@@ -61,8 +63,17 @@ Examples:
 | DS | Database architecture |
 | DD | Database schema |
 | TS | Technical implementation |
+| API | HTTP contract (routes, auth, request/response shape) |
+| RFC | Open proposal, not yet decided |
 
 Documents should not duplicate responsibilities.
+
+RFCs are not part of the authority chain below. They exist *before* a decision is made — once
+resolved, an RFC's outcome is recorded either as a new/superseding ADR (architectural decisions)
+or as an STD update (process/convention decisions), and the RFC itself is marked `Approved`
+(decision recorded) or `Deprecated` (abandoned) rather than promoted into the hierarchy directly.
+An RFC should only be written for a genuine judgment call with more than one defensible option —
+not for corrections with an obviously right answer.
 
 ---
 
@@ -224,3 +235,5 @@ Documentation updates should accompany implementation changes whenever possible.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-20 | Initial documentation standard. |
+| 1.1.0 | 2026-07-27 | Added RFC as a document type (open proposals, pre-decision), with its relationship to ADR/STD clarified. |
+| 1.2.0 | 2026-07-27 | Added API as a document type — the HTTP contract (routes/auth/request-response shape), distinct from TS (implementation detail/rationale) and DD (database schema). `docs/api/` existed as a folder before this but had no defined type. |

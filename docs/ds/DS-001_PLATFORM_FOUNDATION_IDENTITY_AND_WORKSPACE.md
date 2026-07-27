@@ -1,10 +1,10 @@
 # DS-001 — Platform Foundation: Identity & Workspace
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -45,14 +45,24 @@ the source of truth for credentials/login; `profiles` is where Residoro-specific
 (which Workspace, what role) lives, because `auth.users` is a Supabase-managed table Residoro
 doesn't (and shouldn't) directly extend with business columns.
 
-### Role (minimal, this milestone only)
+### Role
 
-Two values: `admin` and `member`. `admin` can manage the Workspace itself and delete records;
-`member` has standard tenant-scoped read/write. This is intentionally coarse — enough to
-gate the handful of admin-only actions this foundation needs (renaming a Workspace, deleting a
-Property), not a general permissions model. The full Permission Engine (per-domain,
-per-action, configurable roles — referenced in CTX-002 and CTX-006's roadmap) is out of scope
-here.
+Originally two values (`admin`, `member`); a third, **`operator`**, was added by
+`tb-client-lifecycle-operator-access-001` (2026-07-22) — a platform-wide role, not scoped to any
+Workspace (`tenant_id` is null for operators). Operators act across every tenant via the
+backend's service-role client, not via RLS-scoped access. `admin` can manage the Workspace
+itself and delete records; `member` has standard tenant-scoped read/write. Still intentionally
+coarse — no per-domain, per-action permission model exists (the Permission Engine referenced in
+CTX-002/CTX-006's roadmap remains unbuilt).
+
+### Client Lifecycle (added 2026-07-22, `cap-client-lifecycle-001`)
+
+A Workspace now carries its own lifecycle state, layered on top of the entities above:
+`contract_start_date`/`contract_end_date` (recorded at enrollment), `access_state`
+(`active`/`read_only`/`blocked`, transitioned by a daily automated check as the contract nears
+and passes its end date), and per-Workspace policy toggles (`exclusivity_hard_block`,
+`rollback_window_hours`) an operator can configure per brokerage. See DD-001 for exact columns
+and ADR/TS docs for the enforcement mechanism (Edge Function + `pg_cron`, not a DB trigger).
 
 ---
 
@@ -69,20 +79,20 @@ this is a naming synonym, not two different concepts.
 
 ---
 
-## Key Decision: Workspace Provisioning on Signup (flagged as a placeholder)
+## Key Decision: Workspace Provisioning on Signup (originally a placeholder; partially resolved)
 
-**Decision:** on signup, a brand-new Workspace is automatically created, and the signing-up
-user becomes its `admin`. Every signup is a new brokerage until an invite-to-existing-workspace
-flow exists.
+**Original decision (2026-07-21):** on signup, a brand-new Workspace is automatically created,
+and the signing-up user becomes its `admin` — a placeholder pending an invite-to-existing-
+workspace flow, flagged explicitly as not a final product decision.
 
-**Why:** this is the only option that satisfies the requirement that "a user can sign up / sign
-in via Supabase Auth and is associated with exactly one tenant" without first building an
-invite system — which is explicitly out of scope for this foundation slice.
-
-**This is a placeholder, not a final product decision.** Once an invite flow exists (a
-teammate joining an existing brokerage's Workspace), this default should be revisited — likely
-gated behind whether the signup included an invite token. Flagging here so it isn't mistaken
-for a considered final answer if read in isolation later.
+**Resolved, 2026-07-22 (`tb-client-lifecycle-enrollment-001`):** the invite path now exists —
+an operator enrolling a new client (`POST /admin/clients`) invites that brokerage's first admin
+into an *existing* Workspace via `raw_user_meta_data->>'tenant_id'`, not a fresh auto-created
+one. The original auto-create-a-new-Workspace-on-signup branch is **not removed** — it remains
+`handle_new_user()`'s default/fallback branch for any signup that isn't an operator invite or a
+client-enrollment invite (see DD-001). In practice, per `cap-client-lifecycle-001`'s invite-only
+model, there is no real public signup path that reaches this fallback branch today; it stays a
+placeholder for a hypothetical direct-signup flow, not something currently in use.
 
 ---
 
@@ -90,9 +100,11 @@ for a considered final answer if read in isolation later.
 
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation & Row-Level Security
+- ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 - DD-001 — Workspaces & Profiles (implements this doc)
 - CTX-002 — Product Architecture (Identity business domain)
 - CTX-007 — Glossary ("Workspace")
+- `cap-client-lifecycle-001` (Theos Registry) — the invite-only enrollment model layered on top of this foundation
 - `mil-platform-foundation-001` (theos-registry) — the Registry milestone this implements
 
 ---
@@ -102,3 +114,4 @@ for a considered final answer if read in isolation later.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial draft, written alongside DD-001 and the platform foundation migration. |
+| 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: documented the `operator` role and Client Lifecycle state layered on top of Workspace/Profile; resolved the signup-provisioning placeholder note (invite path now exists, auto-create branch remains an unused fallback). Structural revision, hence major version bump per STD-002. |

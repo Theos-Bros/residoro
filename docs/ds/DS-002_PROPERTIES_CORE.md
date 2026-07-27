@@ -1,10 +1,10 @@
 # DS-002 — Properties (Core)
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -21,14 +21,15 @@ that already exists elsewhere.
 ## Scope
 
 Covers only the `properties` table itself — the physical property record (identity,
-location, physical specs, ownership pointer, status). Does **not** cover: `Project` (developer
-inventory grouping), `Developer` (placeholder owner entity), `PropertyMedia`, or
-`PropertyDocument` — all four are part of `cap-properties-001`'s full schema but are deferred
-to later milestones (`mil-properties-core-001`, `mil-properties-projects-001`,
-`mil-properties-media-001`, `mil-properties-verification-001` in the Registry), consistent with
-CTX-006's roadmap, which reserves Property Verification/Media/Documents/Listings for Phase 3.
-Pulling only the bare `properties` table into this foundation milestone is a deliberate,
-minimal slice — just enough for `tb-migration-preview-001` to write real rows.
+location, physical specs, ownership pointer, status). Originally, `Project`, `Developer`,
+`PropertyMedia`, and `PropertyDocument` were all deferred to later milestones — pulling only the
+bare `properties` table into this foundation slice was deliberate, just enough for
+`tb-migration-preview-001` to write real rows.
+
+**Update, 2026-07-27:** all four have since shipped. `Project`/`Developer`/`ProjectUnitType` are
+covered by DS-007 (business rationale) and DD-007 (schema); `PropertyMedia`/`PropertyDocument`
+by DS-008/DD-008. This document's scope remains the bare `properties` table only — it is not
+being expanded to cover them, since each now has its own DS.
 
 ---
 
@@ -56,12 +57,15 @@ Architecture → Data Models → `Property`, and § Key Design Decisions. Summar
 ## Deviations From `cap-properties-001` in This Slice
 
 `cap-properties-001`'s schema references `project_id` (FK to `Project`) and `owner_id`
-(polymorphic FK to `Developer` or a CRM Contact/Company). Neither `Project` nor any owner
-entity table exists yet — both stay out of scope for this foundation milestone. `properties`
-is created with `project_id` and `owner_id` as plain nullable/required UUID columns with **no
-foreign key constraint**, so the column shapes match the eventual schema and no data
-migration is needed later — only an `ALTER TABLE ... ADD CONSTRAINT` once the referenced
-tables exist. See DD-002 for the exact column definitions.
+(polymorphic FK to `Developer` or a CRM Contact/Company). As of the original 2026-07-21
+migration, neither `Project` nor any owner entity table existed, so `properties` was created
+with `project_id` and `owner_id` as plain nullable/required UUID columns with no foreign key
+constraint — exactly the non-breaking-later path this section anticipated.
+
+**Update, 2026-07-27:** `project_id` now has a real FK (`projects` shipped, DS-007/DD-007).
+`owner_id` still has no FK — it remains genuinely polymorphic (`developers` or `contacts`
+depending on `owner_type`), which Postgres has no native FK support for; see DD-002's
+Deviations section for the exact current state.
 
 ---
 
@@ -71,7 +75,9 @@ tables exist. See DD-002 for the exact column definitions.
   design rationale; this DS defers to it rather than re-deciding anything
 - ADR-001 — Shared-Schema Multi-Tenant Architecture (this table's `tenant_id` column)
 - ADR-002 — Workspace Isolation & Row-Level Security (this table's RLS policies)
+- ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 - DD-002 — Properties (implements this doc)
+- DS-007 — Developers & Projects, DS-008 — Property Media & Documents (the entities originally deferred here)
 - `mil-platform-foundation-001` (theos-registry) — the Registry milestone this implements
 
 ---
@@ -81,3 +87,4 @@ tables exist. See DD-002 for the exact column definitions.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial draft, written alongside DD-002 and the platform foundation migration. |
+| 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: noted that Project/Developer/PropertyMedia/PropertyDocument, originally deferred here, have all since shipped with their own DS/DD docs; updated the `project_id` FK deviation note. Structural revision, hence major version bump per STD-002. |

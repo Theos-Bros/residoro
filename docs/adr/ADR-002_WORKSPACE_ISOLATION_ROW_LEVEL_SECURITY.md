@@ -1,10 +1,16 @@
 # ADR-002 — Workspace Isolation & Row-Level Security
 
 **Status:** Approved
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
+**Superseded By (partial):** ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
+corrects and tightens this ADR's Consequences section (the service-role bypass had, in practice,
+become universal rather than the narrow "trusted backend jobs" exception described below). The
+core decision below — RLS keyed off `tenant_id`/`current_tenant_id()` — is unchanged and still
+in force. This ADR is left as originally written per this repo's ADR-immutability convention
+(see `CTX-000`); read alongside ADR-003 for the corrected, current picture.
 
 ---
 
@@ -86,6 +92,8 @@ for this on Supabase.
 ## Related Documents
 
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
+- ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes (partial supersession, see
+  note above)
 - CTX-007 — Glossary ("Workspace", "Row Level Security (RLS)")
 - DD-001 — Workspaces & Profiles
 - DD-002 — Properties
@@ -107,3 +115,4 @@ corrected to match — see their revision history.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial decision record, written alongside the first migration that implements it. |
+| 1.0.1 | 2026-07-27 | Added a "Superseded By (partial)" pointer to ADR-003, which corrects this document's Consequences-section framing of service-role scope. Decision/Context/Consequences content below is otherwise unchanged, per this repo's ADR-immutability convention. |

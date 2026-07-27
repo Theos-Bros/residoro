@@ -1,10 +1,10 @@
 # CTX-000 — Context Index
 
 **Status:** Approved  
-**Version:** 1.0.0  
+**Version:** 1.2.0  
 **Owner:** Residoro Engineering  
 **Created:** 2026-07-20  
-**Last Updated:** 2026-07-20
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -52,6 +52,10 @@ SQL
 Application
 ```
 
+RFC documents sit outside this chain — they're open proposals that precede a decision. Once
+resolved, the outcome is recorded as a new/superseding ADR or an STD update; the RFC itself
+doesn't carry authority on its own.
+
 Each document type has a single responsibility.
 
 ---
@@ -67,8 +71,7 @@ Every new contributor or AI assistant should read the documentation in the follo
 - CTX-002 Product Context
 - CTX-003 Engineering Context
 - CTX-004 AI Guidelines
-- CTX-005 Current Status
-- CTX-006 Roadmap
+- CTX-005 Status & Roadmap (merged with the former CTX-006 on 2026-07-27; CTX-006 is deprecated)
 - CTX-007 Glossary
 
 ---
@@ -180,6 +183,25 @@ Documents implementation details for APIs, services, modules, integrations, and 
 
 ---
 
+## API — HTTP Contract
+
+Documents the HTTP contract for a set of related routes: method, path, auth requirement,
+request/response shape. Distinct from TS (implementation rationale) and DD (database schema) —
+API documents what a client of the backend needs to know, nothing about how it's implemented
+internally.
+
+---
+
+## RFC — Request for Comments
+
+Documents an open proposal with more than one defensible option, before a decision is made.
+
+Not part of the authority chain. Once resolved, the decision is recorded as a new/superseding
+ADR or an STD update, and the RFC is marked `Approved` (decision recorded) or `Deprecated`
+(abandoned).
+
+---
+
 # Repository Structure
 
 ```
@@ -192,6 +214,7 @@ docs/
 ├── ds/
 ├── dd/
 ├── ts/
+├── rfc/
 ├── diagrams/
 └── api/
 ```
@@ -252,16 +275,19 @@ Future revisions may include:
 
 # Current Foundation Documents
 
+**This table was a day-one snapshot (2026-07-20, everything "Planned") never updated since —
+corrected 2026-07-27 as part of a birds-eye technical review.**
+
 | Document | Status |
 |----------|--------|
 | CTX-000 Context Index | ✅ Complete |
-| CTX-001 Project Context | Planned |
-| CTX-002 Product Context | Planned |
-| CTX-003 Engineering Context | Planned |
-| CTX-004 AI Guidelines | Planned |
-| CTX-005 Current Status | Planned |
-| CTX-006 Roadmap | Planned |
-| CTX-007 Glossary | Planned |
+| CTX-001 Project Context | ✅ Complete |
+| CTX-002 Product Architecture | ✅ Complete (refreshed 2026-07-27) |
+| CTX-003 Engineering Context | ✅ Complete (refreshed 2026-07-27) |
+| CTX-004 AI Guidelines | ✅ Complete |
+| CTX-005 Status & Roadmap | ✅ Complete (merged with CTX-006, refreshed 2026-07-27) |
+| CTX-006 Roadmap | Deprecated — merged into CTX-005 |
+| CTX-007 Glossary | ✅ Complete |
 
 ---
 
@@ -270,3 +296,5 @@ Future revisions may include:
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-20 | Initial document. |
+| 1.1.0 | 2026-07-27 | Added RFC as a document type (open proposals, pre-decision) and `docs/rfc/` to the repository structure. |
+| 1.2.0 | 2026-07-27 | Added API as a document type and `docs/api/` to the repository structure; corrected the Current Foundation Documents table (was a stale day-one "everything Planned" snapshot); updated the CTX-005/006 merge into the Reading Order. |

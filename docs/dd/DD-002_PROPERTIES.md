@@ -1,24 +1,26 @@
 # DD-002 — Properties
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
 
 ---
 
 ## Purpose
 
 Exact table/column/constraint definitions for `properties`, as implemented by
-`supabase/migrations/20260721120000_platform_foundation.sql`.
+`supabase/migrations/20260721120000_platform_foundation.sql` and four follow-up migrations
+through 2026-07-27 (see Revision History).
 
 ---
 
 ## Scope
 
-Covers only the `public.properties` table. Does not cover `Project`, `Developer`,
-`PropertyMedia`, or `PropertyDocument` — see DS-002's Scope section for why those are deferred.
+Covers only the `public.properties` table. `Project`, `Developer`, and `ProjectUnitType` — no
+longer deferred, now shipped — are covered by DD-007. `PropertyMedia`/`PropertyDocument` are
+covered by DD-008.
 
 ---
 
@@ -28,10 +30,12 @@ Covers only the `public.properties` table. Does not cover `Project`, `Developer`
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
 | `tenant_id` | `uuid` | not null, FK → `workspaces(id)` | |
-| `project_id` | `uuid` | nullable, **no FK** | See Deviations below |
+| `project_id` | `uuid` | nullable, FK → `projects(id)` (added 2026-07-27) | See Deviations below — FK was added once `projects` shipped |
 | `type` | `text` | not null, `CHECK` in 8 PH property types | See Type Choices below |
 | `owner_type` | `text` | not null, `CHECK` in (`developer`, `individual`, `company`) | |
-| `owner_id` | `uuid` | not null, **no FK** | See Deviations below |
+| `owner_id` | `uuid` | **nullable** (was not null), **no FK** | See Deviations below — made nullable for CSV-imported rows with no resolvable owner target |
+| `unit_type_id` | `uuid` | nullable, FK → `project_unit_types(id)` | Added by `tb-properties-bulk-units-001`. Set when a property was stamped out from a unit-type template via bulk generation; null for individually-created or resale properties |
+| `unit_number` | `text` | nullable | Added by `tb-properties-project-rollup-001` follow-up. Free-form label for a unit's position (e.g. `"1F"` for condos, `"Block 3 Lot 12"` for house-and-lot). Never backfilled for properties created before this column existed, per explicit user decision — no retroactive migration. Rollup UI falls back to `title` when null |
 | `title` | `text` | not null | |
 | `address` | `text` | nullable | |
 | `city` | `text` | nullable | |
@@ -60,10 +64,20 @@ is composite-indexed from the start.
 ## Deviations From `cap-properties-001`
 
 `cap-properties-001` specifies `project_id` as an FK to `Project` and `owner_id` as a
-polymorphic FK to `Developer` or a CRM Contact/Company. Neither target table exists yet (both
-are later milestones). Both columns exist with the same shape they'll eventually have
-(`uuid`), but with **no foreign key constraint** for now — adding the constraint later is a
-non-breaking `ALTER TABLE ... ADD CONSTRAINT`, not a data migration.
+polymorphic FK to `Developer` or a CRM Contact/Company. As of the original 2026-07-21 migration,
+neither target table existed, so both columns were created with no foreign key constraint —
+exactly the non-breaking-later-`ADD CONSTRAINT` path this section originally anticipated.
+
+**Update, 2026-07-27:** `project_id` now has a real FK (`properties_project_id_fkey` →
+`projects(id)`), added the same day `projects`/`developers` shipped (`tb-properties-project-001`)
+— all properties existing at that point had `project_id = null`, so the FK was safe with no
+backfill. `owner_id` still has **no FK** — its target remains polymorphic (`developers` or
+`contacts`, per `owner_type`), and Postgres has no native polymorphic FK; the correct target
+table is enforced only in application code (`listings.ts` POST/PATCH `/properties`), not at the
+DB layer. `owner_id` was also made **nullable** (2026-07-22, `tb-migration-preview-001`'s import
+batches migration) — CSV-imported properties have no Contact entity to point at until
+`tb-migration-contacts-001` ships one, and a fabricated placeholder UUID would have been
+dishonest about that gap.
 
 `cap-properties-001` describes `coordinates` generically; this DD splits it into `latitude
 numeric(9,6)` / `longitude numeric(9,6)` rather than a PostGIS `geography`/`point` type.
@@ -98,19 +112,28 @@ RLS enabled. Uses the same `current_tenant_id()` / `current_role()` helper funct
 | `properties_update_tenant` | `update` where/with check `tenant_id = current_tenant_id()` (the `with check` also blocks moving a row to a different tenant via update) |
 | `properties_delete_admin` | `delete` where `tenant_id = current_tenant_id()` and `current_role() = 'admin'` |
 
-`service_role` is granted full access on this table (bypasses RLS by design) for the future
-migration importer (`tb-migration-preview-001`), which writes into a tenant's `properties` on
-the user's behalf from a trusted backend context.
+`service_role` is granted full access on this table (bypasses RLS by design). As implemented
+today, **every** backend route uses `service_role` for `properties` (not only the migration
+importer as originally anticipated here) — see ADR-002's "Superseded By (partial)" note and
+ADR-003, which records the decision to move tenant-user-facing routes to a per-request scoped
+client so these RLS policies become the actual enforcement boundary again, not just for the
+importer. That migration is not yet implemented (tracked as future tracer-bullet work).
 
 ---
 
 ## Related Documents
 
 - DS-002 — Properties (Core) (business-entity source for this DD)
+- DD-007 — Developers & Projects (`project_id`/`unit_type_id` FK targets)
 - `cap-properties-001` (Theos Registry) — full eventual Property schema and design rationale
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation & Row-Level Security
-- `supabase/migrations/20260721120000_platform_foundation.sql` — implements this doc
+- ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
+- `supabase/migrations/20260721120000_platform_foundation.sql` — implements the original table shape
+- `supabase/migrations/20260722130000_import_batches.sql` — `owner_id` made nullable
+- `supabase/migrations/20260727120000_properties_projects.sql` — `project_id` FK added
+- `supabase/migrations/20260727130000_project_unit_types.sql` — `unit_type_id`
+- `supabase/migrations/20260727140000_properties_unit_number.sql` — `unit_number`
 
 ---
 
@@ -119,3 +142,4 @@ the user's behalf from a trusted backend context.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial version, matching the first platform foundation migration. |
+| 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: `project_id` FK added, `owner_id` made nullable, `unit_type_id`/`unit_number` added. Corrected the `service_role` Consequences note — usage became universal, not importer-only; pointed to ADR-003 for the corrected target architecture. Structural revision, hence major version bump per STD-002. |

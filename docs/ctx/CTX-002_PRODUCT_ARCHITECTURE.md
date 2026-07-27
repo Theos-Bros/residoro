@@ -1,10 +1,10 @@
 # CTX-002 — Product Architecture
 
 **Status:** Approved  
-**Version:** 1.0.1  
+**Version:** 2.0.0  
 **Owner:** Residoro Engineering  
 **Created:** 2026-07-20  
-**Last Updated:** 2026-07-21
+**Last Updated:** 2026-07-27
 
 ---
 
@@ -42,6 +42,10 @@ Implementation details are intentionally documented elsewhere.
 - CTX-003 — Engineering Context
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation
+- `theos-registry` (sibling repo) — `registry/capabilities/` for each Built domain's full, current
+  design; this document gives the product-level overview, the Registry gives per-capability
+  depth and tracer-bullet-level shipped status
+- `docs/ds/`, `docs/dd/` — the data model behind every Built domain listed above
 
 ---
 
@@ -87,159 +91,132 @@ Its primary users are brokerage organizations and their staff.
 
 Residoro is organized into business domains rather than application screens.
 
-## Identity
+**Implementation status, as of a 2026-07-27 birds-eye review** — each domain below is marked
+**Built** (real, shipped code — see the Theos Registry `theos-registry/registry/capabilities/`
+for exact scope) or **Future** (named here as intended direction, no code exists). A
+Registry-vs-code audit on the same date found the Built domains genuinely well-aligned with what
+their Registry capability docs claim — this status list is not aspirational rounding-up.
 
-Manages:
+## Identity — **Built**
 
-- Organizations
-- Workspaces
-- Users
-- Roles
-- Permissions
+Manages: Workspaces, Users/Profiles, Roles (`admin`/`member`/`operator`).
 
----
-
-## CRM
-
-Manages:
-
-- Contacts
-- Companies
-- Buyers
-- Sellers
-- Owners
-- Developers
+Not yet built: Organizations as a concept distinct from Workspace, fine-grained Permissions
+(the Permission Engine remains a scoped-out future milestone per `mil-platform-foundation-001`).
+See DS-001/DD-001.
 
 ---
 
-## Property Management
+## Client Lifecycle — **Built** (not in the original domain list; added 2026-07-27)
 
-Manages:
+Manages: how a brokerage actually becomes a Residoro client — invite-only qualification (done
+outside Residoro), manual operator-driven enrollment (no self-serve signup, no online payment),
+contract-based access enforcement (warnings → read-only grace → hard block), onboarding
+training tracking, and self-service data export at any point, including on the way out.
 
-- Properties
-- Units
-- Amenities
-- Media
-- Documents
-- Verification
-
----
-
-## Listing Management
-
-Manages:
-
-- Listings
-- Authority to Sell
-- Pricing
-- Marketing
-- Publication
-- Availability
+**This domain was missing from the original PRD entirely, despite being one of the most
+fully-built parts of the platform** (9 shipped tracer bullets — `cap-client-lifecycle-001`) and
+core to Residoro's actual go-to-market model: Residoro is deliberately high-touch and curated,
+not self-serve SaaS — a brokerage cannot sign up on its own, cannot pay online, and is vetted
+human-to-human before an operator creates their Workspace. This is a considered business-model
+decision, not a missing feature. See DS-006, `cap-client-lifecycle-001` for full rationale.
 
 ---
 
-## Buyer Operations
+## CRM — **Partially Built**
 
-Supports:
+Built: Contacts (generic entity, migration-scoped — see DS-005), Developers (minimal
+placeholder — DS-007).
 
-- Lead intake
-- Qualification
-- Property matching
-- Viewings
-- Offers
-- Reservation
-- Closing
+Not yet built: Companies as a distinct entity, Buyers/Sellers as CRM concepts (they exist only
+implicitly, through Contacts and Listings), lead pipelines, activity history.
 
 ---
 
-## Seller Operations
+## Property Management — **Built**
 
-Supports:
+Manages: Properties, Projects/Developer inventory, Unit Types, bulk unit generation, Media
+(photos), Documents (title/tax), Verification status. See DD-002, DD-007, DD-008.
 
-- Property onboarding
-- Verification
-- Listing preparation
-- Marketing
-- Buyer engagement
-- Sale completion
+Not yet built: Amenities as a structured entity.
 
 ---
 
-## Transaction Management
+## Listing Management — **Built**
 
-Manages:
+Manages: Listings (sale/rent, full lifecycle state machine, auto-expiry), Authority to
+Sell/Lease (exclusivity, term dates, per-workspace hard-block policy), cross-brokerage docket
+sharing. See DD-006, DS-004.
 
-- Deals
-- Offers
-- Contracts
-- Reservations
-- Closing
-- Documentation
-
----
-
-## Commission Management
-
-Manages:
-
-- Commission structures
-- Splits
-- Agent earnings
-- Brokerage earnings
-- Payouts
+Not yet built: a distinct Pricing-strategy concept beyond the listing's own price field,
+external publication/marketplace syndication (explicitly out of scope — see `cap-listings-001`'s
+semantic_scope, reserved for a future Distribution capability).
 
 ---
 
-## Task & Workflow Engine
+## Buyer Operations — **Future**
 
-Coordinates:
-
-- Checklists
-- Tasks
-- Assignments
-- Automations
-- Notifications
+Not started. Lead intake, qualification, property matching, viewings, offers, reservation,
+closing — none of this exists in code. Named here as intended direction only.
 
 ---
 
-## Document Management
+## Seller Operations — **Future**
 
-Stores:
-
-- Contracts
-- IDs
-- Property documents
-- Images
-- Videos
-- Attachments
+Not started, beyond what Property Management/Listing Management already cover (onboarding,
+verification, listing preparation). Buyer engagement and sale completion as distinct workflow
+concepts don't exist.
 
 ---
 
-## Reporting & Analytics
+## Transaction Management — **Future**
 
-Provides:
-
-- Brokerage health
-- Sales performance
-- Agent performance
-- Pipeline analytics
-- Financial reporting
+Not started. Deals, offers, contracts, reservations, closing, documentation as a distinct
+domain — none of this exists in code.
 
 ---
 
-## AI Services
+## Commission Management — **Future**
 
-Supports:
+Not started. No commission structures, splits, earnings, or payouts exist anywhere in the
+schema or backend.
 
-- Data migration
-- Data validation
-- Matching assistance
-- Document drafting
-- Search
-- Summarization
-- Automation
+---
 
-Brokerages retain ownership of their AI providers and API keys.
+## Task & Workflow Engine — **Future**
+
+Not started, as a general-purpose engine. The automated-notification pattern (TS-003) covers a
+narrow slice of "Automations"/"Notifications" for three specific business events
+(contract expiry, training reminders, listing-authority expiry) — not a general task/workflow
+system.
+
+---
+
+## Document Management — **Partially Built**
+
+Built: Property Documents (title deeds, tax declarations — DD-008). Not yet built: a general
+document store for contracts, IDs, or other document types beyond property-attached files.
+
+---
+
+## Reporting & Analytics — **Future**
+
+Not started. No dashboards, pipeline analytics, or financial reporting exist.
+
+---
+
+## AI Services — **Mostly Future; migration-mapping assist is Built differently than originally scoped**
+
+Originally scoped as customer-provided AI providers (OpenAI/Anthropic/Gemini) assisting
+migration, validation, matching, document drafting, search, summarization, and automation.
+
+**As implemented, 2026-07-27**: there is no live AI/LLM call anywhere in the application. Field
+mapping for CSV migration uses a deterministic header-string matcher (TS-004); genuine
+AI-assisted mapping happens in an external Claude session an operator runs outside the app, not
+an in-app customer-provided-key integration. Data validation/preview/dedup/rollback (the
+"zero-trust migration" guarantee) are built, but as deterministic backend logic, not AI. Every
+other listed capability (matching assistance, document drafting, search, summarization, general
+automation) is unstarted. See CTX-003's AI Integration section for the full correction.
 
 ---
 
@@ -279,7 +256,7 @@ Automation assists people rather than replacing business judgment.
 
 # Business Lifecycle
 
-Residoro supports the complete lifecycle of brokerage operations.
+Residoro's target design supports the complete lifecycle of brokerage operations:
 
 ```
 Lead
@@ -303,7 +280,18 @@ Commission
 Reporting
 ```
 
-Seller workflows follow a parallel lifecycle beginning with property onboarding and authority to sell before entering active marketing.
+**As implemented, 2026-07-27, this diagram is entirely aspirational** — Buyer Operations,
+Transaction Management, and Commission Management (the domains this lifecycle depends on) are
+all unbuilt. What's actually built today is the layer *underneath* this lifecycle: Property
+onboarding, Listing creation and marketing authority, and — the domain this document originally
+omitted — the Client Lifecycle that gets a brokerage onto the platform in the first place. The
+buyer/seller transaction lifecycle above remains the intended long-term direction, not current
+functionality.
+
+Seller workflows follow a parallel lifecycle beginning with property onboarding and authority to
+sell before entering active marketing — this half is real today (Property Management + Listing
+Management, both Built above); it just doesn't yet continue into buyer engagement or sale
+completion.
 
 ---
 
@@ -352,3 +340,4 @@ without requiring changes to the core business architecture.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-20 | Initial version. |
+| 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: added Built/Partially Built/Future status to every business domain (verified against actual code, not aspirational); added the Client Lifecycle domain, missing from the original PRD entirely despite being one of the most fully-built parts of the platform; flagged the Business Lifecycle diagram and AI Services section as largely aspirational relative to current implementation. Structural revision, hence major version bump per STD-002. |
