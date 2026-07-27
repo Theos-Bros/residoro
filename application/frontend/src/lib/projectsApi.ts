@@ -28,6 +28,41 @@ export type Project = {
   status: ProjectStatus;
 };
 
+export type PropertyType =
+  | 'condo_unit'
+  | 'house_and_lot'
+  | 'lot_only'
+  | 'townhouse'
+  | 'commercial'
+  | 'warehouse'
+  | 'agricultural'
+  | 'industrial';
+
+export const PROPERTY_TYPES: readonly PropertyType[] = [
+  'condo_unit',
+  'house_and_lot',
+  'lot_only',
+  'townhouse',
+  'commercial',
+  'warehouse',
+  'agricultural',
+  'industrial',
+];
+
+export type ProjectUnitType = {
+  id: string;
+  project_id: string;
+  name: string;
+  property_type: PropertyType;
+  floor_area_sqm: number | null;
+  lot_area_sqm: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  parking_slots: number | null;
+  price: number | null;
+  price_currency: string;
+};
+
 async function parseJsonOrThrow(response: Response) {
   const body = await response.json();
   if (!response.ok) {
@@ -81,6 +116,53 @@ export async function createProject(
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function fetchUnitTypes(
+  accessToken: string,
+  projectId: string,
+): Promise<{ unit_types: ProjectUnitType[] }> {
+  const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function createUnitType(
+  accessToken: string,
+  projectId: string,
+  input: {
+    name: string;
+    property_type: PropertyType;
+    floor_area_sqm?: number;
+    lot_area_sqm?: number;
+    bedrooms?: number;
+    bathrooms?: number;
+    parking_slots?: number;
+    price?: number;
+    price_currency?: string;
+  },
+): Promise<ProjectUnitType> {
+  const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function generateUnits(
+  accessToken: string,
+  projectId: string,
+  unitTypeId: string,
+  count: number,
+): Promise<{ created: number; property_ids: string[] }> {
+  const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types/${unitTypeId}/generate-units`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count }),
   });
   return parseJsonOrThrow(response);
 }
