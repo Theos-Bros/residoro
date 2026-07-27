@@ -12,6 +12,7 @@ import { ListingsPage } from './pages/ListingsPage';
 import { ShareDocketForm } from './pages/ShareDocketForm';
 import { SharedWithMePage } from './pages/SharedWithMePage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PerformancePage } from './pages/PerformancePage';
 import { AdminApp } from './admin/AdminApp';
 import { BrokerageLayout } from './BrokerageLayout';
 
@@ -55,6 +56,7 @@ export function App() {
         <Route path="/listings/:listingId/share" element={session && <ShareDocketForm session={session} />} />
         <Route path="/shared-with-me" element={session && <SharedWithMePage session={session} />} />
         <Route path="/settings" element={session && <SettingsPage session={session} />} />
+        <Route path="/performance" element={session && <PerformancePage session={session} />} />
       </Route>
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route

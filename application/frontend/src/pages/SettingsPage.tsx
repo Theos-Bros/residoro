@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { SharingTemplatesPanel } from '@/components/SharingTemplatesPanel';
+import { PerformanceSettingsPanel } from '@/components/PerformanceSettingsPanel';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -12,7 +13,13 @@ type Props = {
 // sub-nav/panel split exists so future sub-sections (e.g. task/lead routing
 // to team members, per user's own stated direction 2026-07-27) are just
 // another entry + panel, not a rework of this page's shape.
-const SECTIONS = [{ id: 'sharing-templates', label: 'Sharing Templates' }] as const;
+//
+// tb-analytics-share-performance-001: second sub-section, arriving exactly as
+// planned -- no rework of SettingsPage's shape needed, just one more entry.
+const SECTIONS = [
+  { id: 'sharing-templates', label: 'Sharing Templates' },
+  { id: 'performance', label: 'Performance' },
+] as const;
 type SectionId = (typeof SECTIONS)[number]['id'];
 
 export function SettingsPage({ session }: Props) {
@@ -41,6 +48,7 @@ export function SettingsPage({ session }: Props) {
         </nav>
         <div className="min-w-0 flex-1">
           {activeSection === 'sharing-templates' && <SharingTemplatesPanel session={session} isAdmin={isAdmin} />}
+          {activeSection === 'performance' && <PerformanceSettingsPanel session={session} isAdmin={isAdmin} />}
         </div>
       </div>
     </div>

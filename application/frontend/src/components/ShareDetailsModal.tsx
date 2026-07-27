@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { fetchShareText, type ShareAudience } from '@/lib/shareTextApi';
+import { logShareEvent } from '@/lib/analyticsApi';
 import { RichTextEditor } from '@/components/RichTextEditor';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { Button } from '@/components/ui/button';
@@ -88,7 +89,15 @@ export function ShareDetailsModal({ session, listingId, propertyTitle, onClose }
       setCopied(true);
     } catch (err) {
       setError((err as Error).message);
+      return;
     }
+
+    // tb-analytics-share-performance-001: best-effort telemetry -- the copy
+    // itself already succeeded and is what matters to the agent, so a failed
+    // log call is swallowed here (console only), never surfaced as an error.
+    logShareEvent(session.access_token, listingId, audience).catch((err) => {
+      console.error('Could not log share event', err);
+    });
   }
 
   return (
