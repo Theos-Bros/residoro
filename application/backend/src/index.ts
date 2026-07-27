@@ -13,6 +13,7 @@ import { registerPropertyMediaRoutes } from './routes/propertyMedia.js';
 import { registerPropertyDocumentsRoutes } from './routes/propertyDocuments.js';
 import { registerProjectsRoutes } from './routes/projects.js';
 import { registerContactsRoutes } from './routes/contacts.js';
+import { registerShareTextRoutes } from './routes/shareText.js';
 
 const app = Fastify({ logger: true });
 
@@ -29,6 +30,7 @@ await registerPropertyMediaRoutes(app);
 await registerPropertyDocumentsRoutes(app);
 await registerProjectsRoutes(app);
 await registerContactsRoutes(app);
+await registerShareTextRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

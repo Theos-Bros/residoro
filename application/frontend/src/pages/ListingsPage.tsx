@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
+import { ShareDetailsModal } from '@/components/ShareDetailsModal';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -29,6 +30,7 @@ const STATUS_LABEL: Record<ListingStatus, string> = {
 };
 
 type OpenHistory = { propertyId: string; propertyTitle: string } | null;
+type OpenShare = { listingId: string; propertyTitle: string } | null;
 
 // tb-listings-lifecycle-001: status actions now come from
 // LISTING_STATUS_TRANSITIONS instead of the two hardcoded active/withdrawn
@@ -48,6 +50,7 @@ export function ListingsPage({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [openHistory, setOpenHistory] = useState<OpenHistory>(null);
+  const [openShare, setOpenShare] = useState<OpenShare>(null);
   const [renewDates, setRenewDates] = useState<Record<string, string>>({});
 
   function reload() {
@@ -201,6 +204,13 @@ export function ListingsPage({ session }: Props) {
                       <Button
                         size="sm"
                         variant="outline"
+                        onClick={() => setOpenShare({ listingId: listing.id, propertyTitle: listing.property_title })}
+                      >
+                        Share Details
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() =>
                           setOpenHistory({ propertyId: listing.property_id, propertyTitle: listing.property_title })
                         }
@@ -222,6 +232,14 @@ export function ListingsPage({ session }: Props) {
           propertyId={openHistory.propertyId}
           propertyTitle={openHistory.propertyTitle}
           onClose={() => setOpenHistory(null)}
+        />
+      )}
+      {openShare && (
+        <ShareDetailsModal
+          session={session}
+          listingId={openShare.listingId}
+          propertyTitle={openShare.propertyTitle}
+          onClose={() => setOpenShare(null)}
         />
       )}
     </div>

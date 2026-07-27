@@ -24,6 +24,7 @@ const NAV_LINKS = [
   { to: '/projects', label: 'Projects' },
   { to: '/listings', label: 'Listings' },
   { to: '/shared-with-me', label: 'Shared with me' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 // tb-listings-create-001: factors BrokerageApp's session/operator gating and

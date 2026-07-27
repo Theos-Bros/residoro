@@ -42,7 +42,7 @@ async function main() {
   }
   console.log(`Using property ${property.id} (${property.title})`);
 
-  async function call(path: string, init: RequestInit = {}) {
+  async function call(path: string, init: RequestInit = {}): Promise<{ status: number; body: any }> {
     const response = await fetch(`${BACKEND_URL}${path}`, {
       ...init,
       headers: {
