@@ -76,6 +76,7 @@ type UpdateListingStatusBody = {
   status?: string;
   authority_starts_at?: string;
   authority_expires_at?: string | null;
+  buyer_contact_id?: string;
 };
 
 type UpdatePropertyVerificationBody = {
@@ -547,7 +548,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     const { data, error } = await supabase
       .from('listings')
       .select(
-        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, properties(title)',
+        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title), contacts(name)',
       )
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
@@ -569,7 +570,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       authority_expires_at: string | null;
       status: string;
       created_at: string;
+      buyer_contact_id: string | null;
       properties: { title: string } | null;
+      contacts: { name: string } | null;
     }>).map((l) => ({
       id: l.id,
       property_id: l.property_id,
@@ -583,6 +586,8 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       authority_expires_at: l.authority_expires_at,
       status: l.status,
       created_at: l.created_at,
+      buyer_contact_id: l.buyer_contact_id,
+      buyer_name: l.contacts?.name ?? null,
     }));
 
     return { listings };
@@ -679,10 +684,19 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not refresh listing statuses' });
       }
 
-      const { status, authority_starts_at, authority_expires_at } = request.body ?? {};
+      const { status, authority_starts_at, authority_expires_at, buyer_contact_id } = request.body ?? {};
 
       if (!status || !STATUSES.includes(status as (typeof STATUSES)[number])) {
         return reply.status(400).send({ error: `status must be one of: ${STATUSES.join(', ')}` });
+      }
+
+      // tb-crm-buyer-001: sold is terminal (STATUS_TRANSITIONS.sold = []), so this
+      // is the single well-defined point buyer_contact_id can ever be set.
+      if (status === 'sold' && !buyer_contact_id) {
+        return reply.status(400).send({ error: 'buyer_contact_id is required when marking a listing sold' });
+      }
+      if (status !== 'sold' && buyer_contact_id) {
+        return reply.status(400).send({ error: 'buyer_contact_id can only be set when marking a listing sold' });
       }
 
       // UX follow-up: lets a renewal (expired -> active) update the
@@ -715,6 +729,23 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply
           .status(400)
           .send({ error: `Cannot move a listing from '${current.status}' to '${status}'` });
+      }
+
+      if (status === 'sold') {
+        const { data: buyer, error: buyerError } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('id', buyer_contact_id)
+          .eq('tenant_id', request.user!.tenantId)
+          .maybeSingle();
+
+        if (buyerError) {
+          request.log.error(buyerError);
+          return reply.status(500).send({ error: 'Could not verify the buyer' });
+        }
+        if (!buyer) {
+          return reply.status(404).send({ error: 'Buyer not found in your workspace' });
+        }
       }
 
       // tb-listings-authority-001 / tb-listings-exclusivity-hardblock-001:
@@ -761,10 +792,11 @@ export async function registerListingsRoutes(app: FastifyInstance) {
           status,
           ...(startsAt ? { authority_starts_at: startsAt.toISOString() } : {}),
           ...(expiresAt !== undefined ? { authority_expires_at: expiresAt?.toISOString() ?? null } : {}),
+          ...(status === 'sold' ? { buyer_contact_id } : {}),
         })
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .select('id, property_id, status')
+        .select('id, property_id, status, buyer_contact_id')
         .maybeSingle();
 
       if (error) {
