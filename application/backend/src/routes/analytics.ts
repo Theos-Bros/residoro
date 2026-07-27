@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
+import { canEditSetting } from '../lib/settingsDelegation.js';
 
 type Audience = 'public' | 'co_broker' | 'internal';
 const AUDIENCES: Audience[] = ['public', 'co_broker', 'internal'];
@@ -89,9 +90,9 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
     const supabase = getScopedClient(request);
 
     const { data: workspace, error: workspaceError } = await supabase
-      .from('workspaces')
+      .from('workspace_performance_settings')
       .select('hot_share_threshold')
-      .eq('id', request.user!.tenantId)
+      .eq('tenant_id', request.user!.tenantId)
       .single();
 
     if (workspaceError || !workspace) {
@@ -135,27 +136,40 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
   app.get('/settings/performance', { preHandler: requireAuth }, async (request, reply) => {
     const supabase = getScopedClient(request);
     const { data, error } = await supabase
-      .from('workspaces')
+      .from('workspace_performance_settings')
       .select('hot_share_threshold')
-      .eq('id', request.user!.tenantId)
+      .eq('tenant_id', request.user!.tenantId)
       .single();
 
     if (error) {
       request.log.error(error);
       return reply.status(500).send({ error: 'Could not load performance settings' });
     }
-    return data;
+
+    const can_edit = await canEditSetting(supabase, request.user!.tenantId, request.user!.id, request.user!.role, 'performance');
+    return { ...data, can_edit };
   });
 
-  // RLS (workspaces_update_admin) already blocks a non-admin's update at the
-  // database layer -- this app-level check exists only to return a clean 403,
-  // same precedent as PATCH /settings/share-templates.
+  // tb-brokerage-permissions-delegation-001: role === 'admin' OR an explicit
+  // delegation grant. The write goes through the caller's own scoped client
+  // -- workspace_performance_settings' own RLS policy (has_settings_delegation,
+  // see the migration) is the real enforcement here, not this check alone.
+  // This app-level check only exists to return a clean 403, same precedent
+  // as PATCH /settings/share-templates. Never trust the GET's can_edit alone.
   app.patch<{ Body: PerformanceSettingsBody }>(
     '/settings/performance',
     { preHandler: requireAuth },
     async (request, reply) => {
-      if (request.user!.role !== 'admin') {
-        return reply.status(403).send({ error: 'Only an admin can edit performance settings' });
+      const supabase = getScopedClient(request);
+      const canEdit = await canEditSetting(
+        supabase,
+        request.user!.tenantId,
+        request.user!.id,
+        request.user!.role,
+        'performance',
+      );
+      if (!canEdit) {
+        return reply.status(403).send({ error: 'Only an admin or a delegated member can edit performance settings' });
       }
 
       const { hot_share_threshold } = request.body ?? {};
@@ -163,11 +177,10 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'hot_share_threshold must be a positive integer' });
       }
 
-      const supabase = getScopedClient(request);
       const { data, error } = await supabase
-        .from('workspaces')
+        .from('workspace_performance_settings')
         .update({ hot_share_threshold })
-        .eq('id', request.user!.tenantId)
+        .eq('tenant_id', request.user!.tenantId)
         .select('hot_share_threshold')
         .single();
 
@@ -175,7 +188,7 @@ export async function registerAnalyticsRoutes(app: FastifyInstance) {
         request.log.error(error);
         return reply.status(500).send({ error: 'Could not save performance settings' });
       }
-      return data;
+      return { ...data, can_edit: true };
     },
   );
 }

@@ -5,15 +5,19 @@ import { Button } from '@/components/ui/button';
 
 type Props = {
   session: Session;
-  isAdmin: boolean;
 };
 
 // tb-analytics-share-performance-001: Settings' second sub-section, following
-// SharingTemplatesPanel's exact view-all/edit-admin-only shape -- everyone
-// loads and sees the current threshold, only isAdmin gets an editable input
-// and Save button, non-admins get the same read-only notice pattern.
-export function PerformanceSettingsPanel({ session, isAdmin }: Props) {
+// SharingTemplatesPanel's exact view-all/edit-gated shape -- everyone loads
+// and sees the current threshold, only a caller with edit rights gets an
+// editable input and Save button.
+//
+// tb-brokerage-permissions-delegation-001: editability now reads off the
+// fetched resource's own can_edit (server-computed: role === 'admin' OR a
+// matching delegation grant) instead of an canEdit prop.
+export function PerformanceSettingsPanel({ session }: Props) {
   const [threshold, setThreshold] = useState(3);
+  const [canEdit, setCanEdit] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +27,7 @@ export function PerformanceSettingsPanel({ session, isAdmin }: Props) {
     fetchPerformanceSettings(session.access_token)
       .then((settings) => {
         setThreshold(settings.hot_share_threshold);
+        setCanEdit(settings.can_edit);
         setLoaded(true);
       })
       .catch((err: Error) => setError(err.message));
@@ -35,6 +40,7 @@ export function PerformanceSettingsPanel({ session, isAdmin }: Props) {
     try {
       const settings = await updatePerformanceSettings(session.access_token, threshold);
       setThreshold(settings.hot_share_threshold);
+      setCanEdit(settings.can_edit);
       setSaved(true);
     } catch (err) {
       setError((err as Error).message);
@@ -58,9 +64,10 @@ export function PerformanceSettingsPanel({ session, isAdmin }: Props) {
           {error}
         </p>
       )}
-      {!isAdmin && (
+      {!canEdit && (
         <p className="text-sm text-muted-foreground">
-          Only an admin can edit the Hot threshold. You can still view the Performance page.
+          Only an admin, or a member granted edit access, can edit the Hot threshold. You can
+          still view the Performance page.
         </p>
       )}
 
@@ -73,13 +80,13 @@ export function PerformanceSettingsPanel({ session, isAdmin }: Props) {
               min={1}
               step={1}
               value={threshold}
-              disabled={!isAdmin}
+              disabled={!canEdit}
               onChange={(e) => setThreshold(Math.max(1, Math.round(Number(e.target.value))))}
               className="h-9 w-32 rounded-md border border-input px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>
 
-          {isAdmin && (
+          {canEdit && (
             <div className="flex items-center gap-3">
               <Button onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving…' : 'Save'}

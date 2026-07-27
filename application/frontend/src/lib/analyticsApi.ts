@@ -11,6 +11,7 @@ export type ListingPerformance = {
 
 export type PerformanceSettings = {
   hot_share_threshold: number;
+  can_edit: boolean;
 };
 
 async function parseJsonOrThrow(response: Response) {

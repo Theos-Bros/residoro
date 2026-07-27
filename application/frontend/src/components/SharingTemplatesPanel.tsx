@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 
 type Props = {
   session: Session;
-  isAdmin: boolean;
 };
 
 const MERGE_FIELDS = [
@@ -19,9 +18,16 @@ const CO_BROKER_ONLY_FIELD = 'commission_note';
 // sub-section. Internal audience has no template here by design -- it's a
 // fixed full-detail dump built server-side (see cap-distribution-001
 // Decision #4), so only Public/Co-broker get an editor.
-export function SharingTemplatesPanel({ session, isAdmin }: Props) {
+//
+// tb-brokerage-permissions-delegation-001: editability now reads off the
+// fetched resource's own can_edit (server-computed: role === 'admin' OR a
+// matching delegation grant) instead of an canEdit prop, so a delegated
+// non-admin member gets the same editable experience an admin always has,
+// with no separate code path.
+export function SharingTemplatesPanel({ session }: Props) {
   const [publicTemplate, setPublicTemplate] = useState('');
   const [coBrokerTemplate, setCoBrokerTemplate] = useState('');
+  const [canEdit, setCanEdit] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +38,7 @@ export function SharingTemplatesPanel({ session, isAdmin }: Props) {
       .then((templates) => {
         setPublicTemplate(templates.public_share_template ?? '');
         setCoBrokerTemplate(templates.co_broker_share_template ?? '');
+        setCanEdit(templates.can_edit);
         setLoaded(true);
       })
       .catch((err: Error) => setError(err.message));
@@ -42,10 +49,11 @@ export function SharingTemplatesPanel({ session, isAdmin }: Props) {
     setSaved(false);
     setSaving(true);
     try {
-      await updateShareTemplates(session.access_token, {
+      const templates = await updateShareTemplates(session.access_token, {
         public_share_template: publicTemplate,
         co_broker_share_template: coBrokerTemplate,
       });
+      setCanEdit(templates.can_edit);
       setSaved(true);
     } catch (err) {
       setError((err as Error).message);
@@ -69,10 +77,10 @@ export function SharingTemplatesPanel({ session, isAdmin }: Props) {
           {error}
         </p>
       )}
-      {!isAdmin && (
+      {!canEdit && (
         <p className="text-sm text-muted-foreground">
-          Only an admin can edit sharing templates. You can still use them from a listing's
-          "Share Details" button.
+          Only an admin, or a member granted edit access, can edit sharing templates. You can
+          still use them from a listing's "Share Details" button.
         </p>
       )}
 
@@ -83,7 +91,7 @@ export function SharingTemplatesPanel({ session, isAdmin }: Props) {
             <p className="text-xs text-muted-foreground">
               Merge fields: {MERGE_FIELDS.map((f) => `{{${f}}}`).join(', ')}
             </p>
-            <RichTextEditor value={publicTemplate} onChange={setPublicTemplate} editable={isAdmin} />
+            <RichTextEditor value={publicTemplate} onChange={setPublicTemplate} editable={canEdit} />
           </div>
 
           <div className="space-y-2">
@@ -91,10 +99,10 @@ export function SharingTemplatesPanel({ session, isAdmin }: Props) {
             <p className="text-xs text-muted-foreground">
               Merge fields: {MERGE_FIELDS.map((f) => `{{${f}}}`).join(', ')}, {`{{${CO_BROKER_ONLY_FIELD}}}`}
             </p>
-            <RichTextEditor value={coBrokerTemplate} onChange={setCoBrokerTemplate} editable={isAdmin} />
+            <RichTextEditor value={coBrokerTemplate} onChange={setCoBrokerTemplate} editable={canEdit} />
           </div>
 
-          {isAdmin && (
+          {canEdit && (
             <div className="flex items-center gap-3">
               <Button onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving…' : 'Save templates'}

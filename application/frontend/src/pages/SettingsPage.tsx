@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { SharingTemplatesPanel } from '@/components/SharingTemplatesPanel';
 import { PerformanceSettingsPanel } from '@/components/PerformanceSettingsPanel';
+import { PermissionsSettingsPanel } from '@/components/PermissionsSettingsPanel';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -16,23 +17,31 @@ type Props = {
 //
 // tb-analytics-share-performance-001: second sub-section, arriving exactly as
 // planned -- no rework of SettingsPage's shape needed, just one more entry.
-const SECTIONS = [
+//
+// tb-brokerage-permissions-delegation-001: third sub-section, but the one
+// exception to "every sub-section is visible to everyone" -- Permissions is
+// admin-only to view at all, pushed onto SECTIONS conditionally below rather
+// than living in the static array, since who-can-edit-what is an
+// admin-management concern, not something a regular member needs to see.
+const BASE_SECTIONS = [
   { id: 'sharing-templates', label: 'Sharing Templates' },
   { id: 'performance', label: 'Performance' },
 ] as const;
-type SectionId = (typeof SECTIONS)[number]['id'];
+const PERMISSIONS_SECTION = { id: 'permissions', label: 'Permissions' } as const;
+type SectionId = (typeof BASE_SECTIONS)[number]['id'] | typeof PERMISSIONS_SECTION.id;
 
 export function SettingsPage({ session }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>('sharing-templates');
   const { status } = useWorkspaceStatus(session);
   const isAdmin = status?.role === 'admin';
+  const sections = isAdmin ? [...BASE_SECTIONS, PERMISSIONS_SECTION] : BASE_SECTIONS;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
         <nav className="flex gap-1 sm:w-48 sm:shrink-0 sm:flex-col">
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <button
               key={section.id}
               type="button"
@@ -47,8 +56,9 @@ export function SettingsPage({ session }: Props) {
           ))}
         </nav>
         <div className="min-w-0 flex-1">
-          {activeSection === 'sharing-templates' && <SharingTemplatesPanel session={session} isAdmin={isAdmin} />}
-          {activeSection === 'performance' && <PerformanceSettingsPanel session={session} isAdmin={isAdmin} />}
+          {activeSection === 'sharing-templates' && <SharingTemplatesPanel session={session} />}
+          {activeSection === 'performance' && <PerformanceSettingsPanel session={session} />}
+          {activeSection === 'permissions' && isAdmin && <PermissionsSettingsPanel session={session} />}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
+import { canEditSetting } from '../lib/settingsDelegation.js';
 
 type Audience = 'public' | 'co_broker' | 'internal';
 const AUDIENCES: Audience[] = ['public', 'co_broker', 'internal'];
@@ -115,25 +116,44 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
   app.get('/settings/share-templates', { preHandler: requireAuth }, async (request, reply) => {
     const supabase = getScopedClient(request);
     const { data, error } = await supabase
-      .from('workspaces')
+      .from('workspace_sharing_settings')
       .select('public_share_template, co_broker_share_template')
-      .eq('id', request.user!.tenantId)
+      .eq('tenant_id', request.user!.tenantId)
       .single();
 
     if (error) {
       request.log.error(error);
       return reply.status(500).send({ error: 'Could not load sharing templates' });
     }
-    return data;
+
+    const can_edit = await canEditSetting(
+      supabase,
+      request.user!.tenantId,
+      request.user!.id,
+      request.user!.role,
+      'sharing_templates',
+    );
+    return { ...data, can_edit };
   });
 
-  // RLS (workspaces_update_admin) already blocks a non-admin's update at the
-  // database layer -- this app-level check exists only to return a clean 403
-  // instead of a generic Postgres/RLS failure, matching
-  // tb-properties-verification-001's precedent.
+  // tb-brokerage-permissions-delegation-001: role === 'admin' OR an explicit
+  // delegation grant. The write goes through the caller's own scoped client
+  // -- workspace_sharing_settings' own RLS policy (has_settings_delegation,
+  // see the migration) is the real enforcement here, not this check alone.
+  // This app-level check only exists to return a clean 403 instead of a
+  // generic Postgres/RLS failure, same precedent as every other admin-gated
+  // route -- never trust the GET's can_edit alone, re-check on every write.
   app.patch<{ Body: ShareTemplatesBody }>('/settings/share-templates', { preHandler: requireAuth }, async (request, reply) => {
-    if (request.user!.role !== 'admin') {
-      return reply.status(403).send({ error: 'Only an admin can edit sharing templates' });
+    const supabase = getScopedClient(request);
+    const canEdit = await canEditSetting(
+      supabase,
+      request.user!.tenantId,
+      request.user!.id,
+      request.user!.role,
+      'sharing_templates',
+    );
+    if (!canEdit) {
+      return reply.status(403).send({ error: 'Only an admin or a delegated member can edit sharing templates' });
     }
 
     const { public_share_template, co_broker_share_template } = request.body ?? {};
@@ -141,14 +161,13 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'public_share_template or co_broker_share_template is required' });
     }
 
-    const supabase = getScopedClient(request);
     const { data, error } = await supabase
-      .from('workspaces')
+      .from('workspace_sharing_settings')
       .update({
         ...(public_share_template !== undefined && { public_share_template }),
         ...(co_broker_share_template !== undefined && { co_broker_share_template }),
       })
-      .eq('id', request.user!.tenantId)
+      .eq('tenant_id', request.user!.tenantId)
       .select('public_share_template, co_broker_share_template')
       .single();
 
@@ -156,7 +175,7 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
       request.log.error(error);
       return reply.status(500).send({ error: 'Could not save sharing templates' });
     }
-    return data;
+    return { ...data, can_edit: true };
   });
 
   app.get<{ Params: { id: string }; Querystring: { audience?: string } }>(
@@ -193,9 +212,9 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
       }
 
       const { data: workspace } = await supabase
-        .from('workspaces')
+        .from('workspace_sharing_settings')
         .select('public_share_template, co_broker_share_template')
-        .eq('id', request.user!.tenantId)
+        .eq('tenant_id', request.user!.tenantId)
         .single();
 
       if (audience === 'co_broker') {
