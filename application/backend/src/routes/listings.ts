@@ -276,9 +276,10 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     }
 
     if (owner_id) {
-      const ownerTable = owner_type === 'developer' ? 'developers' : 'contacts';
+      // tb-crm-developer-consolidation-001: developers was folded into contacts
+      // via is_company -- every owner_type now resolves through contacts.
       const { data: owner, error: ownerError } = await supabase
-        .from(ownerTable)
+        .from('contacts')
         .select('id')
         .eq('id', owner_id)
         .eq('tenant_id', request.user!.tenantId)
@@ -289,7 +290,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not verify the owner' });
       }
       if (!owner) {
-        return reply.status(404).send({ error: `Owner not found in your workspace (expected in ${ownerTable})` });
+        return reply.status(404).send({ error: 'Owner not found in your workspace' });
       }
     }
 
@@ -443,9 +444,10 @@ export async function registerListingsRoutes(app: FastifyInstance) {
           return reply.status(400).send({ error: `owner_type must be one of: ${OWNER_TYPES.join(', ')}` });
         }
         if (owner_id !== null) {
-          const ownerTable = owner_type === 'developer' ? 'developers' : 'contacts';
+          // tb-crm-developer-consolidation-001: developers was folded into
+          // contacts via is_company -- every owner_type now resolves through contacts.
           const { data: owner, error: ownerError } = await supabase
-            .from(ownerTable)
+            .from('contacts')
             .select('id')
             .eq('id', owner_id)
             .eq('tenant_id', request.user!.tenantId)
@@ -456,7 +458,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
             return reply.status(500).send({ error: 'Could not verify the owner' });
           }
           if (!owner) {
-            return reply.status(404).send({ error: `Owner not found in your workspace (expected in ${ownerTable})` });
+            return reply.status(404).send({ error: 'Owner not found in your workspace' });
           }
         }
         updateFields.owner_type = owner_type;

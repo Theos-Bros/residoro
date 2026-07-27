@@ -121,21 +121,34 @@ async function main() {
     if (badDev.status !== 404) throw new Error('FAIL: nonexistent developer_id should 404');
     console.log('PASS');
 
-    console.log('\n--- 6. resolveOwner via share-text: owner_type=developer resolves through contacts ---');
-    const { data: property, error: propError } = await supabaseAdmin
-      .from('properties')
-      .insert({
-        tenant_id: tenantId,
+    console.log('\n--- 6a. POST /properties with owner_type=developer, owner_id=<contacts row> succeeds ---');
+    // Regression check: listings.ts's owner_id validation used to branch on a
+    // dynamically-computed table name (developers vs contacts) -- missed by this
+    // script's first pass because it's not a literal .from('developers') call.
+    const propRes = await call('/properties', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: 'Verify-CRM Property',
         type: 'condo_unit',
         owner_type: 'developer',
         owner_id: createdDeveloperId,
-        title: 'Verify-CRM Property',
-        created_by: signIn.user!.id,
-      })
-      .select('id')
-      .single();
-    if (propError || !property) throw new Error(`FAIL: could not create test property: ${propError?.message}`);
-    createdPropertyId = property.id;
+      }),
+    });
+    console.log(propRes);
+    if (propRes.status !== 201) throw new Error(`FAIL: POST /properties with owner_type=developer should 201, got ${propRes.status}`);
+    createdPropertyId = propRes.body.id;
+    console.log('PASS');
+
+    console.log('\n--- 6b. PATCH /properties/:id re-pointing owner_type/owner_id at the same contacts row succeeds ---');
+    const patchRes = await call(`/properties/${createdPropertyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ owner_type: 'developer', owner_id: createdDeveloperId }),
+    });
+    console.log(patchRes);
+    if (patchRes.status !== 200) throw new Error(`FAIL: PATCH /properties/:id owner change should 200, got ${patchRes.status}`);
+    console.log('PASS');
+
+    console.log('\n--- 6c. resolveOwner via share-text: owner_type=developer resolves through contacts ---');
 
     const listingRes = await call('/listings', {
       method: 'POST',
