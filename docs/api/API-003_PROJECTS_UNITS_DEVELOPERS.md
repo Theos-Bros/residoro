@@ -1,7 +1,7 @@
 # API-003 — Projects, Unit Types & Developers
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-07-27
@@ -23,7 +23,9 @@ Covers `/developers`, `/projects/*`. Does not cover Property itself (API-002).
 
 ## Routes: Developers
 
-All require `requireAuth`.
+All require `requireAuth`, using a per-request client scoped to the caller's JWT (ADR-003,
+implemented by `tb-platform-rls-scoped-client-001`) — RLS plus the existing explicit
+`.eq('tenant_id', ...)` filters.
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
@@ -58,6 +60,7 @@ All require `requireAuth`.
 - API-001 — Auth guards this document assumes
 - API-002 — Properties (the entity bulk unit generation writes into)
 - ADR-002 — Workspace Isolation & Row-Level Security
+- ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 
 ---
 
@@ -66,3 +69,4 @@ All require `requireAuth`.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written from a birds-eye technical review — from-scratch API spec. |
+| 1.0.1 | 2026-07-27 | Noted ADR-003's scoped-client implementation (`tb-platform-rls-scoped-client-001`). |

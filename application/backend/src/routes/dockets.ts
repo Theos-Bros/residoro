@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../lib/auth.js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const LISTING_FIELDS = [
@@ -67,8 +67,24 @@ type JoinedListing = {
 // concern) and controls visibility only -- GET /listing-dockets/received
 // always joins through to the live listings/properties rows, never a stored
 // copy, per the user's "live projection" decision (2026-07-23).
+//
+// tb-platform-rls-scoped-client-001 / ADR-003 note: this file does NOT get a
+// blanket route-wide swap to the scoped client the way most other route
+// files do. listing_dockets itself is identity-scoped (shared_by/shared_with
+// = auth.uid(), see 20260723110000_listing_dockets.sql) so its own rows are
+// safe to read/write with the scoped client -- but three reads here are
+// genuinely cross-tenant BY DESIGN (the whole point of this feature) and
+// would be silently blocked by properties_select_tenant / listings_select_
+// tenant / profiles_select_same_tenant if run through the scoped client:
+// looking up the recipient's profile by handle (their tenant isn't the
+// sharer's), looking up sharers' profiles for the recipient's inbox (same),
+// and joining through to the live listing/property data for a docket whose
+// source tenant isn't the recipient's own. Those three stay on supabaseAdmin,
+// with the backend's own docket-row checks (already run first) standing in
+// for the RLS layer these particular reads can't use.
 export async function registerDocketRoutes(app: FastifyInstance) {
   app.post<{ Body: CreateDocketBody }>('/listing-dockets', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
     const { listing_id, handle, included_fields } = request.body ?? {};
 
     if (!listing_id || !handle || !included_fields) {
@@ -82,7 +98,7 @@ export async function registerDocketRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: `Unknown field: ${invalidField}` });
     }
 
-    const { data: listing, error: listingError } = await supabaseAdmin
+    const { data: listing, error: listingError } = await supabase
       .from('listings')
       .select('id')
       .eq('id', listing_id)
@@ -97,6 +113,9 @@ export async function registerDocketRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Listing not found in your workspace' });
     }
 
+    // Cross-tenant by design -- the recipient is never in the sharer's own
+    // tenant, so profiles_select_same_tenant would block this under the
+    // scoped client. Stays on supabaseAdmin; see file-level note above.
     const normalizedHandle = handle.trim().toLowerCase();
     const { data: recipient, error: recipientError } = await supabaseAdmin
       .from('profiles')
@@ -115,7 +134,7 @@ export async function registerDocketRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'You cannot share a docket with yourself' });
     }
 
-    const { data: docket, error: docketError } = await supabaseAdmin
+    const { data: docket, error: docketError } = await supabase
       .from('listing_dockets')
       .insert({
         source_listing_id: listing_id,
@@ -136,11 +155,16 @@ export async function registerDocketRoutes(app: FastifyInstance) {
   });
 
   app.get('/listing-dockets/received', { preHandler: requireAuth }, async (request, reply) => {
-    const { data, error } = await supabaseAdmin
+    // The docket rows themselves are identity-scoped (shared_with =
+    // auth.uid()), so this part is safe on the scoped client. The nested
+    // listings/properties join is NOT, though -- those tables are
+    // tenant-scoped RLS, and a docket's source tenant is (by design) never
+    // the recipient's own tenant, so embedding them here would silently come
+    // back null under the scoped client. Fetched separately via
+    // supabaseAdmin below instead of as a nested select.
+    const { data, error } = await getScopedClient(request)
       .from('listing_dockets')
-      .select(
-        'id, shared_by, included_fields, created_at, listings(listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, properties(title, type, address, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots))',
-      )
+      .select('id, shared_by, included_fields, created_at, source_listing_id')
       .eq('shared_with', request.user!.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false });
@@ -155,7 +179,7 @@ export async function registerDocketRoutes(app: FastifyInstance) {
       shared_by: string;
       included_fields: string[];
       created_at: string;
-      listings: JoinedListing | null;
+      source_listing_id: string;
     }>;
 
     const sharerIds = [...new Set(rows.map((row) => row.shared_by))];
@@ -170,8 +194,27 @@ export async function registerDocketRoutes(app: FastifyInstance) {
     }
     const handleById = new Map((sharers ?? []).map((sharer) => [sharer.id, sharer.handle]));
 
+    const listingIds = [...new Set(rows.map((row) => row.source_listing_id))];
+    const { data: listingRows, error: listingsError } =
+      listingIds.length > 0
+        ? await supabaseAdmin
+            .from('listings')
+            .select(
+              'id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, properties(title, type, address, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots)',
+            )
+            .in('id', listingIds)
+        : { data: [], error: null };
+
+    if (listingsError) {
+      request.log.error(listingsError);
+      return reply.status(500).send({ error: 'Could not load shared listing details' });
+    }
+    const listingById = new Map(
+      ((listingRows ?? []) as unknown as Array<JoinedListing & { id: string }>).map((l) => [l.id, l]),
+    );
+
     const dockets = rows.map((row) => {
-      const listing = row.listings;
+      const listing = listingById.get(row.source_listing_id) ?? null;
       const property = listing?.properties ?? null;
       const fields: Record<string, unknown> = {};
 
@@ -204,7 +247,7 @@ export async function registerDocketRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "status must be 'revoked'" });
       }
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await getScopedClient(request)
         .from('listing_dockets')
         .update({ status })
         .eq('id', request.params.id)

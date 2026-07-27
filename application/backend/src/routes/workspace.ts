@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../lib/auth.js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { activeWarningTier, daysUntil } from '../lib/contractExpiry.js';
 
@@ -10,7 +10,7 @@ import { activeWarningTier, daysUntil } from '../lib/contractExpiry.js';
 // active_warning) is purely for display.
 export async function registerWorkspaceRoutes(app: FastifyInstance) {
   app.get('/me/workspace-status', { preHandler: requireAuth }, async (request, reply) => {
-    const { data: workspace, error } = await supabaseAdmin
+    const { data: workspace, error } = await getScopedClient(request)
       .from('workspaces')
       .select('access_state, contract_end_date')
       .eq('id', request.user!.tenantId)
@@ -21,6 +21,13 @@ export async function registerWorkspaceRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load workspace status' });
     }
 
+    // contract_notifications stays on supabaseAdmin, not the scoped client --
+    // this table has RLS enabled but deliberately NO policies at all (see
+    // 20260722120000_contract_expiry.sql's "RLS enabled, no policies,
+    // service-role-only -- every access goes through the backend API"
+    // comment, mirroring migration_temp_files' precedent). Under the scoped
+    // client this would return zero rows / block the update, not just lose a
+    // layer of defense-in-depth -- it would break the feature outright.
     const { data: notifications, error: notificationsError } = await supabaseAdmin
       .from('contract_notifications')
       .select('id, threshold, message, created_at')

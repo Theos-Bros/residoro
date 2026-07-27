@@ -1,7 +1,7 @@
 # API-001 — Auth, Session, Workspace Status & Export
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-07-27
@@ -36,9 +36,16 @@ caching; every authenticated request costs one round-trip to Supabase Auth plus 
 | `requireOperator` | Valid session, `profiles.role = 'operator'` | `tenant_id` is null for operators — cross-tenant by design |
 | `requireMigrationAccess` | Either of the above | Hybrid: an operator must pass `?tenant_id=` explicitly; a non-operator falls through to `requireAuth`'s own session tenant |
 
-All backend routes currently use the service-role Supabase client regardless of guard — see
-ADR-002's "Superseded By (partial)" note and ADR-003 for the target architecture (scoped client
-for tenant-user-facing routes), not yet implemented.
+Tenant-user-facing routes (behind `requireAuth`) now use a per-request client scoped to the
+caller's own JWT (`getScopedClient(request)` in `auth.ts`), not the service-role client — RLS is
+the real enforcement boundary underneath the existing `.eq('tenant_id', ...)` filters, per
+ADR-003 (implemented by `tb-platform-rls-scoped-client-001`). `requireOperator`-gated `/admin/*`
+routes and the migration importer (`requireMigrationAccess`) still use `supabaseAdmin` by
+design — those are the genuinely cross-tenant/trusted-job cases ADR-003 carves out. A handful of
+specific queries within otherwise-scoped route files also stay on `supabaseAdmin` for reasons
+particular to those tables (dockets.ts's cross-tenant profile/listing lookups,
+contract_notifications' deliberate no-RLS-policy design, storage upload/remove) — see ADR-003
+Decision #4 and the inline comments in those files.
 
 ---
 
@@ -67,3 +74,4 @@ for tenant-user-facing routes), not yet implemented.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written from a birds-eye technical review — this is a from-scratch API spec, none existed before. |
+| 1.0.1 | 2026-07-27 | Updated the Auth Guards note: ADR-003's scoped-client architecture is now implemented (`tb-platform-rls-scoped-client-001`), not just decided. |

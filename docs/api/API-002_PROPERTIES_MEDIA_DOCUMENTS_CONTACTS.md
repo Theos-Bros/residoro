@@ -1,7 +1,7 @@
 # API-002 — Properties, Media, Documents & Contacts
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-07-27
@@ -24,8 +24,11 @@ Developers (API-003), or Migration (API-005).
 
 ## Routes: Properties
 
-All require `requireAuth` unless noted. Tenant scoping enforced via explicit
-`.eq('tenant_id', ...)` filtering in every handler (see ADR-002/ADR-003).
+All require `requireAuth` unless noted. Tenant scoping enforced two ways as of ADR-003's
+implementation (`tb-platform-rls-scoped-client-001`): explicit `.eq('tenant_id', ...)` filtering
+in every handler, plus RLS underneath via the per-request scoped client (see ADR-002/ADR-003).
+Storage upload/remove for property media/documents still use the service-role client (no
+`INSERT`/`DELETE` `storage.objects` policy exists yet) — see ADR-003 Decision #4.
 
 | Method | Path | Request | Response | Notes |
 |---|---|---|---|---|
@@ -75,3 +78,4 @@ All require `requireAuth` unless noted. Tenant scoping enforced via explicit
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written from a birds-eye technical review — from-scratch API spec. |
+| 1.0.1 | 2026-07-27 | Noted ADR-003's scoped-client implementation and the storage-write exception (`tb-platform-rls-scoped-client-001`). |

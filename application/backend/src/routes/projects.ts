@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../lib/auth.js';
-import { supabaseAdmin } from '../lib/supabaseAdmin.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 
 const PROJECT_TYPES = ['condo', 'subdivision', 'township', 'mixed_use'] as const;
 const PROJECT_STATUSES = ['pre_selling', 'under_construction', 'ready_for_occupancy', 'sold_out'] as const;
@@ -89,8 +89,8 @@ type ProjectUnitTypeRow = {
 // verifies project_id against the caller's own tenant first -- same "never
 // trust tenant scoping from the URL/body alone" precedent as every other
 // write route in this codebase (see listings.ts, propertyMedia.ts).
-async function loadOwnedProject(tenantId: string, projectId: string) {
-  return supabaseAdmin
+async function loadOwnedProject(supabase: SupabaseClient, tenantId: string, projectId: string) {
+  return supabase
     .from('projects')
     .select('id, name, developer_id, total_units')
     .eq('id', projectId)
@@ -104,7 +104,7 @@ async function loadOwnedProject(tenantId: string, projectId: string) {
 // developer's own details, which this tracer bullet's DoD doesn't require.
 export async function registerProjectsRoutes(app: FastifyInstance) {
   app.get('/developers', { preHandler: requireAuth }, async (request, reply) => {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getScopedClient(request)
       .from('developers')
       .select('id, name, contact_info')
       .eq('tenant_id', request.user!.tenantId)
@@ -125,7 +125,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'name is required' });
     }
 
-    const { data: developer, error } = await supabaseAdmin
+    const { data: developer, error } = await getScopedClient(request)
       .from('developers')
       .insert({
         tenant_id: request.user!.tenantId,
@@ -145,7 +145,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   });
 
   app.get('/projects', { preHandler: requireAuth }, async (request, reply) => {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getScopedClient(request)
       .from('projects')
       .select('id, developer_id, name, project_type, location, total_units, status, developers(name)')
       .eq('tenant_id', request.user!.tenantId)
@@ -180,7 +180,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/projects/:id', { preHandler: requireAuth }, async (request, reply) => {
-    const { data: project, error } = await supabaseAdmin
+    const { data: project, error } = await getScopedClient(request)
       .from('projects')
       .select('id, developer_id, name, project_type, location, total_units, status, developers(name)')
       .eq('id', request.params.id)
@@ -223,6 +223,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
   // the body" precedent as every other tenant-scoped write route in this
   // codebase (see listings.ts POST /listings).
   app.post<{ Body: CreateProjectBody }>('/projects', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
     const { developer_id, name, project_type, location, total_units, status } = request.body ?? {};
 
     if (!developer_id || !name || !project_type) {
@@ -238,7 +239,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'total_units must be a non-negative integer' });
     }
 
-    const { data: developer, error: developerError } = await supabaseAdmin
+    const { data: developer, error: developerError } = await supabase
       .from('developers')
       .select('id')
       .eq('id', developer_id)
@@ -253,7 +254,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Developer not found in your workspace' });
     }
 
-    const { data: project, error } = await supabaseAdmin
+    const { data: project, error } = await supabase
       .from('projects')
       .insert({
         tenant_id: request.user!.tenantId,
@@ -292,7 +293,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'total_units must be a non-negative integer' });
       }
 
-      const { data: project, error } = await supabaseAdmin
+      const { data: project, error } = await getScopedClient(request)
         .from('projects')
         .update({
           ...(name !== undefined && { name }),
@@ -325,7 +326,9 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     '/projects/:id/unit-types',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: project, error: projectError } = await loadOwnedProject(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -337,7 +340,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Project not found in your workspace' });
       }
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('project_unit_types')
         .select(
           'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency',
@@ -358,7 +361,9 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     '/projects/:id/unit-types',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: project, error: projectError } = await loadOwnedProject(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -396,7 +401,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         }
       }
 
-      const { data: unitType, error } = await supabaseAdmin
+      const { data: unitType, error } = await supabase
         .from('project_unit_types')
         .insert({
           tenant_id: request.user!.tenantId,
@@ -435,7 +440,9 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     '/projects/:id/unit-types/:unitTypeId/generate-units',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: project, error: projectError } = await loadOwnedProject(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -462,7 +469,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'unit_numbers must not contain duplicates' });
       }
 
-      const { data: unitType, error: unitTypeError } = await supabaseAdmin
+      const { data: unitType, error: unitTypeError } = await supabase
         .from('project_unit_types')
         .select(
           'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency',
@@ -482,7 +489,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       // tb-properties-project-rollup-001 follow-up (unit removal): unit_number
       // must be unique per unit type so a removal request can unambiguously
       // resolve a label back to exactly one property row.
-      const { data: existingUnitNumbers, error: existingError } = await supabaseAdmin
+      const { data: existingUnitNumbers, error: existingError } = await supabase
         .from('properties')
         .select('unit_number')
         .eq('unit_type_id', unitType.id)
@@ -516,7 +523,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         price_currency: unitType.price_currency,
       }));
 
-      const { data: created, error: insertError } = await supabaseAdmin
+      const { data: created, error: insertError } = await supabase
         .from('properties')
         .insert(rows)
         .select('id');
@@ -541,7 +548,9 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
     '/projects/:id/units-summary',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: project, error: projectError } = await loadOwnedProject(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -554,11 +563,11 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       }
 
       const [propertiesResult, unitTypesResult] = await Promise.all([
-        supabaseAdmin
+        supabase
           .from('properties')
           .select('id, status, unit_type_id, unit_number, title')
           .eq('project_id', request.params.id),
-        supabaseAdmin
+        supabase
           .from('project_unit_types')
           .select('id, name')
           .eq('project_id', request.params.id)
@@ -654,7 +663,9 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(403).send({ error: 'Only a workspace admin can remove generated units' });
       }
 
+      const supabase = getScopedClient(request);
       const { data: project, error: projectError } = await loadOwnedProject(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -681,7 +692,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'unit_numbers must not contain duplicates' });
       }
 
-      const { data: unitType, error: unitTypeError } = await supabaseAdmin
+      const { data: unitType, error: unitTypeError } = await supabase
         .from('project_unit_types')
         .select('id, name')
         .eq('id', request.params.unitTypeId)
@@ -696,7 +707,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Unit type not found for this project' });
       }
 
-      const { data: matches, error: matchError } = await supabaseAdmin
+      const { data: matches, error: matchError } = await supabase
         .from('properties')
         .select('id, unit_number, status')
         .eq('tenant_id', request.user!.tenantId)
@@ -727,7 +738,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
 
       const idsToDelete = unitNumbers.map((label) => foundByLabel.get(label)!.id);
 
-      const { error: deleteError } = await supabaseAdmin
+      const { error: deleteError } = await supabase
         .from('properties')
         .delete()
         .eq('tenant_id', request.user!.tenantId)

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../lib/auth.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const LISTING_TYPES = ['sale', 'rent'] as const;
@@ -109,8 +110,8 @@ type UpdatePropertyBody = {
 // past authority_expires_at are affected; draft listings aren't yet
 // marketing the property, so an unactivated draft's dates don't matter until
 // it's activated (at which point the very next read catches it).
-async function autoExpireLapsedListings(tenantId: string) {
-  const { error } = await supabaseAdmin
+async function autoExpireLapsedListings(supabase: SupabaseClient, tenantId: string) {
+  const { error } = await supabase
     .from('listings')
     .update({ status: 'expired' })
     .eq('tenant_id', tenantId)
@@ -154,10 +155,13 @@ function parseAuthorityDates(
 // property_media doesn't exist for most properties yet (migrated data has
 // none), so this returns undefined for any property with no cover row --
 // callers render a placeholder in that case, not an error.
-async function coverPhotoUrlsByProperty(propertyIds: string[]): Promise<Map<string, string>> {
+async function coverPhotoUrlsByProperty(
+  supabase: SupabaseClient,
+  propertyIds: string[],
+): Promise<Map<string, string>> {
   if (propertyIds.length === 0) return new Map();
 
-  const { data: covers, error } = await supabaseAdmin
+  const { data: covers, error } = await supabase
     .from('property_media')
     .select('property_id, storage_path')
     .in('property_id', propertyIds)
@@ -165,6 +169,10 @@ async function coverPhotoUrlsByProperty(propertyIds: string[]): Promise<Map<stri
 
   if (error || !covers) return new Map();
 
+  // Storage signed-url generation stays on supabaseAdmin, not the scoped
+  // client -- the property-media bucket has no INSERT/DELETE storage.objects
+  // policy (see 20260726130000_property_media.sql), so a scoped client can
+  // read there but not write; kept consistent with upload/remove elsewhere.
   const urls = await Promise.all(
     covers.map(async (cover) => {
       const { data: signed } = await supabaseAdmin.storage
@@ -183,7 +191,8 @@ async function coverPhotoUrlsByProperty(propertyIds: string[]): Promise<Map<stri
 // smallest read an agent needs to pick one and create a listing against it.
 export async function registerListingsRoutes(app: FastifyInstance) {
   app.get('/properties', { preHandler: requireAuth }, async (request, reply) => {
-    const { data, error } = await supabaseAdmin
+    const supabase = getScopedClient(request);
+    const { data, error } = await supabase
       .from('properties')
       .select('id, title, price, price_currency, status, verification_status')
       .eq('tenant_id', request.user!.tenantId)
@@ -195,7 +204,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     }
 
     const properties = data ?? [];
-    const coverUrls = await coverPhotoUrlsByProperty(properties.map((p) => p.id));
+    const coverUrls = await coverPhotoUrlsByProperty(supabase, properties.map((p) => p.id));
 
     return {
       properties: properties.map((property) => ({
@@ -223,6 +232,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // own Notes named Contact as the closest candidate for that case). Omitting
   // it still inserts null, unchanged from before this tracer bullet.
   app.post<{ Body: CreatePropertyBody }>('/properties', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
     const {
       title,
       type,
@@ -262,7 +272,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     }
 
     if (project_id) {
-      const { data: project, error: projectError } = await supabaseAdmin
+      const { data: project, error: projectError } = await supabase
         .from('projects')
         .select('id')
         .eq('id', project_id)
@@ -280,7 +290,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
 
     if (owner_id) {
       const ownerTable = owner_type === 'developer' ? 'developers' : 'contacts';
-      const { data: owner, error: ownerError } = await supabaseAdmin
+      const { data: owner, error: ownerError } = await supabase
         .from(ownerTable)
         .select('id')
         .eq('id', owner_id)
@@ -296,7 +306,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       }
     }
 
-    const { data: property, error: propertyError } = await supabaseAdmin
+    const { data: property, error: propertyError } = await supabase
       .from('properties')
       .insert({
         tenant_id: request.user!.tenantId,
@@ -330,11 +340,14 @@ export async function registerListingsRoutes(app: FastifyInstance) {
 
   // tb-properties-verification-001: the verification_status column has
   // existed since mil-platform-foundation-001's migration but nothing wrote
-  // it until now. Admin-only in code, not RLS -- every properties route uses
-  // supabaseAdmin (service-role), which bypasses RLS entirely, so the
-  // properties_delete_admin policy has never actually been enforced for any
-  // route. This is the first route in the codebase to check
-  // request.user.role directly.
+  // it until now. Admin-only in code, not RLS -- properties_update_tenant
+  // allows any tenant member's UPDATE; this route's own role check is the
+  // only thing gating verification_status specifically. This is the first
+  // route in the codebase to check request.user.role directly. (Prior to
+  // tb-platform-rls-scoped-client-001, every properties route ran on
+  // supabaseAdmin, so properties_delete_admin was never actually enforced by
+  // Postgres for any route -- now that this route uses the scoped client,
+  // RLS is live underneath it too, not just this app-level check.)
   app.patch<{ Params: { id: string }; Body: UpdatePropertyVerificationBody }>(
     '/properties/:id/verification',
     { preHandler: requireAuth },
@@ -343,6 +356,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(403).send({ error: 'Only an admin can change verification status' });
       }
 
+      const supabase = getScopedClient(request);
       const { verification_status } = request.body ?? {};
 
       if (!verification_status || !VERIFICATION_STATUSES.includes(verification_status as (typeof VERIFICATION_STATUSES)[number])) {
@@ -351,7 +365,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
           .send({ error: `verification_status must be one of: ${VERIFICATION_STATUSES.join(', ')}` });
       }
 
-      const { data: property, error } = await supabaseAdmin
+      const { data: property, error } = await supabase
         .from('properties')
         .update({ verification_status })
         .eq('id', request.params.id)
@@ -383,6 +397,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     '/properties/:id',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const {
         title,
         address,
@@ -442,7 +457,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         }
         if (owner_id !== null) {
           const ownerTable = owner_type === 'developer' ? 'developers' : 'contacts';
-          const { data: owner, error: ownerError } = await supabaseAdmin
+          const { data: owner, error: ownerError } = await supabase
             .from(ownerTable)
             .select('id')
             .eq('id', owner_id)
@@ -465,7 +480,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'No editable fields were provided' });
       }
 
-      const { data: property, error } = await supabaseAdmin
+      const { data: property, error } = await supabase
         .from('properties')
         .update(updateFields)
         .eq('id', request.params.id)
@@ -490,14 +505,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     '/properties/:id/listings',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       try {
-        await autoExpireLapsedListings(request.user!.tenantId);
+        await autoExpireLapsedListings(supabase, request.user!.tenantId);
       } catch (err) {
         request.log.error(err);
         return reply.status(500).send({ error: 'Could not refresh listing statuses' });
       }
 
-      const { data: property, error: propertyError } = await supabaseAdmin
+      const { data: property, error: propertyError } = await supabase
         .from('properties')
         .select('id')
         .eq('id', request.params.id)
@@ -512,7 +528,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Property not found in your workspace' });
       }
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('listings')
         .select(
           'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at',
@@ -531,14 +547,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   );
 
   app.get('/listings', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
     try {
-      await autoExpireLapsedListings(request.user!.tenantId);
+      await autoExpireLapsedListings(supabase, request.user!.tenantId);
     } catch (err) {
       request.log.error(err);
       return reply.status(500).send({ error: 'Could not refresh listing statuses' });
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from('listings')
       .select(
         'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, properties(title)',
@@ -590,6 +607,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // "never trust tenant scoping from the body" precedent as every other
   // tenant-scoped write route in this codebase.
   app.post<{ Body: CreateListingBody }>('/listings', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
     const {
       property_id,
       listing_type,
@@ -619,7 +637,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     }
     const { startsAt, expiresAt } = parsedDates;
 
-    const { data: property, error: propertyError } = await supabaseAdmin
+    const { data: property, error: propertyError } = await supabase
       .from('properties')
       .select('id')
       .eq('id', property_id)
@@ -634,7 +652,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Property not found in your workspace' });
     }
 
-    const { data: listing, error: listingError } = await supabaseAdmin
+    const { data: listing, error: listingError } = await supabase
       .from('listings')
       .insert({
         tenant_id: request.user!.tenantId,
@@ -664,8 +682,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     '/listings/:id',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       try {
-        await autoExpireLapsedListings(request.user!.tenantId);
+        await autoExpireLapsedListings(supabase, request.user!.tenantId);
       } catch (err) {
         request.log.error(err);
         return reply.status(500).send({ error: 'Could not refresh listing statuses' });
@@ -687,7 +706,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       }
       const { startsAt, expiresAt } = parsedDates;
 
-      const { data: current, error: currentError } = await supabaseAdmin
+      const { data: current, error: currentError } = await supabase
         .from('listings')
         .select('id, property_id, status')
         .eq('id', request.params.id)
@@ -715,7 +734,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       // persists the conflicting activation at all -- no write-then-rollback.
       let conflictWarning: string | undefined;
       if (status === 'active') {
-        const { data: conflicting, error: conflictError } = await supabaseAdmin
+        const { data: conflicting, error: conflictError } = await supabase
           .from('listings')
           .select('id')
           .eq('tenant_id', request.user!.tenantId)
@@ -729,7 +748,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         if (conflictError) {
           request.log.error(conflictError);
         } else if (conflicting) {
-          const { data: workspace, error: workspaceError } = await supabaseAdmin
+          const { data: workspace, error: workspaceError } = await supabase
             .from('workspaces')
             .select('exclusivity_hard_block')
             .eq('id', request.user!.tenantId)
@@ -747,7 +766,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         }
       }
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await supabase
         .from('listings')
         .update({
           status,

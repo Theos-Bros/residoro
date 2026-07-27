@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../lib/auth.js';
-import { supabaseAdmin } from '../lib/supabaseAdmin.js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 
 // tb-properties-owner-linking-001: contacts previously had no brokerage-
 // facing read route -- only written via Migration's CSV import
@@ -9,7 +8,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 // contacts directly, for the property-creation owner picker.
 export async function registerContactsRoutes(app: FastifyInstance) {
   app.get('/contacts', { preHandler: requireAuth }, async (request, reply) => {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getScopedClient(request)
       .from('contacts')
       .select('id, name, type, company')
       .eq('tenant_id', request.user!.tenantId)

@@ -1,5 +1,9 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from './supabaseAdmin.js';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
 export type AccessState = 'active' | 'read_only' | 'blocked';
 
@@ -161,4 +165,25 @@ export async function requireMigrationAccess(request: FastifyRequest, reply: Fas
   }
 
   await requireAuth(request, reply);
+}
+
+// tb-platform-rls-scoped-client-001 / ADR-003: a per-request client scoped to
+// the caller's own JWT, so the RLS policies already defined on every tenant-
+// scoped table are the real enforcement boundary, not just this route's own
+// .eq('tenant_id', ...) filter. Only call after requireAuth/requireOperator
+// has already validated the bearer token -- this re-forwards the same header
+// rather than re-verifying it, so it must run inside an authed route.
+// Uses the publishable key (not the service-role key) as the apikey header;
+// the Postgres role RLS actually sees comes from the forwarded Authorization
+// JWT, not this key -- see ADR-002's Consequences section on why the
+// service-role client bypasses RLS and this deliberately doesn't.
+export function getScopedClient(request: FastifyRequest): SupabaseClient {
+  if (!supabaseUrl || !publishableKey) {
+    throw new Error('SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY must be set (see .env).');
+  }
+
+  return createClient(supabaseUrl, publishableKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: request.headers.authorization! } },
+  });
 }

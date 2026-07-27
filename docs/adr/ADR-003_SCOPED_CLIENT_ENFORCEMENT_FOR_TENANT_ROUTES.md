@@ -1,7 +1,7 @@
 # ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 
-**Status:** Approved
-**Version:** 1.0.0
+**Status:** Approved — Implemented
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-07-27
@@ -60,22 +60,56 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
 3. The existing hand-written `.eq('tenant_id', ...)` filtering pattern is **not** removed from
    tenant-user-facing routes — it stays as an explicit, readable first layer, with RLS now
    providing the actual guarantee underneath it rather than nothing.
+4. **Implementation-time exceptions found within "tenant-user-facing" scope** (recorded here
+   post-implementation, per `tb-platform-rls-scoped-client-001`'s DoD — these are not policy
+   changes, just cases where a blanket per-route swap would have silently broken a feature or
+   simply doesn't apply):
+   - `dockets.ts` (`listing-dockets` routes): `listing_dockets` itself is identity-scoped
+     (`shared_by`/`shared_with = auth.uid()`) and safe to scope, but three reads are
+     genuinely cross-tenant **by design** (the whole point of co-broker sharing,
+     `tb-listings-co-broker-share-001`) and stay on `supabaseAdmin`: looking up the recipient's
+     profile by handle, looking up sharers' profiles for the recipient's inbox, and the joined
+     listing/property data for a docket whose source tenant isn't the recipient's own
+     (`profiles_select_same_tenant` / `listings_select_tenant` / `properties_select_tenant`
+     would otherwise silently null these out under the scoped client). See the file-level
+     comment in `application/backend/src/routes/dockets.ts`.
+   - `workspace.ts` (`/me/*` routes): `workspaces` scopes cleanly, but `contract_notifications`
+     stays on `supabaseAdmin` — that table has RLS enabled with **zero policies**, by deliberate
+     design (`20260722120000_contract_expiry.sql`: "service-role-only, every access goes
+     through the backend API"), mirroring `migration_temp_files`' precedent. This isn't a gap
+     the scoped client should close; it's an existing intentional service-role-only table.
+   - Storage operations (`propertyMedia.ts`, `propertyDocuments.ts`): `.storage.upload()` and
+     `.storage.remove()` stay on `supabaseAdmin` — the `property-media`/`property-documents`
+     buckets only have a `SELECT` `storage.objects` policy, no `INSERT`/`DELETE` policy, so a
+     scoped client could sign existing URLs but not write. Kept storage on one client per file
+     for consistency rather than splitting further given the marginal RLS benefit.
+   - `export.ts` and the property-media cover-photo signed-URL helper in `listings.ts`: `export.ts`
+     turned out to be a straightforward full migration (all reads are the caller's own tenant,
+     no cross-tenant join) — the "may need per-query treatment" hedge in this ADR's original
+     Consequences section didn't end up applying there.
 
 ---
 
 ## Consequences
 
-- (+) RLS becomes the real enforcement boundary for tenant-user-facing routes, not dormant
+- (+) RLS is now the real enforcement boundary for tenant-user-facing routes, not dormant
   policy — a future route that forgets its manual filter can no longer leak cross-tenant data,
-  because the database blocks it regardless of application code.
+  because the database blocks it regardless of application code. Verified live
+  (2026-07-27, `verify-rls-scoped-client.ts`): a cross-tenant `properties` read through the
+  scoped client with no app-level `tenant_id` filter at all returns an empty result, not the
+  row.
 - (+) No RLS policy or schema change required — the existing policies are already correct;
-  this is a backend client-wiring change only.
-- (–) Every tenant-user-facing route needs to switch from `supabaseAdmin` to a scoped client and
-  be re-verified under RLS — real implementation effort across roughly 20 routes, not yet done.
-  This ADR records the target architecture; implementation is tracked separately as a
-  `theos-registry` tracer bullet, not part of this documentation change.
+  this was a backend client-wiring change only.
+- (+) The co-broker docket-sharing feature (`tb-listings-co-broker-share-001`), which is
+  genuinely cross-tenant by design, still works correctly after the per-query split described
+  in Decision #4 — verified live end-to-end (`verify-rls-docket-cross-tenant.ts`): a real
+  cross-tenant share still returns real, live-projected field values, not nulls.
 - (–) Each RLS-checked query does a small additional lookup via the `current_tenant_id()`/
   `current_role()` helper functions (already noted as acceptable at current scale in ADR-002).
+- (–) Not every tenant-user-facing route got a uniform per-route swap — `dockets.ts` and
+  `workspace.ts` needed per-query treatment (Decision #4). This adds a small amount of
+  inconsistency across route files in exchange for correctness; flagged inline in each file
+  rather than silently applying the blanket rule where it would have broken a feature.
 
 ---
 
@@ -95,3 +129,4 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial decision record, written from RFC-002's approved decision. |
+| 1.1.0 | 2026-07-27 | Implemented via `tb-platform-rls-scoped-client-001`. Added Decision #4 recording implementation-time exceptions found within "tenant-user-facing" scope (dockets.ts's genuinely cross-tenant reads, workspace.ts's contract_notifications no-policy table, storage write operations) and updated Consequences with live verification results. |

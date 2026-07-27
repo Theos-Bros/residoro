@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { requireAuth } from '../lib/auth.js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const BUCKET = 'property-documents';
@@ -24,10 +25,13 @@ type PropertyDocumentRow = {
 
 // Same "never trust tenant scoping from the URL alone" precedent as
 // propertyMedia.ts and listings.ts.
-async function loadOwnedProperty(tenantId: string, propertyId: string) {
-  return supabaseAdmin.from('properties').select('id').eq('id', propertyId).eq('tenant_id', tenantId).maybeSingle();
+async function loadOwnedProperty(supabase: SupabaseClient, tenantId: string, propertyId: string) {
+  return supabase.from('properties').select('id').eq('id', propertyId).eq('tenant_id', tenantId).maybeSingle();
 }
 
+// Storage calls stay on supabaseAdmin -- same reasoning as propertyMedia.ts:
+// the property-documents bucket only has a SELECT storage.objects policy
+// (20260727100000_property_documents.sql), no INSERT/DELETE policy.
 async function signDocumentUrl(storagePath: string): Promise<string | undefined> {
   const { data } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
   return data?.signedUrl;
@@ -51,7 +55,9 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
     '/properties/:id/documents',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -63,7 +69,7 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Property not found in your workspace' });
       }
 
-      const { data: rows, error } = await supabaseAdmin
+      const { data: rows, error } = await supabase
         .from('property_documents')
         .select('id, property_id, document_type, storage_path, file_name, created_at')
         .eq('property_id', request.params.id)
@@ -93,7 +99,9 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
     '/properties/:id/documents',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -134,7 +142,7 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
-      const { data: row, error: insertError } = await supabaseAdmin
+      const { data: row, error: insertError } = await supabase
         .from('property_documents')
         .insert({
           tenant_id: request.user!.tenantId,
@@ -169,7 +177,9 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
     '/properties/:id/documents/:documentId',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -181,7 +191,7 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Property not found in your workspace' });
       }
 
-      const { data: row, error: rowError } = await supabaseAdmin
+      const { data: row, error: rowError } = await supabase
         .from('property_documents')
         .select('id, storage_path')
         .eq('id', request.params.documentId)
@@ -203,7 +213,7 @@ export async function registerPropertyDocumentsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not delete document file' });
       }
 
-      const { error: deleteError } = await supabaseAdmin.from('property_documents').delete().eq('id', row.id);
+      const { error: deleteError } = await supabase.from('property_documents').delete().eq('id', row.id);
       if (deleteError) {
         request.log.error(deleteError);
         return reply.status(500).send({ error: 'Could not delete document record' });

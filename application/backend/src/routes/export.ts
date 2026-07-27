@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ZipArchive } from 'archiver';
-import { requireAuth } from '../lib/auth.js';
-import { supabaseAdmin } from '../lib/supabaseAdmin.js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { toCsv } from '../lib/csv.js';
 
 const PROPERTY_COLUMNS = [
@@ -34,8 +33,9 @@ const LISTING_COLUMNS = [
 export async function registerExportRoutes(app: FastifyInstance) {
   app.get('/export', { preHandler: requireAuth }, async (request, reply) => {
     const tenantId = request.user!.tenantId;
+    const supabase = getScopedClient(request);
 
-    const { data: properties, error: propertiesError } = await supabaseAdmin
+    const { data: properties, error: propertiesError } = await supabase
       .from('properties')
       .select('*')
       .eq('tenant_id', tenantId)
@@ -46,7 +46,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load properties for export' });
     }
 
-    const { data: contacts, error: contactsError } = await supabaseAdmin
+    const { data: contacts, error: contactsError } = await supabase
       .from('contacts')
       .select('*')
       .eq('tenant_id', tenantId)
@@ -57,7 +57,7 @@ export async function registerExportRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load contacts for export' });
     }
 
-    const { data: listings, error: listingsError } = await supabaseAdmin
+    const { data: listings, error: listingsError } = await supabase
       .from('listings')
       .select('*')
       .eq('tenant_id', tenantId)

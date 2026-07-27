@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
-import { requireAuth } from '../lib/auth.js';
+import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const BUCKET = 'property-media';
@@ -25,10 +26,16 @@ type UpdateMediaBody = {
 // Every route below re-verifies property_id against the caller's own
 // tenant_id before touching property_media -- same "never trust tenant
 // scoping from the URL/body alone" precedent as listings.ts.
-async function loadOwnedProperty(tenantId: string, propertyId: string) {
-  return supabaseAdmin.from('properties').select('id').eq('id', propertyId).eq('tenant_id', tenantId).maybeSingle();
+async function loadOwnedProperty(supabase: SupabaseClient, tenantId: string, propertyId: string) {
+  return supabase.from('properties').select('id').eq('id', propertyId).eq('tenant_id', tenantId).maybeSingle();
 }
 
+// Storage calls (here and throughout this file) stay on supabaseAdmin, not
+// the scoped client -- the property-media bucket only has a SELECT
+// storage.objects policy (20260726130000_property_media.sql), no
+// INSERT/DELETE policy, so a scoped client could sign existing URLs but not
+// upload or remove; kept on one client per operation type for consistency
+// rather than splitting reads further.
 async function signMediaUrl(storagePath: string): Promise<string | undefined> {
   const { data } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
   return data?.signedUrl;
@@ -40,7 +47,8 @@ async function signMediaUrl(storagePath: string): Promise<string | undefined> {
 // standalone (e.g. on a page refresh, without the list already in memory).
 export async function registerPropertyMediaRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/properties/:id', { preHandler: requireAuth }, async (request, reply) => {
-    const { data: property, error } = await supabaseAdmin
+    const supabase = getScopedClient(request);
+    const { data: property, error } = await supabase
       .from('properties')
       .select(
         'id, title, type, address, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency, status, verification_status, owner_type, owner_id, project_id, projects(name)',
@@ -70,7 +78,9 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
     '/properties/:id/media',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -82,7 +92,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Property not found in your workspace' });
       }
 
-      const { data: rows, error } = await supabaseAdmin
+      const { data: rows, error } = await supabase
         .from('property_media')
         .select('id, property_id, storage_path, sort_order, is_cover, created_at')
         .eq('property_id', request.params.id)
@@ -114,7 +124,9 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
     '/properties/:id/media',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -150,7 +162,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Upload failed' });
       }
 
-      const { count, error: countError } = await supabaseAdmin
+      const { count, error: countError } = await supabase
         .from('property_media')
         .select('id', { count: 'exact', head: true })
         .eq('property_id', request.params.id);
@@ -159,7 +171,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not save photo record' });
       }
 
-      const { data: row, error: insertError } = await supabaseAdmin
+      const { data: row, error: insertError } = await supabase
         .from('property_media')
         .insert({
           tenant_id: request.user!.tenantId,
@@ -194,7 +206,9 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
     '/properties/:id/media/:mediaId',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -215,7 +229,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
       }
 
       if (is_cover === true) {
-        const { error: clearError } = await supabaseAdmin
+        const { error: clearError } = await supabase
           .from('property_media')
           .update({ is_cover: false })
           .eq('property_id', request.params.id)
@@ -226,7 +240,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         }
       }
 
-      const { data: row, error } = await supabaseAdmin
+      const { data: row, error } = await supabase
         .from('property_media')
         .update({
           ...(sort_order !== undefined && { sort_order }),
@@ -264,7 +278,9 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
     '/properties/:id/media/:mediaId',
     { preHandler: requireAuth },
     async (request, reply) => {
+      const supabase = getScopedClient(request);
       const { data: property, error: propertyError } = await loadOwnedProperty(
+        supabase,
         request.user!.tenantId,
         request.params.id,
       );
@@ -276,7 +292,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Property not found in your workspace' });
       }
 
-      const { data: row, error: rowError } = await supabaseAdmin
+      const { data: row, error: rowError } = await supabase
         .from('property_media')
         .select('id, storage_path, is_cover')
         .eq('id', request.params.mediaId)
@@ -298,14 +314,14 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not delete photo file' });
       }
 
-      const { error: deleteError } = await supabaseAdmin.from('property_media').delete().eq('id', row.id);
+      const { error: deleteError } = await supabase.from('property_media').delete().eq('id', row.id);
       if (deleteError) {
         request.log.error(deleteError);
         return reply.status(500).send({ error: 'Could not delete photo record' });
       }
 
       if (row.is_cover) {
-        const { data: next } = await supabaseAdmin
+        const { data: next } = await supabase
           .from('property_media')
           .select('id')
           .eq('property_id', request.params.id)
@@ -315,7 +331,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
           .maybeSingle<{ id: string }>();
 
         if (next) {
-          await supabaseAdmin.from('property_media').update({ is_cover: true }).eq('id', next.id);
+          await supabase.from('property_media').update({ is_cover: true }).eq('id', next.id);
         }
       }
 
