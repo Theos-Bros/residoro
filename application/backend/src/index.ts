@@ -16,6 +16,8 @@ import { registerContactsRoutes } from './routes/contacts.js';
 import { registerShareTextRoutes } from './routes/shareText.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerSettingsPermissionsRoutes } from './routes/settingsPermissions.js';
+import { registerInquiriesRoutes } from './routes/inquiries.js';
+import { registerBuyerRequirementsRoutes } from './routes/buyerRequirements.js';
 
 const app = Fastify({ logger: true });
 
@@ -35,6 +37,8 @@ await registerContactsRoutes(app);
 await registerShareTextRoutes(app);
 await registerAnalyticsRoutes(app);
 await registerSettingsPermissionsRoutes(app);
+await registerInquiriesRoutes(app);
+await registerBuyerRequirementsRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchListings,
@@ -54,7 +54,18 @@ export function ListingsPage({ session }: Props) {
   const [openShare, setOpenShare] = useState<OpenShare>(null);
   const [renewDates, setRenewDates] = useState<Record<string, string>>({});
   const [contacts, setContacts] = useState<Contact[] | null>(null);
-  const [buyerSelections, setBuyerSelections] = useState<Record<string, string>>({});
+  // tb-buyer-leads-schema-001: LeadDetailPanel's "Mark Sold on Listings Page"
+  // convenience action navigates here with this state -- purely a UI
+  // pre-fill of the existing buyer picker below, never a second write path;
+  // the actual sold transition still goes through this page's own
+  // handleMarkSold -> PATCH /listings/:id, entirely unmodified.
+  const location = useLocation();
+  const prefill = location.state as { prefillListingId?: string; prefillBuyerContactId?: string } | null;
+  const [buyerSelections, setBuyerSelections] = useState<Record<string, string>>(
+    prefill?.prefillListingId && prefill.prefillBuyerContactId
+      ? { [prefill.prefillListingId]: prefill.prefillBuyerContactId }
+      : {},
+  );
 
   function reload() {
     fetchListings(session.access_token)

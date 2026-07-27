@@ -9,6 +9,7 @@ import { ProjectsListPage } from './pages/ProjectsListPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { NewProjectForm } from './pages/NewProjectForm';
 import { ListingsPage } from './pages/ListingsPage';
+import { LeadsPage } from './pages/LeadsPage';
 import { ShareDocketForm } from './pages/ShareDocketForm';
 import { SharedWithMePage } from './pages/SharedWithMePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -54,6 +55,7 @@ export function App() {
         <Route path="/projects/:id" element={session && <ProjectDetailPage session={session} />} />
         <Route path="/listings" element={session && <ListingsPage session={session} />} />
         <Route path="/listings/:listingId/share" element={session && <ShareDocketForm session={session} />} />
+        <Route path="/leads" element={session && <LeadsPage session={session} />} />
         <Route path="/shared-with-me" element={session && <SharedWithMePage session={session} />} />
         <Route path="/settings" element={session && <SettingsPage session={session} />} />
         <Route path="/performance" element={session && <PerformancePage session={session} />} />

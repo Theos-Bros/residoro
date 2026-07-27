@@ -23,6 +23,7 @@ const NAV_LINKS = [
   { to: '/properties', label: 'Properties' },
   { to: '/projects', label: 'Projects' },
   { to: '/listings', label: 'Listings' },
+  { to: '/leads', label: 'Leads' },
   { to: '/shared-with-me', label: 'Shared with me' },
   { to: '/performance', label: 'Performance' },
   { to: '/settings', label: 'Settings' },
