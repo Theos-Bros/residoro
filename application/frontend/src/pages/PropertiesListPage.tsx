@@ -112,11 +112,15 @@ export function PropertiesListPage({ session }: Props) {
                 <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
                   <TableCell>
                     {property.cover_photo_url ? (
-                      <img
-                        src={property.cover_photo_url}
-                        alt=""
-                        className="h-10 w-10 rounded object-cover"
-                      />
+                      <a
+                        href={property.cover_photo_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View photos"
+                        className="flex h-10 w-10 items-center justify-center rounded bg-muted text-lg hover:bg-accent"
+                      >
+                        🖼️
+                      </a>
                     ) : (
                       <div className="h-10 w-10 rounded bg-muted" />
                     )}

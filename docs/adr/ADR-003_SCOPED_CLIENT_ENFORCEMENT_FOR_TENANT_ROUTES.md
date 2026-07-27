@@ -1,7 +1,7 @@
 # ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 
 **Status:** Approved — Implemented
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-07-27
@@ -83,6 +83,11 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
      buckets only have a `SELECT` `storage.objects` policy, no `INSERT`/`DELETE` policy, so a
      scoped client could sign existing URLs but not write. Kept storage on one client per file
      for consistency rather than splitting further given the marginal RLS benefit.
+     **Update 2026-07-27 (`tb-properties-media-external-links-001`):** this exception no longer
+     applies to `propertyMedia.ts` at all — the `property-media` bucket was removed entirely
+     (Residoro doesn't host photos/videos; users paste external links instead), so there is no
+     Storage call of any kind left in that file. The exception still stands for
+     `propertyDocuments.ts`/`property-documents`, untouched by that tracer bullet.
    - `export.ts` and the property-media cover-photo signed-URL helper in `listings.ts`: `export.ts`
      turned out to be a straightforward full migration (all reads are the caller's own tenant,
      no cross-tenant join) — the "may need per-query treatment" hedge in this ADR's original
@@ -129,4 +134,5 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial decision record, written from RFC-002's approved decision. |
+| 1.1.1 | 2026-07-27 | `tb-properties-media-external-links-001` removed the `property-media` Storage bucket entirely (photos/videos are now pasted external links) — noted that the storage-write exception in Decision #4 no longer applies to `propertyMedia.ts`, only to `propertyDocuments.ts`. |
 | 1.1.0 | 2026-07-27 | Implemented via `tb-platform-rls-scoped-client-001`. Added Decision #4 recording implementation-time exceptions found within "tenant-user-facing" scope (dockets.ts's genuinely cross-tenant reads, workspace.ts's contract_notifications no-policy table, storage write operations) and updated Consequences with live verification results. |

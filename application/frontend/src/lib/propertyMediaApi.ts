@@ -24,13 +24,16 @@ export type PropertyDetail = {
   project_name: string | null;
 };
 
+export type MediaType = 'photo' | 'video';
+
 export type PropertyMedia = {
   id: string;
   property_id: string;
+  type: MediaType;
+  external_url: string;
   sort_order: number;
   is_cover: boolean;
   created_at: string;
-  url?: string;
 };
 
 async function parseJsonOrThrow(response: Response) {
@@ -58,18 +61,19 @@ export async function fetchPropertyMedia(
   return parseJsonOrThrow(response);
 }
 
-export async function uploadPropertyPhoto(
+export async function addPropertyMediaLink(
   accessToken: string,
   propertyId: string,
-  file: File,
+  url: string,
+  type: MediaType = 'photo',
 ): Promise<PropertyMedia> {
-  const formData = new FormData();
-  formData.append('file', file);
-
   const response = await fetch(`${BACKEND_URL}/properties/${propertyId}/media`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: formData,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url, type }),
   });
   return parseJsonOrThrow(response);
 }

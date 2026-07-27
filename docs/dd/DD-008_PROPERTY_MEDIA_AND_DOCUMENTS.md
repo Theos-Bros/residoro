@@ -1,7 +1,7 @@
 # DD-008 — Property Media & Documents
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-07-27
@@ -25,20 +25,23 @@ Covers `public.property_media`, `public.property_documents`, and the `property-m
 
 ## Storage Buckets
 
-Both buckets are **private** (`public = false`) — the frontend never reads a stored file's
-public URL directly; the backend generates short-lived signed URLs with the service-role key on
-every read.
+**`property-media` was removed by `tb-properties-media-external-links-001` (2026-07-27).**
+Residoro does not host property photos/videos at all anymore — users paste an existing external
+link (Google Photos or elsewhere) instead of uploading a file. The bucket, its `storage.objects`
+policy, and every `storage_path`/signed-URL code path were deleted; `property_media` now stores
+a plain `external_url` column instead (see table below). `property-documents` is **unaffected** —
+documents (title deed, tax declaration) stay Storage-hosted, since the 2026-07-27 decision was
+photos/videos only.
 
 | Bucket | Path convention | Notes |
 |---|---|---|
-| `property-media` | `{tenant_id}/{property_id}/{uuid}.{ext}` | Added by `tb-properties-photos-001` — the first use of Supabase Storage in residoro (CSV migration deliberately stores raw content as text in Postgres instead — see DD-003) |
-| `property-documents` | Same convention | Added by `tb-properties-documents-001`, exact mirror of `property-media`'s pattern |
+| `property-documents` | `{tenant_id}/{property_id}/{uuid}.{ext}` | Added by `tb-properties-documents-001`. Private (`public = false`); the backend generates short-lived signed URLs with the service-role key on every read. |
 
-Each bucket has one `storage.objects` `select` policy
-(`property_media_storage_select`/`property_documents_storage_select`) checking
-`(storage.foldername(name))[1] = current_tenant_id()::text`. **This is defense-in-depth only** —
-all actual reads/writes go through the backend's service-role client, which bypasses Storage RLS
-entirely; nothing in the current app relies on this policy being the enforcement path.
+The bucket has one `storage.objects` `select` policy (`property_documents_storage_select`)
+checking `(storage.foldername(name))[1] = current_tenant_id()::text`. **This is defense-in-depth
+only** — all actual reads/writes go through the backend's service-role client, which bypasses
+Storage RLS entirely; nothing in the current app relies on this policy being the enforcement
+path.
 
 ## Table: `property_media`
 
@@ -47,8 +50,8 @@ entirely; nothing in the current app relies on this policy being the enforcement
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
 | `tenant_id` | `uuid` | not null, FK → `workspaces(id)` | |
 | `property_id` | `uuid` | not null, FK → `properties(id)` on delete cascade | |
-| `type` | `text` | not null, default `'photo'`, `CHECK (type = 'photo')` | Single-value constraint deliberately — widening to `floor_plan`\|`video` is an explicit future tracer bullet's job, not `tb-properties-photos-001`'s |
-| `storage_path` | `text` | not null | Path within the `property-media` bucket, not a public URL |
+| `type` | `text` | not null, default `'photo'`, `CHECK (type in ('photo', 'video'))` | Widened from a single-value `'photo'` constraint by `tb-properties-media-external-links-001` — trivial once nothing is uploaded/MIME-validated, a link doesn't care whether it points at a photo or a video |
+| `external_url` | `text` | not null | A pasted external link (Google Photos or elsewhere) — Residoro does not host the file. Link-out only, no embed/preview. Replaces `storage_path`, removed by `tb-properties-media-external-links-001` |
 | `sort_order` | `integer` | not null, default `0` | Gallery ordering |
 | `is_cover` | `boolean` | not null, default `false` | |
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | |
@@ -112,8 +115,9 @@ every other table, the backend currently uses `service_role` for all routes (see
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation & Row-Level Security
 - ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
-- `supabase/migrations/20260726130000_property_media.sql` — implements `property_media` and its bucket
-- `supabase/migrations/20260727100000_property_documents.sql` — implements `property_documents` and its bucket
+- `supabase/migrations/20260726130000_property_media.sql` — original `property_media` + bucket (superseded)
+- `supabase/migrations/20260727150000_property_media_external_links.sql` — removes the bucket, repoints `property_media` at `external_url`
+- `supabase/migrations/20260727100000_property_documents.sql` — implements `property_documents` and its bucket (unaffected)
 
 ---
 
@@ -121,4 +125,5 @@ every other table, the backend currently uses `service_role` for all routes (see
 
 | Version | Date | Description |
 |----------|------|-------------|
+| 1.1.0 | 2026-07-27 | `tb-properties-media-external-links-001`: removed the `property-media` Storage bucket entirely; `property_media.storage_path` replaced with `external_url`; `type` widened to `photo`\|`video`. `property_documents`/`property-documents` unaffected. |
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering two already-shipped tracer bullets. |

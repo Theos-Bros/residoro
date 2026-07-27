@@ -1,21 +1,22 @@
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { randomUUID } from 'crypto';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
-import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
-const BUCKET = 'property-media';
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
-const SIGNED_URL_TTL_SECONDS = 3600;
+type MediaType = 'photo' | 'video';
 
 type PropertyMediaRow = {
   id: string;
   property_id: string;
-  storage_path: string;
+  type: MediaType;
+  external_url: string;
   sort_order: number;
   is_cover: boolean;
   created_at: string;
+};
+
+type AddMediaBody = {
+  url: string;
+  type?: MediaType;
 };
 
 type UpdateMediaBody = {
@@ -30,15 +31,8 @@ async function loadOwnedProperty(supabase: SupabaseClient, tenantId: string, pro
   return supabase.from('properties').select('id').eq('id', propertyId).eq('tenant_id', tenantId).maybeSingle();
 }
 
-// Storage calls (here and throughout this file) stay on supabaseAdmin, not
-// the scoped client -- the property-media bucket only has a SELECT
-// storage.objects policy (20260726130000_property_media.sql), no
-// INSERT/DELETE policy, so a scoped client could sign existing URLs but not
-// upload or remove; kept on one client per operation type for consistency
-// rather than splitting reads further.
-async function signMediaUrl(storagePath: string): Promise<string | undefined> {
-  const { data } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
-  return data?.signedUrl;
+function isValidHttpUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\/.+/.test(value);
 }
 
 // tb-properties-photos-001: no dedicated single-property GET endpoint
@@ -94,7 +88,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
 
       const { data: rows, error } = await supabase
         .from('property_media')
-        .select('id, property_id, storage_path, sort_order, is_cover, created_at')
+        .select('id, property_id, type, external_url, sort_order, is_cover, created_at')
         .eq('property_id', request.params.id)
         .order('sort_order');
 
@@ -103,24 +97,15 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not load photos' });
       }
 
-      const media = await Promise.all(
-        ((rows ?? []) as PropertyMediaRow[]).map(async (row) => ({
-          id: row.id,
-          property_id: row.property_id,
-          sort_order: row.sort_order,
-          is_cover: row.is_cover,
-          created_at: row.created_at,
-          url: await signMediaUrl(row.storage_path),
-        })),
-      );
-
-      return { media };
+      return { media: (rows ?? []) as PropertyMediaRow[] };
     },
   );
 
-  // The first photo uploaded to a property becomes its cover automatically;
-  // every later upload leaves the existing cover alone.
-  app.post<{ Params: { id: string } }>(
+  // The first link added to a property becomes its cover automatically;
+  // every later addition leaves the existing cover alone. No file upload of
+  // any kind -- the user pastes an existing external link (Google Photos or
+  // elsewhere) and Residoro stores/displays it as-is (link-out only).
+  app.post<{ Params: { id: string }; Body: AddMediaBody }>(
     '/properties/:id/media',
     { preHandler: requireAuth },
     async (request, reply) => {
@@ -138,28 +123,12 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Property not found in your workspace' });
       }
 
-      const file = await request.file({ limits: { fileSize: MAX_FILE_SIZE_BYTES } });
-      if (!file) {
-        return reply.status(400).send({ error: 'No file uploaded' });
+      const { url, type = 'photo' } = request.body ?? {};
+      if (!isValidHttpUrl(url)) {
+        return reply.status(400).send({ error: 'A valid http(s) URL is required' });
       }
-      if (!ALLOWED_MIME_TYPES.includes(file.mimetype as (typeof ALLOWED_MIME_TYPES)[number])) {
-        return reply.status(400).send({ error: 'Only JPEG, PNG, or WebP images are allowed' });
-      }
-
-      const buffer = await file.toBuffer();
-      if (file.file.truncated) {
-        return reply.status(413).send({ error: `File exceeds the ${MAX_FILE_SIZE_BYTES} byte limit` });
-      }
-
-      const ext = file.mimetype.split('/')[1];
-      const storagePath = `${request.user!.tenantId}/${request.params.id}/${randomUUID()}.${ext}`;
-
-      const { error: uploadError } = await supabaseAdmin.storage
-        .from(BUCKET)
-        .upload(storagePath, buffer, { contentType: file.mimetype });
-      if (uploadError) {
-        request.log.error(uploadError);
-        return reply.status(500).send({ error: 'Upload failed' });
+      if (type !== 'photo' && type !== 'video') {
+        return reply.status(400).send({ error: "type must be 'photo' or 'video'" });
       }
 
       const { count, error: countError } = await supabase
@@ -168,7 +137,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         .eq('property_id', request.params.id);
       if (countError) {
         request.log.error(countError);
-        return reply.status(500).send({ error: 'Could not save photo record' });
+        return reply.status(500).send({ error: 'Could not save media record' });
       }
 
       const { data: row, error: insertError } = await supabase
@@ -176,27 +145,21 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         .insert({
           tenant_id: request.user!.tenantId,
           property_id: request.params.id,
-          storage_path: storagePath,
+          type,
+          external_url: url,
           sort_order: count ?? 0,
           is_cover: (count ?? 0) === 0,
           created_by: request.user!.id,
         })
-        .select('id, property_id, storage_path, sort_order, is_cover, created_at')
+        .select('id, property_id, type, external_url, sort_order, is_cover, created_at')
         .single<PropertyMediaRow>();
 
       if (insertError || !row) {
         request.log.error(insertError);
-        return reply.status(500).send({ error: 'Could not save photo record' });
+        return reply.status(500).send({ error: 'Could not save media record' });
       }
 
-      return reply.status(201).send({
-        id: row.id,
-        property_id: row.property_id,
-        sort_order: row.sort_order,
-        is_cover: row.is_cover,
-        created_at: row.created_at,
-        url: await signMediaUrl(row.storage_path),
-      });
+      return reply.status(201).send(row);
     },
   );
 
@@ -249,7 +212,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         .eq('id', request.params.mediaId)
         .eq('property_id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .select('id, property_id, storage_path, sort_order, is_cover, created_at')
+        .select('id, property_id, type, external_url, sort_order, is_cover, created_at')
         .maybeSingle<PropertyMediaRow>();
 
       if (error) {
@@ -260,14 +223,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Photo not found' });
       }
 
-      return {
-        id: row.id,
-        property_id: row.property_id,
-        sort_order: row.sort_order,
-        is_cover: row.is_cover,
-        created_at: row.created_at,
-        url: await signMediaUrl(row.storage_path),
-      };
+      return row;
     },
   );
 
@@ -294,11 +250,11 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
 
       const { data: row, error: rowError } = await supabase
         .from('property_media')
-        .select('id, storage_path, is_cover')
+        .select('id, is_cover')
         .eq('id', request.params.mediaId)
         .eq('property_id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .maybeSingle<{ id: string; storage_path: string; is_cover: boolean }>();
+        .maybeSingle<{ id: string; is_cover: boolean }>();
 
       if (rowError) {
         request.log.error(rowError);
@@ -306,12 +262,6 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
       }
       if (!row) {
         return reply.status(404).send({ error: 'Photo not found' });
-      }
-
-      const { error: removeError } = await supabaseAdmin.storage.from(BUCKET).remove([row.storage_path]);
-      if (removeError) {
-        request.log.error(removeError);
-        return reply.status(500).send({ error: 'Could not delete photo file' });
       }
 
       const { error: deleteError } = await supabase.from('property_media').delete().eq('id', row.id);

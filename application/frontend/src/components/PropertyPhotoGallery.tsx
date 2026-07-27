@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import {
+  addPropertyMediaLink,
   deletePropertyMedia,
   updatePropertyMedia,
-  uploadPropertyPhoto,
+  type MediaType,
   type PropertyMedia,
 } from '@/lib/propertyMediaApi';
-import { FileUploadDropzone } from '@/components/FileUploadDropzone';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 type Props = {
   session: Session;
@@ -16,20 +17,34 @@ type Props = {
   onChange: (media: PropertyMedia[]) => void;
 };
 
-// tb-properties-photos-001: native HTML5 drag-and-drop for reordering (no
-// new dependency) -- consistent with FileUploadDropzone's own pre-existing
-// use of native drag events rather than a library.
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
+
+// tb-properties-media-external-links-001: native HTML5 drag-and-drop for
+// reordering (no new dependency), unchanged from tb-properties-photos-001.
+// Residoro doesn't host any file here -- every item is a pasted external
+// link (Google Photos or elsewhere), rendered as a link-out, never an <img>.
 export function PropertyPhotoGallery({ session, propertyId, media, onChange }: Props) {
+  const [linkInput, setLinkInput] = useState('');
+  const [linkType, setLinkType] = useState<MediaType>('photo');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
-  async function handleUpload(file: File) {
+  async function handleAddLink(e: FormEvent) {
+    e.preventDefault();
+    if (!linkInput.trim()) return;
     setError(null);
     setBusy(true);
     try {
-      const uploaded = await uploadPropertyPhoto(session.access_token, propertyId, file);
-      onChange([...media, uploaded]);
+      const added = await addPropertyMediaLink(session.access_token, propertyId, linkInput.trim(), linkType);
+      onChange([...media, added]);
+      setLinkInput('');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -114,15 +129,19 @@ export function PropertyPhotoGallery({ session, propertyId, media, onChange }: P
               onDragStart={() => setDraggedId(item.id)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(item.id)}
-              className="group relative aspect-square overflow-hidden rounded-lg border bg-muted"
+              className="group relative flex aspect-square flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border bg-muted p-2 text-center"
             >
-              {item.url ? (
-                <img src={item.url} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                  Loading…
-                </div>
-              )}
+              <a
+                href={item.external_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                <span aria-hidden className="text-2xl">
+                  {item.type === 'video' ? '🎬' : '🖼️'}
+                </span>
+                <span className="line-clamp-2 break-all">{hostnameOf(item.external_url)}</span>
+              </a>
               {item.is_cover && (
                 <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
                   Cover
@@ -148,14 +167,38 @@ export function PropertyPhotoGallery({ session, propertyId, media, onChange }: P
         </div>
       )}
 
-      <FileUploadDropzone
-        onFileSelected={handleUpload}
-        disabled={busy}
-        accept="image/jpeg,image/png,image/webp"
-        maxSizeMb={10}
-        multiple
-        helperText="Drag and drop photos here, or click to choose files."
-      />
+      <form onSubmit={handleAddLink} className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          type="url"
+          placeholder="Paste a photo or video link (e.g. a Google Photos album)"
+          value={linkInput}
+          onChange={(e) => setLinkInput(e.target.value)}
+          disabled={busy}
+          required
+          className="flex-1"
+        />
+        <div className="flex gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={linkType === 'photo' ? 'default' : 'outline'}
+            onClick={() => setLinkType('photo')}
+          >
+            Photo
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={linkType === 'video' ? 'default' : 'outline'}
+            onClick={() => setLinkType('video')}
+          >
+            Video
+          </Button>
+          <Button type="submit" size="sm" disabled={busy || !linkInput.trim()}>
+            Add link
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

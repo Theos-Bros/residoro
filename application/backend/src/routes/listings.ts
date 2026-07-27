@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
-import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const LISTING_TYPES = ['sale', 'rent'] as const;
 const STATUSES = ['draft', 'active', 'under_offer', 'sold', 'expired', 'withdrawn'] as const;
@@ -150,11 +149,12 @@ function parseAuthorityDates(
   return { startsAt, expiresAt };
 }
 
-// tb-properties-photos-001: a cover photo thumbnail for the list, batched in
-// one query + one Promise.all of signed-URL calls rather than N round trips.
-// property_media doesn't exist for most properties yet (migrated data has
-// none), so this returns undefined for any property with no cover row --
-// callers render a placeholder in that case, not an error.
+// tb-properties-media-external-links-001: a cover-link lookup for the list,
+// batched in one query. property_media rows are now pasted external links,
+// not Storage-hosted files, so no signed-URL step is needed -- the stored
+// external_url is returned as-is. Returns undefined for any property with no
+// cover row -- callers render a placeholder/no-link-out affordance then, not
+// an error.
 async function coverPhotoUrlsByProperty(
   supabase: SupabaseClient,
   propertyIds: string[],
@@ -163,26 +163,13 @@ async function coverPhotoUrlsByProperty(
 
   const { data: covers, error } = await supabase
     .from('property_media')
-    .select('property_id, storage_path')
+    .select('property_id, external_url')
     .in('property_id', propertyIds)
     .eq('is_cover', true);
 
   if (error || !covers) return new Map();
 
-  // Storage signed-url generation stays on supabaseAdmin, not the scoped
-  // client -- the property-media bucket has no INSERT/DELETE storage.objects
-  // policy (see 20260726130000_property_media.sql), so a scoped client can
-  // read there but not write; kept consistent with upload/remove elsewhere.
-  const urls = await Promise.all(
-    covers.map(async (cover) => {
-      const { data: signed } = await supabaseAdmin.storage
-        .from('property-media')
-        .createSignedUrl(cover.storage_path, 3600);
-      return [cover.property_id, signed?.signedUrl] as const;
-    }),
-  );
-
-  return new Map(urls.filter(([, url]) => url !== undefined) as [string, string][]);
+  return new Map(covers.map((cover) => [cover.property_id, cover.external_url] as const));
 }
 
 // tb-listings-create-001: the first brokerage-facing (requireAuth, not
