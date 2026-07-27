@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { fetchProject, fetchUnitTypes, type Project, type ProjectUnitType } from '@/lib/projectsApi';
+import {
+  fetchProject,
+  fetchProjectUnitsSummary,
+  fetchUnitTypes,
+  type Project,
+  type ProjectUnitsSummary,
+  type ProjectUnitType,
+} from '@/lib/projectsApi';
 import { UnitTypesSection } from '@/components/UnitTypesSection';
+import { UnitsSummarySection } from '@/components/UnitsSummarySection';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -10,24 +18,34 @@ type Props = {
   session: Session;
 };
 
-// tb-properties-project-001: deliberately minimal -- core fields read-only,
-// no rollup view of the project's own units (see semantic_scope; that's a
-// follow-on tracer bullet once bulk unit generation exists to populate one).
 export function ProjectDetailPage({ session }: Props) {
   const { id } = useParams<{ id: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [unitTypes, setUnitTypes] = useState<ProjectUnitType[] | null>(null);
+  const [unitsSummary, setUnitsSummary] = useState<ProjectUnitsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const refetchUnitsSummary = useCallback(() => {
+    if (!id) return;
+    fetchProjectUnitsSummary(session.access_token, id)
+      .then(setUnitsSummary)
+      .catch((err: Error) => setError(err.message));
+  }, [id, session.access_token]);
 
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
 
-    Promise.all([fetchProject(session.access_token, id), fetchUnitTypes(session.access_token, id)])
-      .then(([projectResult, unitTypesResult]) => {
+    Promise.all([
+      fetchProject(session.access_token, id),
+      fetchUnitTypes(session.access_token, id),
+      fetchProjectUnitsSummary(session.access_token, id),
+    ])
+      .then(([projectResult, unitTypesResult, unitsSummaryResult]) => {
         if (cancelled) return;
         setProject(projectResult);
         setUnitTypes(unitTypesResult.unit_types);
+        setUnitsSummary(unitsSummaryResult);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -65,6 +83,15 @@ export function ProjectDetailPage({ session }: Props) {
           <p className="text-sm text-muted-foreground">Total units: {project.total_units ?? '—'}</p>
 
           <div className="space-y-2 pt-4">
+            <h2 className="text-lg font-semibold tracking-tight">Units summary</h2>
+            {unitsSummary === null ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <UnitsSummarySection summary={unitsSummary} />
+            )}
+          </div>
+
+          <div className="space-y-2 pt-4">
             <h2 className="text-lg font-semibold tracking-tight">Unit types</h2>
             {unitTypes === null ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
@@ -72,8 +99,11 @@ export function ProjectDetailPage({ session }: Props) {
               <UnitTypesSection
                 session={session}
                 projectId={id}
+                developerName={project.developer_name}
+                projectName={project.name}
                 unitTypes={unitTypes}
                 onChange={setUnitTypes}
+                onUnitsChanged={refetchUnitsSummary}
               />
             )}
           </div>

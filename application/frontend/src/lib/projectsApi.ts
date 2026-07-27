@@ -63,6 +63,28 @@ export type ProjectUnitType = {
   price_currency: string;
 };
 
+export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market';
+export const PROPERTY_STATUSES: readonly PropertyStatus[] = ['available', 'reserved', 'sold', 'off_market'];
+
+export type StatusCounts = Record<PropertyStatus, number>;
+
+export type UnitLabelsByStatus = Record<PropertyStatus, string[]>;
+
+export type ProjectUnitTypeSummary = {
+  unit_type_id: string | null;
+  unit_type_name: string;
+  total: number;
+  by_status: StatusCounts;
+  units_by_status: UnitLabelsByStatus;
+};
+
+export type ProjectUnitsSummary = {
+  total: number;
+  by_status: StatusCounts;
+  declared_total_units: number | null;
+  by_unit_type: ProjectUnitTypeSummary[];
+};
+
 async function parseJsonOrThrow(response: Response) {
   const body = await response.json();
   if (!response.ok) {
@@ -153,16 +175,40 @@ export async function createUnitType(
   return parseJsonOrThrow(response);
 }
 
+export async function removeUnits(
+  accessToken: string,
+  projectId: string,
+  unitTypeId: string,
+  unitNumbers: string[],
+): Promise<{ deleted: number; unit_numbers: string[] }> {
+  const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types/${unitTypeId}/units`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ unit_numbers: unitNumbers }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function fetchProjectUnitsSummary(
+  accessToken: string,
+  projectId: string,
+): Promise<ProjectUnitsSummary> {
+  const response = await fetch(`${BACKEND_URL}/projects/${projectId}/units-summary`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
 export async function generateUnits(
   accessToken: string,
   projectId: string,
   unitTypeId: string,
-  count: number,
+  unitNumbers: string[],
 ): Promise<{ created: number; property_ids: string[] }> {
   const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types/${unitTypeId}/generate-units`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ count }),
+    body: JSON.stringify({ unit_numbers: unitNumbers }),
   });
   return parseJsonOrThrow(response);
 }

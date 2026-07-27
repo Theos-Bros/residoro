@@ -7,6 +7,7 @@ import {
   type ProjectUnitType,
   type PropertyType,
 } from '@/lib/projectsApi';
+import { RemoveUnitsPanel } from '@/components/RemoveUnitsPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,8 +17,11 @@ import { Separator } from '@/components/ui/separator';
 type Props = {
   session: Session;
   projectId: string;
+  developerName: string;
+  projectName: string;
   unitTypes: ProjectUnitType[];
   onChange: (unitTypes: ProjectUnitType[]) => void;
+  onUnitsChanged: () => void;
 };
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
@@ -36,8 +40,30 @@ function formatSpecs(unitType: ProjectUnitType): string {
 // PATCH/DELETE route exists) -- a wrong template is fixed by adding a new,
 // correctly-specified one, not editing the old one, same as properties'
 // own no-generic-edit convention.
-function GenerateUnitsRow({ session, projectId, unitType }: { session: Session; projectId: string; unitType: ProjectUnitType }) {
-  const [count, setCount] = useState('50');
+//
+// tb-properties-project-rollup-001 follow-up: the operator pastes the real
+// unit/lot labels (e.g. "1F, 1G, 2A" for a condo floor, or "Block 3 Lot 12,
+// Block 3 Lot 13" for a subdivision) instead of a bare count -- these are
+// free-form per development convention, not something generated for them.
+export function parseUnitNumbers(raw: string): string[] {
+  return raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function GenerateUnitsRow({
+  session,
+  projectId,
+  unitType,
+  onGenerated,
+}: {
+  session: Session;
+  projectId: string;
+  unitType: ProjectUnitType;
+  onGenerated: () => void;
+}) {
+  const [unitNumbersInput, setUnitNumbersInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,16 +71,18 @@ function GenerateUnitsRow({ session, projectId, unitType }: { session: Session; 
   async function handleGenerate() {
     setError(null);
     setResult(null);
-    const numericCount = Number(count);
-    if (!Number.isInteger(numericCount) || numericCount < 1) {
-      setError('Count must be a positive whole number.');
+    const unitNumbers = parseUnitNumbers(unitNumbersInput);
+    if (unitNumbers.length === 0) {
+      setError('Enter at least one unit/lot number, separated by commas or new lines.');
       return;
     }
 
     setBusy(true);
     try {
-      const { created } = await generateUnits(session.access_token, projectId, unitType.id, numericCount);
+      const { created } = await generateUnits(session.access_token, projectId, unitType.id, unitNumbers);
       setResult(`Created ${created} unit${created === 1 ? '' : 's'}.`);
+      setUnitNumbersInput('');
+      onGenerated();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -65,13 +93,12 @@ function GenerateUnitsRow({ session, projectId, unitType }: { session: Session; 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Input
-        type="number"
-        min="1"
-        step="1"
-        value={count}
-        onChange={(e) => setCount(e.target.value)}
-        className="h-8 w-24"
-        aria-label={`Number of units to generate for ${unitType.name}`}
+        type="text"
+        value={unitNumbersInput}
+        onChange={(e) => setUnitNumbersInput(e.target.value)}
+        placeholder="e.g. 1F, 1G, 2A, 2B"
+        className="h-8 w-64"
+        aria-label={`Unit/lot numbers to generate for ${unitType.name}`}
       />
       <Button size="sm" variant="outline" onClick={handleGenerate} disabled={busy}>
         {busy ? 'Generating…' : 'Generate units'}
@@ -86,7 +113,15 @@ function GenerateUnitsRow({ session, projectId, unitType }: { session: Session; 
   );
 }
 
-export function UnitTypesSection({ session, projectId, unitTypes, onChange }: Props) {
+export function UnitTypesSection({
+  session,
+  projectId,
+  developerName,
+  projectName,
+  unitTypes,
+  onChange,
+  onUnitsChanged,
+}: Props) {
   const [name, setName] = useState('');
   const [propertyType, setPropertyType] = useState<PropertyType>('condo_unit');
   const [floorAreaSqm, setFloorAreaSqm] = useState('');
@@ -96,6 +131,7 @@ export function UnitTypesSection({ session, projectId, unitTypes, onChange }: Pr
   const [price, setPrice] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [removingUnitTypeId, setRemovingUnitTypeId] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -141,7 +177,28 @@ export function UnitTypesSection({ session, projectId, unitTypes, onChange }: Pr
                 <span className="font-medium">{unitType.name}</span>
                 <span className="text-xs text-muted-foreground">{formatSpecs(unitType)}</span>
               </div>
-              <GenerateUnitsRow session={session} projectId={projectId} unitType={unitType} />
+              <div className="flex flex-wrap items-center gap-2">
+                <GenerateUnitsRow
+                  session={session}
+                  projectId={projectId}
+                  unitType={unitType}
+                  onGenerated={onUnitsChanged}
+                />
+                <Button size="sm" variant="ghost" onClick={() => setRemovingUnitTypeId(unitType.id)}>
+                  Remove units
+                </Button>
+              </div>
+              {removingUnitTypeId === unitType.id && (
+                <RemoveUnitsPanel
+                  session={session}
+                  projectId={projectId}
+                  developerName={developerName}
+                  projectName={projectName}
+                  unitType={unitType}
+                  onRemoved={onUnitsChanged}
+                  onClose={() => setRemovingUnitTypeId(null)}
+                />
+              )}
             </li>
           ))}
         </ul>
