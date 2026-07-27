@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { createProperty, createListing, type PropertyType, type OwnerType } from '@/lib/listingsApi';
-import { fetchProjects, type Project } from '@/lib/projectsApi';
+import { fetchDevelopers, fetchProjects, type Developer, type Project } from '@/lib/projectsApi';
+import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,9 +33,12 @@ const OWNER_TYPES: OwnerType[] = ['developer', 'individual', 'company'];
 // property that isn't in residoro yet -- creates a properties row and a
 // listings row together in one submit. Reuses POST /listings unchanged
 // against the newly-created property_id; the listing fields below mirror
-// CreateListingForm's exactly. owner_id is never collected here -- stays
-// NULL, matching Migration's existing behavior (cap-properties-001
-// Decision #2).
+// CreateListingForm's exactly.
+//
+// tb-properties-owner-linking-001: an Owner picker is now offered, sourced
+// from `developers` or `contacts` depending on owner_type (mirrors the
+// Project picker's lazy-fetch-on-owner_type-change pattern). Still optional
+// -- omitting it inserts owner_id = null, same as before this tracer bullet.
 export function NewPropertyListingForm({ session }: Props) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<PropertyType>('condo_unit');
@@ -51,6 +55,15 @@ export function NewPropertyListingForm({ session }: Props) {
   // resale-only session never pays for the fetch.
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [projectId, setProjectId] = useState<string>('');
+
+  // tb-properties-owner-linking-001: developers/contacts loaded lazily,
+  // matching the Project picker's own lazy-fetch pattern -- developers when
+  // ownerType is 'developer', contacts when it's 'individual'/'company'.
+  // ownerId resets on ownerType change so a stale developer id can't leak
+  // into a contact-owned property or vice versa.
+  const [developers, setDevelopers] = useState<Developer[] | null>(null);
+  const [contacts, setContacts] = useState<Contact[] | null>(null);
+  const [ownerId, setOwnerId] = useState<string>('');
 
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [price, setPrice] = useState('');
@@ -78,6 +91,44 @@ export function NewPropertyListingForm({ session }: Props) {
       cancelled = true;
     };
   }, [ownerType, projects, session.access_token]);
+
+  useEffect(() => {
+    setOwnerId('');
+  }, [ownerType]);
+
+  useEffect(() => {
+    if (ownerType !== 'developer' || developers !== null) return;
+    let cancelled = false;
+
+    fetchDevelopers(session.access_token)
+      .then(({ developers }) => {
+        if (!cancelled) setDevelopers(developers);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerType, developers, session.access_token]);
+
+  useEffect(() => {
+    if (ownerType === 'developer' || contacts !== null) return;
+    let cancelled = false;
+
+    fetchContacts(session.access_token)
+      .then(({ contacts }) => {
+        if (!cancelled) setContacts(contacts);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerType, contacts, session.access_token]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -111,6 +162,7 @@ export function NewPropertyListingForm({ session }: Props) {
         province: province || undefined,
         price: numericAskPrice,
         project_id: ownerType === 'developer' && projectId ? projectId : undefined,
+        owner_id: ownerId || undefined,
       });
 
       await createListing(session.access_token, {
@@ -168,6 +220,31 @@ export function NewPropertyListingForm({ session }: Props) {
                     {o}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="owner">
+                {ownerType === 'developer' ? 'Developer (optional)' : 'Owner contact (optional)'}
+              </Label>
+              <select
+                id="owner"
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">— Unspecified —</option>
+                {ownerType === 'developer'
+                  ? developers?.map((developer) => (
+                      <option key={developer.id} value={developer.id}>
+                        {developer.name}
+                      </option>
+                    ))
+                  : contacts?.map((contact) => (
+                      <option key={contact.id} value={contact.id}>
+                        {contact.name}
+                        {contact.company ? ` (${contact.company})` : ''}
+                      </option>
+                    ))}
               </select>
             </div>
             {ownerType === 'developer' && (

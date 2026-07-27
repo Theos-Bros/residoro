@@ -79,10 +79,10 @@ type ProjectUnitTypeRow = {
 async function loadOwnedProject(tenantId: string, projectId: string) {
   return supabaseAdmin
     .from('projects')
-    .select('id, name')
+    .select('id, name, developer_id')
     .eq('id', projectId)
     .eq('tenant_id', tenantId)
-    .maybeSingle<{ id: string; name: string }>();
+    .maybeSingle<{ id: string; name: string; developer_id: string }>();
 }
 
 // tb-properties-project-001: developers is a minimal placeholder entity
@@ -478,7 +478,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
           title: `${project.name} - ${unitType.name} - Unit ${unitNumber}`,
           type: unitType.property_type,
           owner_type: 'developer',
-          owner_id: null,
+          owner_id: project.developer_id,
           floor_area_sqm: unitType.floor_area_sqm,
           lot_area_sqm: unitType.lot_area_sqm,
           bedrooms: unitType.bedrooms,

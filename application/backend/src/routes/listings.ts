@@ -68,6 +68,7 @@ type CreatePropertyBody = {
   price?: number;
   price_currency?: string;
   project_id?: string;
+  owner_id?: string;
 };
 
 type UpdateListingStatusBody = {
@@ -185,9 +186,6 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // tb-listings-new-property-001: the only other way a property enters
   // residoro is Migration (operator-driven CSV import) -- this lets an
   // agent create one directly for the "I just got a new listing" moment.
-  // owner_id is never accepted from the body -- always NULL on insert,
-  // matching Migration's own existing behavior (no real Developer/Contact
-  // FK target exists yet, cap-properties-001 Decision #2).
   //
   // tb-properties-project-001: project_id is only accepted when
   // owner_type = 'developer' -- resale properties (individual/company) never
@@ -196,6 +194,12 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // developer inventory not yet assigned to a project); if given, it's
   // re-verified against the caller's own tenant, same "never trust tenant
   // scoping from the body" precedent as every other write route here.
+  //
+  // tb-properties-owner-linking-001: owner_id is now optionally accepted and
+  // validated against the table matching owner_type -- `developers` for
+  // 'developer', `contacts` for 'individual'/'company' (cap-properties-001's
+  // own Notes named Contact as the closest candidate for that case). Omitting
+  // it still inserts null, unchanged from before this tracer bullet.
   app.post<{ Body: CreatePropertyBody }>('/properties', { preHandler: requireAuth }, async (request, reply) => {
     const {
       title,
@@ -212,6 +216,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       price,
       price_currency,
       project_id,
+      owner_id,
     } = request.body ?? {};
 
     if (!title || !type || !owner_type) {
@@ -251,6 +256,24 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       }
     }
 
+    if (owner_id) {
+      const ownerTable = owner_type === 'developer' ? 'developers' : 'contacts';
+      const { data: owner, error: ownerError } = await supabaseAdmin
+        .from(ownerTable)
+        .select('id')
+        .eq('id', owner_id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle();
+
+      if (ownerError) {
+        request.log.error(ownerError);
+        return reply.status(500).send({ error: 'Could not verify the owner' });
+      }
+      if (!owner) {
+        return reply.status(404).send({ error: `Owner not found in your workspace (expected in ${ownerTable})` });
+      }
+    }
+
     const { data: property, error: propertyError } = await supabaseAdmin
       .from('properties')
       .insert({
@@ -259,7 +282,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         title,
         type,
         owner_type,
-        owner_id: null,
+        owner_id: owner_id ?? null,
         project_id: project_id ?? null,
         address,
         city,

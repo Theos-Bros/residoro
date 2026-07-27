@@ -12,6 +12,7 @@ import { registerDocketRoutes } from './routes/dockets.js';
 import { registerPropertyMediaRoutes } from './routes/propertyMedia.js';
 import { registerPropertyDocumentsRoutes } from './routes/propertyDocuments.js';
 import { registerProjectsRoutes } from './routes/projects.js';
+import { registerContactsRoutes } from './routes/contacts.js';
 
 const app = Fastify({ logger: true });
 
@@ -27,6 +28,7 @@ await registerDocketRoutes(app);
 await registerPropertyMediaRoutes(app);
 await registerPropertyDocumentsRoutes(app);
 await registerProjectsRoutes(app);
+await registerContactsRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 
