@@ -67,6 +67,7 @@ type CreatePropertyBody = {
   parking_slots?: number;
   price?: number;
   price_currency?: string;
+  project_id?: string;
 };
 
 type UpdateListingStatusBody = {
@@ -187,6 +188,14 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // owner_id is never accepted from the body -- always NULL on insert,
   // matching Migration's own existing behavior (no real Developer/Contact
   // FK target exists yet, cap-properties-001 Decision #2).
+  //
+  // tb-properties-project-001: project_id is only accepted when
+  // owner_type = 'developer' -- resale properties (individual/company) never
+  // get a project_id, enforced here server-side, not just hidden in the UI.
+  // A developer-owned property may still omit project_id (standalone
+  // developer inventory not yet assigned to a project); if given, it's
+  // re-verified against the caller's own tenant, same "never trust tenant
+  // scoping from the body" precedent as every other write route here.
   app.post<{ Body: CreatePropertyBody }>('/properties', { preHandler: requireAuth }, async (request, reply) => {
     const {
       title,
@@ -202,6 +211,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       parking_slots,
       price,
       price_currency,
+      project_id,
     } = request.body ?? {};
 
     if (!title || !type || !owner_type) {
@@ -213,11 +223,31 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     if (!OWNER_TYPES.includes(owner_type as (typeof OWNER_TYPES)[number])) {
       return reply.status(400).send({ error: `owner_type must be one of: ${OWNER_TYPES.join(', ')}` });
     }
+    if (project_id && owner_type !== 'developer') {
+      return reply.status(400).send({ error: 'project_id can only be set when owner_type is developer' });
+    }
 
     const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price };
     for (const [field, value] of Object.entries(numericFields)) {
       if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
         return reply.status(400).send({ error: `${field} must be a non-negative number` });
+      }
+    }
+
+    if (project_id) {
+      const { data: project, error: projectError } = await supabaseAdmin
+        .from('projects')
+        .select('id')
+        .eq('id', project_id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle();
+
+      if (projectError) {
+        request.log.error(projectError);
+        return reply.status(500).send({ error: 'Could not verify the project' });
+      }
+      if (!project) {
+        return reply.status(404).send({ error: 'Project not found in your workspace' });
       }
     }
 
@@ -230,6 +260,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         type,
         owner_type,
         owner_id: null,
+        project_id: project_id ?? null,
         address,
         city,
         province,

@@ -13,6 +13,8 @@ export type PropertyDetail = {
   price_currency: string;
   status: string;
   verification_status: VerificationStatus;
+  project_id: string | null;
+  project_name: string | null;
 };
 
 export type PropertyMedia = {

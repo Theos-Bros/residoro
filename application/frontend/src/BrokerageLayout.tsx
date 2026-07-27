@@ -21,6 +21,7 @@ type Props = {
 
 const NAV_LINKS = [
   { to: '/properties', label: 'Properties' },
+  { to: '/projects', label: 'Projects' },
   { to: '/listings', label: 'Listings' },
   { to: '/shared-with-me', label: 'Shared with me' },
 ];

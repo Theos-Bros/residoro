@@ -5,6 +5,9 @@ import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { PropertiesListPage } from './pages/PropertiesListPage';
 import { PropertyDetailPage } from './pages/PropertyDetailPage';
 import { NewPropertyListingForm } from './pages/NewPropertyListingForm';
+import { ProjectsListPage } from './pages/ProjectsListPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { NewProjectForm } from './pages/NewProjectForm';
 import { ListingsPage } from './pages/ListingsPage';
 import { ShareDocketForm } from './pages/ShareDocketForm';
 import { SharedWithMePage } from './pages/SharedWithMePage';
@@ -44,6 +47,9 @@ export function App() {
         <Route path="/properties" element={session && <PropertiesListPage session={session} />} />
         <Route path="/properties/new" element={session && <NewPropertyListingForm session={session} />} />
         <Route path="/properties/:id" element={session && <PropertyDetailPage session={session} />} />
+        <Route path="/projects" element={session && <ProjectsListPage session={session} />} />
+        <Route path="/projects/new" element={session && <NewProjectForm session={session} />} />
+        <Route path="/projects/:id" element={session && <ProjectDetailPage session={session} />} />
         <Route path="/listings" element={session && <ListingsPage session={session} />} />
         <Route path="/listings/:listingId/share" element={session && <ShareDocketForm session={session} />} />
         <Route path="/shared-with-me" element={session && <SharedWithMePage session={session} />} />

@@ -131,6 +131,7 @@ export async function createProperty(
     parking_slots?: number;
     price?: number;
     price_currency?: string;
+    project_id?: string;
   },
 ): Promise<Property> {
   const response = await fetch(`${BACKEND_URL}/properties`, {

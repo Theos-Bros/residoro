@@ -42,7 +42,9 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/properties/:id', { preHandler: requireAuth }, async (request, reply) => {
     const { data: property, error } = await supabaseAdmin
       .from('properties')
-      .select('id, title, type, address, city, province, price, price_currency, status, verification_status')
+      .select(
+        'id, title, type, address, city, province, price, price_currency, status, verification_status, project_id, projects(name)',
+      )
       .eq('id', request.params.id)
       .eq('tenant_id', request.user!.tenantId)
       .maybeSingle();
@@ -55,7 +57,13 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Property not found in your workspace' });
     }
 
-    return property;
+    // tb-properties-project-001: project_name is a convenience join, not a
+    // stored column -- null for every property until one is assigned to a
+    // project (project_id stays null for resale properties, unchanged).
+    const { projects, ...rest } = property as unknown as Record<string, unknown> & {
+      projects: { name: string } | null;
+    };
+    return { ...rest, project_name: projects?.name ?? null };
   });
 
   app.get<{ Params: { id: string } }>(

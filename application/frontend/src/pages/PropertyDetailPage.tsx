@@ -115,6 +115,14 @@ export function PropertyDetailPage({ session }: Props) {
             <p className="text-sm text-muted-foreground">
               {[property.address, property.city, property.province].filter(Boolean).join(', ') || '—'}
             </p>
+            {property.project_name && (
+              <p className="text-sm text-muted-foreground">
+                Part of{' '}
+                <Link to={`/projects/${property.project_id}`} className="hover:underline">
+                  {property.project_name}
+                </Link>
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

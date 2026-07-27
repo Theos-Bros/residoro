@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { createProperty, createListing, type PropertyType, type OwnerType } from '@/lib/listingsApi';
+import { fetchProjects, type Project } from '@/lib/projectsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,6 +44,14 @@ export function NewPropertyListingForm({ session }: Props) {
   const [province, setProvince] = useState('');
   const [askPrice, setAskPrice] = useState('');
 
+  // tb-properties-project-001: a Project picker only makes sense for
+  // developer-owned properties -- resale properties (individual/company)
+  // never get a project_id, enforced again server-side (see POST
+  // /properties). Loaded lazily only when ownerType becomes 'developer' so a
+  // resale-only session never pays for the fetch.
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projectId, setProjectId] = useState<string>('');
+
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
   const [price, setPrice] = useState('');
   const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
@@ -52,6 +61,23 @@ export function NewPropertyListingForm({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (ownerType !== 'developer' || projects !== null) return;
+    let cancelled = false;
+
+    fetchProjects(session.access_token)
+      .then(({ projects }) => {
+        if (!cancelled) setProjects(projects);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerType, projects, session.access_token]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -84,6 +110,7 @@ export function NewPropertyListingForm({ session }: Props) {
         city: city || undefined,
         province: province || undefined,
         price: numericAskPrice,
+        project_id: ownerType === 'developer' && projectId ? projectId : undefined,
       });
 
       await createListing(session.access_token, {
@@ -143,6 +170,24 @@ export function NewPropertyListingForm({ session }: Props) {
                 ))}
               </select>
             </div>
+            {ownerType === 'developer' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="project">Project (optional)</Label>
+                <select
+                  id="project"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">— None yet —</option>
+                  {projects?.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="address">Address (optional)</Label>
               <Input id="address" type="text" value={address} onChange={(e) => setAddress(e.target.value)} />
