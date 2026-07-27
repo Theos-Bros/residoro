@@ -31,6 +31,10 @@ export type PropertyType =
 
 export type OwnerType = 'developer' | 'individual' | 'company';
 
+export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market';
+
+export const PROPERTY_STATUSES: readonly PropertyStatus[] = ['available', 'reserved', 'sold', 'off_market'];
+
 export type Listing = {
   id: string;
   property_id: string;
@@ -142,6 +146,42 @@ export async function createProperty(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-properties-edit-001: general fields open to any tenant user (matching
+// createProperty's own lack of a role check); owner_type/owner_id are
+// admin-only server-side (403 otherwise) -- callers should only include them
+// when the current user is an admin, but the real enforcement is the
+// backend's role check, not this client omitting them.
+export async function updateProperty(
+  accessToken: string,
+  propertyId: string,
+  patch: {
+    title?: string;
+    address?: string;
+    city?: string;
+    province?: string;
+    floor_area_sqm?: number;
+    lot_area_sqm?: number;
+    bedrooms?: number;
+    bathrooms?: number;
+    parking_slots?: number;
+    price?: number;
+    price_currency?: string;
+    status?: PropertyStatus;
+    owner_type?: OwnerType;
+    owner_id?: string | null;
+  },
+): Promise<Property> {
+  const response = await fetch(`${BACKEND_URL}/properties/${propertyId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(patch),
   });
   return parseJsonOrThrow(response);
 }

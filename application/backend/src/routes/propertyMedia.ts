@@ -43,7 +43,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
     const { data: property, error } = await supabaseAdmin
       .from('properties')
       .select(
-        'id, title, type, address, city, province, price, price_currency, status, verification_status, project_id, projects(name)',
+        'id, title, type, address, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency, status, verification_status, owner_type, owner_id, project_id, projects(name)',
       )
       .eq('id', request.params.id)
       .eq('tenant_id', request.user!.tenantId)

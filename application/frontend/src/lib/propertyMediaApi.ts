@@ -9,10 +9,17 @@ export type PropertyDetail = {
   address: string | null;
   city: string | null;
   province: string | null;
+  floor_area_sqm: number | null;
+  lot_area_sqm: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  parking_slots: number | null;
   price: number | null;
   price_currency: string;
   status: string;
   verification_status: VerificationStatus;
+  owner_type: string;
+  owner_id: string | null;
   project_id: string | null;
   project_name: string | null;
 };

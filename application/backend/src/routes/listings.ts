@@ -42,6 +42,7 @@ const PROPERTY_TYPES = [
 ] as const;
 const OWNER_TYPES = ['developer', 'individual', 'company'] as const;
 const VERIFICATION_STATUSES = ['unverified', 'pending', 'verified', 'flagged'] as const;
+const PROPERTY_STATUSES = ['available', 'reserved', 'sold', 'off_market'] as const;
 
 type CreateListingBody = {
   property_id?: string;
@@ -79,6 +80,27 @@ type UpdateListingStatusBody = {
 
 type UpdatePropertyVerificationBody = {
   verification_status?: string;
+};
+
+// tb-properties-edit-001: every field here has been create-time-only via
+// POST /properties until now. owner_type/owner_id are admin-only (see the
+// route below) -- everything else is open to any authenticated tenant user,
+// matching POST /properties' own lack of a role check.
+type UpdatePropertyBody = {
+  title?: string;
+  address?: string;
+  city?: string;
+  province?: string;
+  floor_area_sqm?: number;
+  lot_area_sqm?: number;
+  bedrooms?: number;
+  bathrooms?: number;
+  parking_slots?: number;
+  price?: number;
+  price_currency?: string;
+  status?: string;
+  owner_type?: string;
+  owner_id?: string | null;
 };
 
 // UX follow-up: "the expiry of the authority to sell should be automatic,
@@ -335,6 +357,120 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
         .select('id, verification_status')
+        .single();
+
+      if (error || !property) {
+        request.log.error(error);
+        return reply.status(404).send({ error: 'Property not found' });
+      }
+
+      return property;
+    },
+  );
+
+  // tb-properties-edit-001: the general property-edit gap named across
+  // tb-properties-project-001, tb-properties-bulk-units-001, and
+  // tb-properties-owner-linking-001's own "What Happens Next" sections --
+  // every field here except verification_status (its own route above) and
+  // project_id/unit_number/type (still create-time-only, see semantic_scope)
+  // was previously only writable via POST /properties. Reuses POST's exact
+  // numeric-field validation and owner-table lookup rather than duplicating
+  // slightly-different rules. owner_type/owner_id are gated admin-only and
+  // must be given together (a partial ownership change could leave owner_id
+  // pointing at the wrong table) -- owner_id may be explicitly null to clear
+  // ownership.
+  app.patch<{ Params: { id: string }; Body: UpdatePropertyBody }>(
+    '/properties/:id',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const {
+        title,
+        address,
+        city,
+        province,
+        floor_area_sqm,
+        lot_area_sqm,
+        bedrooms,
+        bathrooms,
+        parking_slots,
+        price,
+        price_currency,
+        status,
+        owner_type,
+        owner_id,
+      } = request.body ?? {};
+
+      const updateFields: Record<string, unknown> = {};
+
+      if (title !== undefined) {
+        if (!title.trim()) {
+          return reply.status(400).send({ error: 'title cannot be empty' });
+        }
+        updateFields.title = title;
+      }
+      if (address !== undefined) updateFields.address = address;
+      if (city !== undefined) updateFields.city = city;
+      if (province !== undefined) updateFields.province = province;
+      if (price_currency !== undefined) updateFields.price_currency = price_currency;
+
+      const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price };
+      for (const [field, value] of Object.entries(numericFields)) {
+        if (value !== undefined) {
+          if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+            return reply.status(400).send({ error: `${field} must be a non-negative number` });
+          }
+          updateFields[field] = value;
+        }
+      }
+
+      if (status !== undefined) {
+        if (!PROPERTY_STATUSES.includes(status as (typeof PROPERTY_STATUSES)[number])) {
+          return reply.status(400).send({ error: `status must be one of: ${PROPERTY_STATUSES.join(', ')}` });
+        }
+        updateFields.status = status;
+      }
+
+      if (owner_type !== undefined || owner_id !== undefined) {
+        if (request.user!.role !== 'admin') {
+          return reply.status(403).send({ error: 'Only an admin can change property ownership' });
+        }
+        if (owner_type === undefined || owner_id === undefined) {
+          return reply.status(400).send({ error: 'owner_type and owner_id must be provided together' });
+        }
+        if (!OWNER_TYPES.includes(owner_type as (typeof OWNER_TYPES)[number])) {
+          return reply.status(400).send({ error: `owner_type must be one of: ${OWNER_TYPES.join(', ')}` });
+        }
+        if (owner_id !== null) {
+          const ownerTable = owner_type === 'developer' ? 'developers' : 'contacts';
+          const { data: owner, error: ownerError } = await supabaseAdmin
+            .from(ownerTable)
+            .select('id')
+            .eq('id', owner_id)
+            .eq('tenant_id', request.user!.tenantId)
+            .maybeSingle();
+
+          if (ownerError) {
+            request.log.error(ownerError);
+            return reply.status(500).send({ error: 'Could not verify the owner' });
+          }
+          if (!owner) {
+            return reply.status(404).send({ error: `Owner not found in your workspace (expected in ${ownerTable})` });
+          }
+        }
+        updateFields.owner_type = owner_type;
+        updateFields.owner_id = owner_id;
+      }
+
+      if (Object.keys(updateFields).length === 0) {
+        return reply.status(400).send({ error: 'No editable fields were provided' });
+      }
+
+      const { data: property, error } = await supabaseAdmin
+        .from('properties')
+        .update(updateFields)
+        .eq('id', request.params.id)
+        .eq('tenant_id', request.user!.tenantId)
+        .select('id, title, price, price_currency, status, owner_type, owner_id')
         .single();
 
       if (error || !property) {

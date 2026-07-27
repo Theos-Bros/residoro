@@ -1,14 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchProperty, fetchPropertyMedia, type PropertyDetail, type PropertyMedia } from '@/lib/propertyMediaApi';
 import { fetchPropertyDocuments, type PropertyDocument } from '@/lib/propertyDocumentsApi';
-import { updatePropertyVerification, VERIFICATION_STATUSES, type VerificationStatus } from '@/lib/listingsApi';
+import {
+  updatePropertyVerification,
+  updateProperty,
+  VERIFICATION_STATUSES,
+  PROPERTY_STATUSES,
+  type VerificationStatus,
+  type PropertyStatus,
+  type OwnerType,
+} from '@/lib/listingsApi';
+import { fetchDevelopers, type Developer } from '@/lib/projectsApi';
+import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { PropertyPhotoGallery } from '@/components/PropertyPhotoGallery';
 import { PropertyDocumentsSection } from '@/components/PropertyDocumentsSection';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
 
 type Props = {
   session: Session;
@@ -17,15 +30,58 @@ type Props = {
 const verificationSelectClass =
   'h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm';
 
+const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
+
+const OWNER_TYPES: OwnerType[] = ['developer', 'individual', 'company'];
+
+type EditFormState = {
+  title: string;
+  address: string;
+  city: string;
+  province: string;
+  floor_area_sqm: string;
+  lot_area_sqm: string;
+  bedrooms: string;
+  bathrooms: string;
+  parking_slots: string;
+  price: string;
+  status: PropertyStatus;
+  owner_type: OwnerType;
+  owner_id: string;
+};
+
+function toFormState(property: PropertyDetail): EditFormState {
+  return {
+    title: property.title,
+    address: property.address ?? '',
+    city: property.city ?? '',
+    province: property.province ?? '',
+    floor_area_sqm: property.floor_area_sqm?.toString() ?? '',
+    lot_area_sqm: property.lot_area_sqm?.toString() ?? '',
+    bedrooms: property.bedrooms?.toString() ?? '',
+    bathrooms: property.bathrooms?.toString() ?? '',
+    parking_slots: property.parking_slots?.toString() ?? '',
+    price: property.price?.toString() ?? '',
+    status: property.status as PropertyStatus,
+    owner_type: property.owner_type as OwnerType,
+    owner_id: property.owner_id ?? '',
+  };
+}
+
 function formatPrice(value: number | null, currency: string): string {
   return value === null ? '—' : `${currency} ${value.toLocaleString()}`;
 }
 
 // tb-properties-photos-001: no single-property view existed before this --
 // only PropertiesListPage (a list) and PropertyCard (unrelated, migration-
-// preview only). Deliberately minimal: core fields read-only + the photo
-// gallery, not a full edit experience (see the tracer bullet's
-// semantic_scope).
+// preview only).
+//
+// tb-properties-edit-001: the general edit form below closes the gap the
+// original comment here used to flag ("not a full edit experience") --
+// general fields (title/location/specs/price/status) are open to any tenant
+// user, matching PATCH /properties/:id's own lack of a role check; ownership
+// (owner_type/owner_id) is only rendered for admins, mirroring the
+// verification-status control's existing isAdmin gate on this same page.
 export function PropertyDetailPage({ session }: Props) {
   const { id } = useParams<{ id: string }>();
   const [property, setProperty] = useState<PropertyDetail | null>(null);
@@ -34,6 +90,13 @@ export function PropertyDetailPage({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState<EditFormState | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [developers, setDevelopers] = useState<Developer[] | null>(null);
+  const [contacts, setContacts] = useState<Contact[] | null>(null);
 
   async function handleVerificationChange(verificationStatus: VerificationStatus) {
     if (!id) return;
@@ -44,6 +107,112 @@ export function PropertyDetailPage({ session }: Props) {
       setProperty(refreshed);
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  function startEditing() {
+    if (!property) return;
+    setForm(toFormState(property));
+    setSaveError(null);
+    setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    setIsEditing(false);
+    setForm(null);
+    setSaveError(null);
+  }
+
+  function updateForm(patch: Partial<EditFormState>) {
+    setForm((prev) => (prev ? { ...prev, ...patch } : prev));
+  }
+
+  // tb-properties-owner-linking-001's own lazy-fetch-on-owner_type pattern,
+  // reused here: only loaded once editing starts and only for the isAdmin
+  // branch that actually renders the ownership picker.
+  useEffect(() => {
+    if (!isEditing || !isAdmin || !form) return;
+    if (form.owner_type === 'developer') {
+      if (developers !== null) return;
+      let cancelled = false;
+      fetchDevelopers(session.access_token)
+        .then(({ developers }) => {
+          if (!cancelled) setDevelopers(developers);
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setSaveError(err.message);
+        });
+      return () => {
+        cancelled = true;
+      };
+    } else {
+      if (contacts !== null) return;
+      let cancelled = false;
+      fetchContacts(session.access_token)
+        .then(({ contacts }) => {
+          if (!cancelled) setContacts(contacts);
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setSaveError(err.message);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [isEditing, isAdmin, form?.owner_type, developers, contacts, session.access_token]);
+
+  async function handleEditSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!id || !form) return;
+    setSaveError(null);
+
+    if (!form.title.trim()) {
+      setSaveError('Title is required.');
+      return;
+    }
+
+    const numericPatch: Record<string, number> = {};
+    for (const [field, raw] of Object.entries({
+      floor_area_sqm: form.floor_area_sqm,
+      lot_area_sqm: form.lot_area_sqm,
+      bedrooms: form.bedrooms,
+      bathrooms: form.bathrooms,
+      parking_slots: form.parking_slots,
+      price: form.price,
+    })) {
+      if (raw.trim() === '') continue;
+      const value = Number(raw);
+      if (!Number.isFinite(value) || value < 0) {
+        setSaveError(`${field.replace(/_/g, ' ')} must be a non-negative number.`);
+        return;
+      }
+      numericPatch[field] = value;
+    }
+
+    setSaving(true);
+    try {
+      const ownershipChanged = isAdmin && property && form.owner_type !== property.owner_type;
+      const ownerIdChanged = isAdmin && property && form.owner_id !== (property.owner_id ?? '');
+      await updateProperty(session.access_token, id, {
+        title: form.title.trim(),
+        address: form.address,
+        city: form.city,
+        province: form.province,
+        status: form.status,
+        price_currency: property?.price_currency,
+        ...numericPatch,
+        ...(isAdmin && (ownershipChanged || ownerIdChanged)
+          ? { owner_type: form.owner_type, owner_id: form.owner_id || null }
+          : {}),
+      });
+      const refreshed = await fetchProperty(session.access_token, id);
+      setProperty(refreshed);
+      setIsEditing(false);
+      setForm(null);
+    } catch (err) {
+      setSaveError((err as Error).message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -94,6 +263,11 @@ export function PropertyDetailPage({ session }: Props) {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">{property.title}</h1>
               <Badge variant="outline">{property.status}</Badge>
+              {!isEditing && (
+                <Button variant="outline" size="sm" onClick={startEditing}>
+                  Edit
+                </Button>
+              )}
               {isAdmin ? (
                 <select
                   aria-label={`Verification status for ${property.title}`}
@@ -124,6 +298,195 @@ export function PropertyDetailPage({ session }: Props) {
               </p>
             )}
           </div>
+
+          {isEditing && form && (
+            <Card>
+              <CardContent className="pt-6">
+                <form onSubmit={handleEditSubmit} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_title">Title</Label>
+                    <Input
+                      id="edit_title"
+                      type="text"
+                      value={form.title}
+                      onChange={(e) => updateForm({ title: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_address">Address</Label>
+                    <Input
+                      id="edit_address"
+                      type="text"
+                      value={form.address}
+                      onChange={(e) => updateForm({ address: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_city">City</Label>
+                      <Input
+                        id="edit_city"
+                        type="text"
+                        value={form.city}
+                        onChange={(e) => updateForm({ city: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_province">Province</Label>
+                      <Input
+                        id="edit_province"
+                        type="text"
+                        value={form.province}
+                        onChange={(e) => updateForm({ province: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_floor_area">Floor area (sqm)</Label>
+                      <Input
+                        id="edit_floor_area"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.floor_area_sqm}
+                        onChange={(e) => updateForm({ floor_area_sqm: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_lot_area">Lot area (sqm)</Label>
+                      <Input
+                        id="edit_lot_area"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.lot_area_sqm}
+                        onChange={(e) => updateForm({ lot_area_sqm: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_bedrooms">Bedrooms</Label>
+                      <Input
+                        id="edit_bedrooms"
+                        type="number"
+                        min="0"
+                        value={form.bedrooms}
+                        onChange={(e) => updateForm({ bedrooms: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_bathrooms">Bathrooms</Label>
+                      <Input
+                        id="edit_bathrooms"
+                        type="number"
+                        min="0"
+                        value={form.bathrooms}
+                        onChange={(e) => updateForm({ bathrooms: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_parking">Parking slots</Label>
+                      <Input
+                        id="edit_parking"
+                        type="number"
+                        min="0"
+                        value={form.parking_slots}
+                        onChange={(e) => updateForm({ parking_slots: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_price">
+                      Price ({property.price_currency})
+                    </Label>
+                    <Input
+                      id="edit_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.price}
+                      onChange={(e) => updateForm({ price: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_status">Status</Label>
+                    <select
+                      id="edit_status"
+                      value={form.status}
+                      onChange={(e) => updateForm({ status: e.target.value as PropertyStatus })}
+                      className={selectClass}
+                    >
+                      {PROPERTY_STATUSES.map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {isAdmin && (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="edit_owner_type">Owner type (admin only)</Label>
+                        <select
+                          id="edit_owner_type"
+                          value={form.owner_type}
+                          onChange={(e) =>
+                            updateForm({ owner_type: e.target.value as OwnerType, owner_id: '' })
+                          }
+                          className={selectClass}
+                        >
+                          {OWNER_TYPES.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="edit_owner">
+                          {form.owner_type === 'developer' ? 'Developer' : 'Owner contact'}
+                        </Label>
+                        <select
+                          id="edit_owner"
+                          value={form.owner_id}
+                          onChange={(e) => updateForm({ owner_id: e.target.value })}
+                          className={selectClass}
+                        >
+                          <option value="">— Unspecified —</option>
+                          {form.owner_type === 'developer'
+                            ? developers?.map((developer) => (
+                                <option key={developer.id} value={developer.id}>
+                                  {developer.name}
+                                </option>
+                              ))
+                            : contacts?.map((contact) => (
+                                <option key={contact.id} value={contact.id}>
+                                  {contact.name}
+                                  {contact.company ? ` (${contact.company})` : ''}
+                                </option>
+                              ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={saving}>
+                      {saving ? 'Saving…' : 'Save changes'}
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={cancelEditing} disabled={saving}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="space-y-2">
             <h2 className="text-lg font-semibold tracking-tight">Photos</h2>
