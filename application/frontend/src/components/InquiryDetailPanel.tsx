@@ -25,6 +25,7 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
   onQualified: (leadId: string) => void;
+  onBroadcast: () => void;
 };
 
 type BuyerFields = {
@@ -43,7 +44,7 @@ const EMPTY_BUYER_FIELDS: BuyerFields = { buyer_name: '', buyer_phone: '', buyer
 // -- 'qualified' is reachable only through the dedicated Qualify action below
 // (which also creates the Lead + optional contact), never as a raw PATCH,
 // so an inquiry can't end up "qualified" with no promoted_lead_id.
-export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSaved, onQualified }: Props) {
+export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSaved, onQualified, onBroadcast }: Props) {
   const navigate = useNavigate();
   const isNew = inquiryId === 'new';
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
@@ -264,6 +265,11 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
                 }
               >
                 Search
+              </Button>
+            )}
+            {!isNew && inquiry && (
+              <Button size="sm" variant="outline" onClick={onBroadcast}>
+                Buyer Wanted
               </Button>
             )}
             {!isNew && inquiry && inquiry.stage === 'to_probe' && (

@@ -10,12 +10,17 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InquiryDetailPanel } from '@/components/InquiryDetailPanel';
 import { LeadDetailPanel } from '@/components/LeadDetailPanel';
+import { BroadcastModal } from '@/components/BroadcastModal';
+import type { BroadcastEntityType } from '@/lib/broadcastApi';
 
 type Props = {
   session: Session;
 };
 
-type OpenPanel = { type: 'inquiry' | 'lead'; id: string | 'new' } | null;
+type OpenPanel =
+  | { type: 'inquiry' | 'lead'; id: string | 'new' }
+  | { type: 'broadcast'; entityType: BroadcastEntityType; id: string }
+  | null;
 
 function budgetLabel(min?: number | null, max?: number | null, currency?: string | null): string {
   if (!min && !max) return '—';
@@ -184,6 +189,9 @@ export function LeadsPage({ session }: Props) {
             reloadLeads();
           }}
           onQualified={(leadId) => setOpenPanel({ type: 'lead', id: leadId })}
+          onBroadcast={() =>
+            openPanel.id !== 'new' && setOpenPanel({ type: 'broadcast', entityType: 'inquiry', id: openPanel.id })
+          }
         />
       )}
       {openPanel?.type === 'lead' && (
@@ -194,6 +202,18 @@ export function LeadsPage({ session }: Props) {
           onClose={() => setOpenPanel(null)}
           onSaved={reloadLeads}
           onGoMarkSold={handleGoMarkSold}
+          onBroadcast={() =>
+            openPanel.id !== 'new' &&
+            setOpenPanel({ type: 'broadcast', entityType: 'buyer_requirement', id: openPanel.id })
+          }
+        />
+      )}
+      {openPanel?.type === 'broadcast' && (
+        <BroadcastModal
+          session={session}
+          entityType={openPanel.entityType}
+          entityId={openPanel.id}
+          onClose={() => setOpenPanel(null)}
         />
       )}
     </div>

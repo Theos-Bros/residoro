@@ -14,10 +14,19 @@ const MERGE_FIELDS = [
 ];
 const CO_BROKER_ONLY_FIELD = 'commission_note';
 
-// tb-distribution-share-text-001: Settings' first (and, for now, only)
-// sub-section. Internal audience has no template here by design -- it's a
-// fixed full-detail dump built server-side (see cap-distribution-001
-// Decision #4), so only Public/Co-broker get an editor.
+// tb-buyer-leads-broadcast-001: a Buyer Wanted broadcast merges a buyer
+// requirement's own fields (inquiries/buyer_requirements), not a
+// listing/property's -- a disjoint field set from MERGE_FIELDS above.
+const BUYER_WANTED_MERGE_FIELDS = [
+  'intent', 'property_type', 'budget_min', 'budget_max', 'budget_range',
+  'target_city', 'target_province', 'bedrooms', 'bathrooms',
+  'floor_area_sqm_min', 'lot_area_sqm_min', 'contact_name',
+];
+
+// tb-distribution-share-text-001: Settings' first sub-section. Internal
+// audience has no template here by design -- it's a fixed full-detail dump
+// built server-side (see cap-distribution-001 Decision #4), so it never gets
+// an editor. tb-buyer-leads-broadcast-001 added a third, Buyer Wanted, below.
 //
 // tb-brokerage-permissions-delegation-001: editability now reads off the
 // fetched resource's own can_edit (server-computed: role === 'admin' OR a
@@ -27,6 +36,7 @@ const CO_BROKER_ONLY_FIELD = 'commission_note';
 export function SharingTemplatesPanel({ session }: Props) {
   const [publicTemplate, setPublicTemplate] = useState('');
   const [coBrokerTemplate, setCoBrokerTemplate] = useState('');
+  const [buyerWantedTemplate, setBuyerWantedTemplate] = useState('');
   const [canEdit, setCanEdit] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,6 +48,7 @@ export function SharingTemplatesPanel({ session }: Props) {
       .then((templates) => {
         setPublicTemplate(templates.public_share_template ?? '');
         setCoBrokerTemplate(templates.co_broker_share_template ?? '');
+        setBuyerWantedTemplate(templates.buyer_wanted_share_template ?? '');
         setCanEdit(templates.can_edit);
         setLoaded(true);
       })
@@ -52,6 +63,7 @@ export function SharingTemplatesPanel({ session }: Props) {
       const templates = await updateShareTemplates(session.access_token, {
         public_share_template: publicTemplate,
         co_broker_share_template: coBrokerTemplate,
+        buyer_wanted_share_template: buyerWantedTemplate,
       });
       setCanEdit(templates.can_edit);
       setSaved(true);
@@ -100,6 +112,16 @@ export function SharingTemplatesPanel({ session }: Props) {
               Merge fields: {MERGE_FIELDS.map((f) => `{{${f}}}`).join(', ')}, {`{{${CO_BROKER_ONLY_FIELD}}}`}
             </p>
             <RichTextEditor value={coBrokerTemplate} onChange={setCoBrokerTemplate} editable={canEdit} />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Buyer Wanted template</label>
+            <p className="text-xs text-muted-foreground">
+              Used for the "Buyer Wanted" broadcast — merge fields come from the buyer's
+              requirement, not a listing. Merge fields:{' '}
+              {BUYER_WANTED_MERGE_FIELDS.map((f) => `{{${f}}}`).join(', ')}
+            </p>
+            <RichTextEditor value={buyerWantedTemplate} onChange={setBuyerWantedTemplate} editable={canEdit} />
           </div>
 
           {canEdit && (

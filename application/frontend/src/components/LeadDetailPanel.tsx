@@ -27,6 +27,7 @@ type Props = {
   onClose: () => void;
   onSaved: () => void;
   onGoMarkSold: (listingId: string, buyerContactId: string) => void;
+  onBroadcast: () => void;
 };
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
@@ -37,7 +38,7 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // plain unscored options-sent picker, and a bookkeeping-only mark-won that
 // hands off to the existing ListingsPage sold flow rather than writing
 // listings.buyer_contact_id itself.
-export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, onGoMarkSold }: Props) {
+export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, onGoMarkSold, onBroadcast }: Props) {
   const navigate = useNavigate();
   const activeListings = listings.filter((l) => l.status === 'active');
   const isNew = leadId === 'new';
@@ -240,6 +241,11 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                 onClick={() => navigate('/search', { state: { sourceType: 'lead', sourceId: leadId, requirement } })}
               >
                 Search
+              </Button>
+            )}
+            {!isNew && lead && (
+              <Button size="sm" variant="outline" onClick={onBroadcast}>
+                Buyer Wanted
               </Button>
             )}
           </div>

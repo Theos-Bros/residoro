@@ -9,6 +9,7 @@ const AUDIENCES: Audience[] = ['public', 'co_broker', 'internal'];
 type ShareTemplatesBody = {
   public_share_template?: string;
   co_broker_share_template?: string;
+  buyer_wanted_share_template?: string;
 };
 
 type PropertyRow = {
@@ -43,7 +44,10 @@ type ListingRow = {
 // resolve to an empty string rather than leaving the literal token behind,
 // so a brokerage template referencing a field this listing doesn't have
 // (e.g. bedrooms on a lot_only property) degrades gracefully.
-function mergeTemplate(template: string, fields: Record<string, string>): string {
+// Exported: tb-buyer-leads-broadcast-001's buyerBroadcast.ts reuses this
+// verbatim against buyer_requirements/inquiries fields instead of duplicating
+// the {{field}} regex.
+export function mergeTemplate(template: string, fields: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => fields[key] ?? '');
 }
 
@@ -108,7 +112,7 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
     const supabase = getScopedClient(request);
     const { data, error } = await supabase
       .from('workspace_sharing_settings')
-      .select('public_share_template, co_broker_share_template')
+      .select('public_share_template, co_broker_share_template, buyer_wanted_share_template')
       .eq('tenant_id', request.user!.tenantId)
       .single();
 
@@ -147,9 +151,15 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only an admin or a delegated member can edit sharing templates' });
     }
 
-    const { public_share_template, co_broker_share_template } = request.body ?? {};
-    if (public_share_template === undefined && co_broker_share_template === undefined) {
-      return reply.status(400).send({ error: 'public_share_template or co_broker_share_template is required' });
+    const { public_share_template, co_broker_share_template, buyer_wanted_share_template } = request.body ?? {};
+    if (
+      public_share_template === undefined &&
+      co_broker_share_template === undefined &&
+      buyer_wanted_share_template === undefined
+    ) {
+      return reply
+        .status(400)
+        .send({ error: 'public_share_template, co_broker_share_template, or buyer_wanted_share_template is required' });
     }
 
     const { data, error } = await supabase
@@ -157,9 +167,10 @@ export async function registerShareTextRoutes(app: FastifyInstance) {
       .update({
         ...(public_share_template !== undefined && { public_share_template }),
         ...(co_broker_share_template !== undefined && { co_broker_share_template }),
+        ...(buyer_wanted_share_template !== undefined && { buyer_wanted_share_template }),
       })
       .eq('tenant_id', request.user!.tenantId)
-      .select('public_share_template, co_broker_share_template')
+      .select('public_share_template, co_broker_share_template, buyer_wanted_share_template')
       .single();
 
     if (error) {

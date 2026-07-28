@@ -5,6 +5,7 @@ export type ShareAudience = 'public' | 'co_broker' | 'internal';
 export type ShareTemplates = {
   public_share_template: string | null;
   co_broker_share_template: string | null;
+  buyer_wanted_share_template: string | null;
   can_edit: boolean;
 };
 

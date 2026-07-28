@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   searchInquiry,
   searchBuyerRequirement,
   searchAdHoc,
+  fetchMatchingSettings,
   TOGGLE_FIELDS,
   TOGGLE_FIELD_LABELS,
   type MatchResult,
@@ -13,6 +14,7 @@ import {
 import type { RequirementFields } from '@/lib/inquiriesApi';
 import { sendOptions } from '@/lib/buyerRequirementsApi';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
+import { BroadcastModal } from '@/components/BroadcastModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +47,17 @@ export function SearchPage({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+  const [matchThreshold, setMatchThreshold] = useState<number | null>(null);
+  const [showBroadcast, setShowBroadcast] = useState(false);
+
+  // tb-buyer-leads-broadcast-001: best-effort -- if this fails, the "no good
+  // match" broadcast prompt just never shows, matching cap-buyer-leads-001's
+  // stance elsewhere on non-critical telemetry-adjacent fetches.
+  useEffect(() => {
+    fetchMatchingSettings(session.access_token)
+      .then((settings) => setMatchThreshold(settings.match_score_threshold))
+      .catch(() => {});
+  }, [session.access_token]);
 
   function toggleHardFilter(field: Exclude<MatchableField, 'intent'>) {
     setHardFilters((prev) => {
@@ -87,6 +100,17 @@ export function SearchPage({ session }: Props) {
       setSendingId(null);
     }
   }
+
+  // tb-buyer-leads-broadcast-001: TB2's "no good match" signal -- a search
+  // that came back empty, or where every result scores below
+  // match_score_threshold. Only offered when launched from a real Inquiry/
+  // Lead (an ad-hoc/blank search has no record to attach the broadcast to).
+  const noGoodMatch =
+    results !== null &&
+    matchThreshold !== null &&
+    (results.length === 0 || results.every((r) => r.score < matchThreshold));
+  const broadcastEntityType = state?.sourceType === 'inquiry' ? 'inquiry' : 'buyer_requirement';
+  const canBroadcast = (state?.sourceType === 'inquiry' || state?.sourceType === 'lead') && !!state.sourceId;
 
   return (
     <div className="space-y-8">
@@ -144,6 +168,17 @@ export function SearchPage({ session }: Props) {
           </p>
         )}
 
+        {noGoodMatch && canBroadcast && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-dashed p-3">
+            <p className="text-sm text-muted-foreground">
+              No good match — generate a Buyer Wanted broadcast instead.
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setShowBroadcast(true)}>
+              Generate Buyer Wanted broadcast
+            </Button>
+          </div>
+        )}
+
         {results && results.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2">
             {results.map((result) => {
@@ -187,6 +222,15 @@ export function SearchPage({ session }: Props) {
           </div>
         )}
       </section>
+
+      {showBroadcast && state?.sourceId && (
+        <BroadcastModal
+          session={session}
+          entityType={broadcastEntityType}
+          entityId={state.sourceId}
+          onClose={() => setShowBroadcast(false)}
+        />
+      )}
     </div>
   );
 }
