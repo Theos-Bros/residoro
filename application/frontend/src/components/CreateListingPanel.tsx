@@ -14,6 +14,10 @@ type Props = {
   initialPriceCurrency?: string;
   onClose: () => void;
   onSaved: () => void;
+  // Cancel button target -- defaults to onClose (dismiss the panel) when
+  // omitted, but ListingDetailModal's embedded edit form overrides this to
+  // go back to view mode instead of closing the whole modal.
+  onCancel?: () => void;
   // tb-listings-detail-edit-modal-001: when present, the form edits this
   // existing listing's type/price/exclusivity (via updateListingFields)
   // instead of creating a new one. Authority dates aren't editable here --
@@ -49,6 +53,7 @@ export function CreateListingPanel({
   initialPrice,
   onClose,
   onSaved,
+  onCancel,
   editingListing,
   embedded,
 }: Props) {
@@ -160,9 +165,14 @@ export function CreateListingPanel({
           </>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button type="submit" disabled={submitting}>
-          {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Create listing'}
-        </Button>
+        <div className="flex gap-2">
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Create listing'}
+          </Button>
+          <Button type="button" variant="outline" disabled={submitting} onClick={onCancel ?? onClose}>
+            Cancel
+          </Button>
+        </div>
       </form>
   );
 

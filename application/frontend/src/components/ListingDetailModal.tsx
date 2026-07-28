@@ -120,6 +120,7 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
           editingListing={listing}
           embedded
           onClose={onClose}
+          onCancel={() => setMode('view')}
           onSaved={() => {
             setMode('view');
             onUpdated();

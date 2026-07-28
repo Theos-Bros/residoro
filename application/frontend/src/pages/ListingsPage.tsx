@@ -44,7 +44,20 @@ export function ListingsPage({ session }: Props) {
   const location = useLocation();
   const prefill = location.state as { prefillListingId?: string; prefillBuyerContactId?: string } | null;
   const [openDetailId, setOpenDetailId] = useState<string | null>(prefill?.prefillListingId ?? null);
+  // Bumped on every row click (even re-clicking the currently-open listing)
+  // and used as ListingDetailModal's `key` below, forcing a fresh mount --
+  // and so a fresh, expanded FloatingPanel -- every time a row is clicked.
+  // Without this, clicking a different row while the modal is minimized just
+  // swapped its content underneath without popping it back open, since
+  // FloatingPanel's collapsed state lives inside the same component instance
+  // across a plain prop change.
+  const [openDetailToken, setOpenDetailToken] = useState(0);
   const openDetailListing = listings?.find((l) => l.id === openDetailId) ?? null;
+
+  function openDetail(listingId: string) {
+    setOpenDetailId(listingId);
+    setOpenDetailToken((t) => t + 1);
+  }
 
   function reload() {
     fetchListings(session.access_token)
@@ -100,7 +113,7 @@ export function ListingsPage({ session }: Props) {
               {listings.map((listing) => (
                 <TableRow
                   key={listing.id}
-                  onClick={() => setOpenDetailId(listing.id)}
+                  onClick={() => openDetail(listing.id)}
                   className={cn(
                     'cursor-pointer hover:bg-muted/50',
                     openHistory?.propertyId === listing.property_id && 'bg-amber-100',
@@ -182,6 +195,7 @@ export function ListingsPage({ session }: Props) {
       )}
       {openDetailListing && (
         <ListingDetailModal
+          key={openDetailToken}
           session={session}
           listing={openDetailListing}
           onClose={() => setOpenDetailId(null)}
