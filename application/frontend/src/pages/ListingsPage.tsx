@@ -1,71 +1,63 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import {
-  fetchListings,
-  updateListingStatus,
-  authorityWarningLabel,
-  LISTING_STATUS_TRANSITIONS,
-  type Listing,
-  type ListingStatus,
-} from '@/lib/listingsApi';
-import { fetchContacts, type Contact } from '@/lib/contactsApi';
-import { Button } from '@/components/ui/button';
+import { fetchListings, authorityWarningLabel, STATUS_LABEL, type Listing } from '@/lib/listingsApi';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { ShareDetailsModal } from '@/components/ShareDetailsModal';
+import { ListingDetailModal } from '@/components/ListingDetailModal';
 import { cn } from '@/lib/utils';
 
 type Props = {
   session: Session;
 };
 
-const STATUS_LABEL: Record<ListingStatus, string> = {
-  draft: 'Draft',
-  active: 'Active',
-  under_offer: 'Under Offer',
-  sold: 'Sold',
-  expired: 'Expired',
-  withdrawn: 'Withdrawn',
-};
-
 type OpenHistory = { propertyId: string; propertyTitle: string } | null;
 type OpenShare = { listingId: string; propertyTitle: string } | null;
 
-// tb-listings-lifecycle-001: status actions now come from
-// LISTING_STATUS_TRANSITIONS instead of the two hardcoded active/withdrawn
-// buttons tb-listings-create-001 shipped with -- only legally-reachable next
-// states are offered, matching the backend's own transition enforcement.
-//
 // UX follow-up: "History" opens a floating panel (bottom-right) instead of
 // navigating to a separate route, same as PropertiesListPage. A row whose
 // property has that panel open gets a light-gold highlight so it's obvious
 // which row the floating panel belongs to. Authority (ATS/ATL) expiry is now
-// automatic (backend auto-expires on read, see listingsApi's comment) --
-// 'expired' rows get a warning badge and a renewal control (new date +
-// Renew) instead of a generic "Mark Expired" button, since there never was
-// one to begin with.
+// automatic (backend auto-expires on read, see listingsApi's comment).
+//
+// tb-listings-detail-edit-modal-001: rows are now clickable and open
+// ListingDetailModal, which owns the status-transition controls (Mark
+// <status>, Mark Sold + buyer picker, Renew) that used to live in this
+// page's own Actions cell -- see that component for the relocated logic.
+// This page now only tracks which listing's detail modal is open, looked up
+// fresh from `listings` on every render so a status change or field edit
+// made inside the modal shows up here (and in the modal) without closing it.
 export function ListingsPage({ session }: Props) {
   const [listings, setListings] = useState<Listing[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
   const [openHistory, setOpenHistory] = useState<OpenHistory>(null);
   const [openShare, setOpenShare] = useState<OpenShare>(null);
-  const [renewDates, setRenewDates] = useState<Record<string, string>>({});
-  const [contacts, setContacts] = useState<Contact[] | null>(null);
   // tb-buyer-leads-schema-001: LeadDetailPanel's "Mark Sold on Listings Page"
-  // convenience action navigates here with this state -- purely a UI
-  // pre-fill of the existing buyer picker below, never a second write path;
-  // the actual sold transition still goes through this page's own
-  // handleMarkSold -> PATCH /listings/:id, entirely unmodified.
+  // convenience action navigates here with this state, opening that
+  // listing's detail modal with the buyer already pre-selected -- purely a
+  // UI convenience, never a second write path; the actual sold transition
+  // still goes through ListingDetailModal's own handleMarkSold -> PATCH
+  // /listings/:id, entirely unmodified.
   const location = useLocation();
   const prefill = location.state as { prefillListingId?: string; prefillBuyerContactId?: string } | null;
-  const [buyerSelections, setBuyerSelections] = useState<Record<string, string>>(
-    prefill?.prefillListingId && prefill.prefillBuyerContactId
-      ? { [prefill.prefillListingId]: prefill.prefillBuyerContactId }
-      : {},
-  );
+  const [openDetailId, setOpenDetailId] = useState<string | null>(prefill?.prefillListingId ?? null);
+  // Bumped on every row click (even re-clicking the currently-open listing)
+  // and used as ListingDetailModal's `key` below, forcing a fresh mount --
+  // and so a fresh, expanded FloatingPanel -- every time a row is clicked.
+  // Without this, clicking a different row while the modal is minimized just
+  // swapped its content underneath without popping it back open, since
+  // FloatingPanel's collapsed state lives inside the same component instance
+  // across a plain prop change.
+  const [openDetailToken, setOpenDetailToken] = useState(0);
+  const openDetailListing = listings?.find((l) => l.id === openDetailId) ?? null;
+
+  function openDetail(listingId: string) {
+    setOpenDetailId(listingId);
+    setOpenDetailToken((t) => t + 1);
+  }
 
   function reload() {
     fetchListings(session.access_token)
@@ -89,76 +81,6 @@ export function ListingsPage({ session }: Props) {
     };
   }, [session.access_token]);
 
-  // tb-crm-buyer-ui-001: lazy-fetch contacts only once a listing actually
-  // needs a buyer picker -- mirrors NewPropertyListingForm's own
-  // fetch-on-condition pattern rather than loading contacts unconditionally.
-  useEffect(() => {
-    if (contacts !== null) return;
-    if (!listings?.some((l) => l.status === 'under_offer')) return;
-    let cancelled = false;
-
-    fetchContacts(session.access_token)
-      .then(({ contacts }) => {
-        if (!cancelled) setContacts(contacts);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [listings, contacts, session.access_token]);
-
-  async function handleStatus(listingId: string, status: ListingStatus) {
-    setWarning(null);
-    try {
-      const result = await updateListingStatus(session.access_token, listingId, status);
-      if (result.warning) setWarning(result.warning);
-      reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  async function handleMarkSold(listingId: string) {
-    const buyerContactId = buyerSelections[listingId];
-    if (!buyerContactId) {
-      setError('Select a buyer before marking this listing sold.');
-      return;
-    }
-    setError(null);
-    setWarning(null);
-    try {
-      const result = await updateListingStatus(session.access_token, listingId, 'sold', {
-        buyer_contact_id: buyerContactId,
-      });
-      if (result.warning) setWarning(result.warning);
-      reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  async function handleRenew(listingId: string) {
-    const newExpiresAt = renewDates[listingId];
-    if (!newExpiresAt) {
-      setError('Pick a new Authority to Sell/Lease end date to renew.');
-      return;
-    }
-    setError(null);
-    setWarning(null);
-    try {
-      const result = await updateListingStatus(session.access_token, listingId, 'active', {
-        authority_expires_at: new Date(newExpiresAt).toISOString(),
-      });
-      if (result.warning) setWarning(result.warning);
-      reload();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold tracking-tight">Listings</h1>
@@ -166,11 +88,6 @@ export function ListingsPage({ session }: Props) {
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
-        </p>
-      )}
-      {warning && (
-        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {warning}
         </p>
       )}
       {!error && listings === null && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -196,7 +113,11 @@ export function ListingsPage({ session }: Props) {
               {listings.map((listing) => (
                 <TableRow
                   key={listing.id}
-                  className={cn(openHistory?.propertyId === listing.property_id && 'bg-amber-100')}
+                  onClick={() => openDetail(listing.id)}
+                  className={cn(
+                    'cursor-pointer hover:bg-muted/50',
+                    openHistory?.propertyId === listing.property_id && 'bg-amber-100',
+                  )}
                 >
                   <TableCell className="font-medium">{listing.property_title}</TableCell>
                   <TableCell className="capitalize">{listing.listing_type}</TableCell>
@@ -226,62 +147,8 @@ export function ListingsPage({ session }: Props) {
                       <p className="mt-1 text-xs text-muted-foreground">Buyer: {listing.buyer_name}</p>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap justify-end gap-2">
-                      {listing.status === 'expired' ? (
-                        <>
-                          <input
-                            type="date"
-                            value={renewDates[listing.id] ?? ''}
-                            onChange={(e) => setRenewDates((prev) => ({ ...prev, [listing.id]: e.target.value }))}
-                            className="h-8 rounded-md border border-input px-2 text-sm"
-                          />
-                          <Button size="sm" variant="outline" onClick={() => handleRenew(listing.id)}>
-                            Renew
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleStatus(listing.id, 'withdrawn')}>
-                            Mark Withdrawn
-                          </Button>
-                        </>
-                      ) : (
-                        LISTING_STATUS_TRANSITIONS[listing.status].map((nextStatus) =>
-                          nextStatus === 'sold' ? (
-                            <div key="sold" className="flex items-center gap-2">
-                              <select
-                                value={buyerSelections[listing.id] ?? ''}
-                                onChange={(e) =>
-                                  setBuyerSelections((prev) => ({ ...prev, [listing.id]: e.target.value }))
-                                }
-                                className="h-8 rounded-md border border-input px-2 text-sm"
-                              >
-                                <option value="">Select buyer…</option>
-                                {contacts?.map((contact) => (
-                                  <option key={contact.id} value={contact.id}>
-                                    {contact.name}
-                                  </option>
-                                ))}
-                              </select>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!buyerSelections[listing.id]}
-                                onClick={() => handleMarkSold(listing.id)}
-                              >
-                                Mark Sold
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              key={nextStatus}
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleStatus(listing.id, nextStatus)}
-                            >
-                              Mark {STATUS_LABEL[nextStatus]}
-                            </Button>
-                          ),
-                        )
-                      )}
                       <Button asChild size="sm" variant="outline">
                         <Link to={`/listings/${listing.id}/share`}>Share as docket</Link>
                       </Button>
@@ -324,6 +191,18 @@ export function ListingsPage({ session }: Props) {
           listingId={openShare.listingId}
           propertyTitle={openShare.propertyTitle}
           onClose={() => setOpenShare(null)}
+        />
+      )}
+      {openDetailListing && (
+        <ListingDetailModal
+          key={openDetailToken}
+          session={session}
+          listing={openDetailListing}
+          onClose={() => setOpenDetailId(null)}
+          onUpdated={reload}
+          initialBuyerContactId={
+            openDetailListing.id === prefill?.prefillListingId ? prefill?.prefillBuyerContactId : undefined
+          }
         />
       )}
     </div>

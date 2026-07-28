@@ -210,7 +210,7 @@ export function PropertiesListPage({ session }: Props) {
           initialPrice={openPanel.price}
           initialPriceCurrency={openPanel.priceCurrency}
           onClose={() => setOpenPanel(null)}
-          onCreated={() => setOpenPanel(null)}
+          onSaved={() => setOpenPanel(null)}
         />
       )}
       {openPanel?.mode === 'history' && (
