@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
+import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const STAGES = [
   'registered',
@@ -240,6 +241,15 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
   // null until tb-buyer-leads-matching-001 (TB2) populates it. Each listing_id
   // is re-verified tenant-owned + active, same "never trust the client" as
   // every other write route.
+  //
+  // tb-buyer-leads-matching-001: a listing_id not found in the caller's own
+  // active inventory is also accepted if it's the source_listing_id of an
+  // active docket shared with the caller (identity-scoped read, same as
+  // dockets.ts) whose underlying listing is still status='active' on
+  // supabaseAdmin -- otherwise the Search page's docket-sourced results could
+  // never actually be sent as an option, contradicting TB2's own "identical
+  // to an inventory-sourced one" Definition of Done. Never writes to
+  // listing_dockets itself; purely a read-only eligibility check.
   app.post<{ Params: { id: string }; Body: OptionsSentBody }>(
     '/buyer-requirements/:id/options-sent',
     { preHandler: requireAuth },
@@ -279,11 +289,42 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
       }
 
       const validIds = new Set((listings ?? []).map((l) => l.id));
+      const remainingIds = listing_ids.filter((id) => !validIds.has(id));
+
+      if (remainingIds.length > 0) {
+        const { data: dockets, error: docketsError } = await supabase
+          .from('listing_dockets')
+          .select('source_listing_id')
+          .in('source_listing_id', remainingIds)
+          .eq('shared_with', request.user!.id)
+          .eq('status', 'active');
+
+        if (docketsError) {
+          request.log.error(docketsError);
+          return reply.status(500).send({ error: 'Could not verify shared dockets' });
+        }
+
+        const docketListingIds = [...new Set((dockets ?? []).map((d) => d.source_listing_id))];
+        if (docketListingIds.length > 0) {
+          const { data: docketListings, error: docketListingsError } = await supabaseAdmin
+            .from('listings')
+            .select('id')
+            .in('id', docketListingIds)
+            .eq('status', 'active');
+
+          if (docketListingsError) {
+            request.log.error(docketListingsError);
+            return reply.status(500).send({ error: 'Could not verify shared listings' });
+          }
+          for (const row of docketListings ?? []) validIds.add(row.id);
+        }
+      }
+
       const invalidIds = listing_ids.filter((id) => !validIds.has(id));
       if (invalidIds.length > 0) {
         return reply
           .status(400)
-          .send({ error: `Listings not found or not active in your workspace: ${invalidIds.join(', ')}` });
+          .send({ error: `Listings not found, not active, or not shared with you: ${invalidIds.join(', ')}` });
       }
 
       const { data: matches, error: matchError } = await supabase

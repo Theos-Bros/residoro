@@ -24,6 +24,7 @@ const NAV_LINKS = [
   { to: '/projects', label: 'Projects' },
   { to: '/listings', label: 'Listings' },
   { to: '/leads', label: 'Leads' },
+  { to: '/search', label: 'Search' },
   { to: '/shared-with-me', label: 'Shared with me' },
   { to: '/performance', label: 'Performance' },
   { to: '/settings', label: 'Settings' },

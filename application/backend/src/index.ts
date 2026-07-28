@@ -18,6 +18,7 @@ import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { registerSettingsPermissionsRoutes } from './routes/settingsPermissions.js';
 import { registerInquiriesRoutes } from './routes/inquiries.js';
 import { registerBuyerRequirementsRoutes } from './routes/buyerRequirements.js';
+import { registerMatchingRoutes } from './routes/matching.js';
 
 const app = Fastify({ logger: true });
 
@@ -39,6 +40,7 @@ await registerAnalyticsRoutes(app);
 await registerSettingsPermissionsRoutes(app);
 await registerInquiriesRoutes(app);
 await registerBuyerRequirementsRoutes(app);
+await registerMatchingRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

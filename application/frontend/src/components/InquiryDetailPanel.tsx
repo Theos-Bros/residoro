@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchInquiry,
@@ -43,6 +44,7 @@ const EMPTY_BUYER_FIELDS: BuyerFields = { buyer_name: '', buyer_phone: '', buyer
 // (which also creates the Lead + optional contact), never as a raw PATCH,
 // so an inquiry can't end up "qualified" with no promoted_lead_id.
 export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSaved, onQualified }: Props) {
+  const navigate = useNavigate();
   const isNew = inquiryId === 'new';
   const [inquiry, setInquiry] = useState<Inquiry | null>(null);
   const [buyerFields, setBuyerFields] = useState<BuyerFields>(EMPTY_BUYER_FIELDS);
@@ -253,6 +255,17 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {isNew ? 'Create Inquiry' : 'Save'}
             </Button>
+            {!isNew && inquiry && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  navigate('/search', { state: { sourceType: 'inquiry', sourceId: inquiryId, requirement } })
+                }
+              >
+                Search
+              </Button>
+            )}
             {!isNew && inquiry && inquiry.stage === 'to_probe' && (
               <Button size="sm" variant="outline" onClick={() => handleStage('probing')} disabled={saving}>
                 Mark Probing

@@ -1,6 +1,6 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
-export type SettingKey = 'sharing_templates' | 'performance';
+export type SettingKey = 'sharing_templates' | 'performance' | 'matching';
 
 export type MemberPermissions = {
   member_id: string;
@@ -8,6 +8,7 @@ export type MemberPermissions = {
   handle: string | null;
   sharing_templates: boolean;
   performance: boolean;
+  matching: boolean;
 };
 
 async function parseJsonOrThrow(response: Response) {

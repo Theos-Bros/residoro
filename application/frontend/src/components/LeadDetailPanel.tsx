@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchBuyerRequirement,
@@ -37,6 +38,7 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // hands off to the existing ListingsPage sold flow rather than writing
 // listings.buyer_contact_id itself.
 export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, onGoMarkSold }: Props) {
+  const navigate = useNavigate();
   const activeListings = listings.filter((l) => l.status === 'active');
   const isNew = leadId === 'new';
   const [lead, setLead] = useState<BuyerRequirement | null>(null);
@@ -231,6 +233,15 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {isNew ? 'Create Lead' : 'Save'}
             </Button>
+            {!isNew && lead && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate('/search', { state: { sourceType: 'lead', sourceId: leadId, requirement } })}
+              >
+                Search
+              </Button>
+            )}
           </div>
 
           {!isNew && lead && (

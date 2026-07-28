@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import type { SettingKey } from '../lib/settingsDelegation.js';
 
-const SETTING_KEYS: SettingKey[] = ['sharing_templates', 'performance'];
+const SETTING_KEYS: SettingKey[] = ['sharing_templates', 'performance', 'matching'];
 
 type PutPermissionBody = {
   setting_key?: string;
@@ -65,6 +65,7 @@ export async function registerSettingsPermissionsRoutes(app: FastifyInstance) {
           handle: profile.handle,
           sharing_templates: keys.has('sharing_templates'),
           performance: keys.has('performance'),
+          matching: keys.has('matching'),
         };
       });
 
