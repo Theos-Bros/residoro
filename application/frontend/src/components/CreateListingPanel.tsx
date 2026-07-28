@@ -10,6 +10,8 @@ type Props = {
   session: Session;
   propertyId: string;
   propertyTitle: string;
+  initialPrice?: number | null;
+  initialPriceCurrency?: string;
   onClose: () => void;
   onCreated: () => void;
 };
@@ -25,9 +27,15 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // (bottom-right, Messenger/Gmail-compose style) instead of a full-page route
 // -- propertyId now comes from a prop, not useParams, and success closes the
 // panel via onCreated() instead of navigating away.
-export function CreateListingPanel({ session, propertyId, propertyTitle, onClose, onCreated }: Props) {
+// tb-listings-autofill-from-property-001: price seeds from the property's own
+// price on file (passed in as initialPrice), falling back to blank when the
+// property has none -- still a normal editable field either way. Currency
+// isn't handled here: createListing's payload has no currency field today,
+// so initialPriceCurrency is only accepted for forward-compatibility and
+// currently unused (see listingsApi.ts's createListing input type).
+export function CreateListingPanel({ session, propertyId, propertyTitle, initialPrice, onClose, onCreated }: Props) {
   const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
-  const [price, setPrice] = useState('');
+  const [price, setPrice] = useState(initialPrice != null ? String(initialPrice) : '');
   const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
   const [authorityStartsAt, setAuthorityStartsAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [authorityExpiresAt, setAuthorityExpiresAt] = useState('');

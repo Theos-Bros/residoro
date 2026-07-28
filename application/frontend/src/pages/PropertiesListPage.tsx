@@ -23,7 +23,15 @@ type Props = {
   session: Session;
 };
 
-type OpenPanel = { mode: 'create' | 'history'; propertyId: string; propertyTitle: string } | null;
+type OpenPanel =
+  | {
+      mode: 'create' | 'history';
+      propertyId: string;
+      propertyTitle: string;
+      price?: number | null;
+      priceCurrency?: string;
+    }
+  | null;
 
 // tb-listings-create-001: the first brokerage-facing property browser --
 // properties previously only existed server-side (created via Migration,
@@ -166,7 +174,13 @@ export function PropertiesListPage({ session }: Props) {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        setOpenPanel({ mode: 'create', propertyId: property.id, propertyTitle: property.title })
+                        setOpenPanel({
+                          mode: 'create',
+                          propertyId: property.id,
+                          propertyTitle: property.title,
+                          price: property.price,
+                          priceCurrency: property.price_currency,
+                        })
                       }
                     >
                       Create listing
@@ -193,6 +207,8 @@ export function PropertiesListPage({ session }: Props) {
           session={session}
           propertyId={openPanel.propertyId}
           propertyTitle={openPanel.propertyTitle}
+          initialPrice={openPanel.price}
+          initialPriceCurrency={openPanel.priceCurrency}
           onClose={() => setOpenPanel(null)}
           onCreated={() => setOpenPanel(null)}
         />
