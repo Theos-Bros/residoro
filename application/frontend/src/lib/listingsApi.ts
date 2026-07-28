@@ -54,6 +54,18 @@ export type Listing = {
 
 export type ListingStatus = 'draft' | 'active' | 'under_offer' | 'sold' | 'expired' | 'withdrawn';
 
+// tb-listings-detail-edit-modal-001: moved here from ListingsPage.tsx so
+// ListingDetailModal can share the same labels for the relocated
+// status-action controls.
+export const STATUS_LABEL: Record<ListingStatus, string> = {
+  draft: 'Draft',
+  active: 'Active',
+  under_offer: 'Under Offer',
+  sold: 'Sold',
+  expired: 'Expired',
+  withdrawn: 'Withdrawn',
+};
+
 // tb-listings-lifecycle-001: mirrors the backend's STATUS_TRANSITIONS in
 // listings.ts -- kept in sync by hand since this is a small, stable state
 // machine, not generated from a shared schema. sold/withdrawn are terminal
@@ -206,6 +218,27 @@ export async function createListing(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-listings-detail-edit-modal-001: edits price/listing_type/exclusivity on
+// an existing listing -- none of these were changeable post-creation before
+// this. Independent of a status transition; shares the same PATCH route as
+// updateListingStatus (the backend accepts either or both in one request),
+// but this helper never sends a status field.
+export async function updateListingFields(
+  accessToken: string,
+  listingId: string,
+  fields: Partial<Pick<Listing, 'listing_type' | 'price' | 'exclusivity'>>,
+): Promise<Listing> {
+  const response = await fetch(`${BACKEND_URL}/listings/${listingId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(fields),
   });
   return parseJsonOrThrow(response);
 }

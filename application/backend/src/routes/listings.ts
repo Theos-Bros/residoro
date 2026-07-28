@@ -77,6 +77,11 @@ type UpdateListingStatusBody = {
   authority_starts_at?: string;
   authority_expires_at?: string | null;
   buyer_contact_id?: string;
+  // tb-listings-detail-edit-modal-001: field edits on an existing listing --
+  // independent of a status transition, so a PATCH can carry either or both.
+  listing_type?: string;
+  price?: number;
+  exclusivity?: string;
 };
 
 type UpdatePropertyVerificationBody = {
@@ -684,10 +689,41 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not refresh listing statuses' });
       }
 
-      const { status, authority_starts_at, authority_expires_at, buyer_contact_id } = request.body ?? {};
+      const {
+        status,
+        authority_starts_at,
+        authority_expires_at,
+        buyer_contact_id,
+        listing_type,
+        price,
+        exclusivity,
+      } = request.body ?? {};
 
-      if (!status || !STATUSES.includes(status as (typeof STATUSES)[number])) {
+      // tb-listings-detail-edit-modal-001: status is no longer required on
+      // every PATCH -- a request can carry a pure field edit
+      // (listing_type/price/exclusivity), a status transition, or both.
+      if (
+        status === undefined &&
+        listing_type === undefined &&
+        price === undefined &&
+        exclusivity === undefined
+      ) {
+        return reply.status(400).send({
+          error: 'At least one of status, listing_type, price, or exclusivity is required',
+        });
+      }
+
+      if (status !== undefined && !STATUSES.includes(status as (typeof STATUSES)[number])) {
         return reply.status(400).send({ error: `status must be one of: ${STATUSES.join(', ')}` });
+      }
+      if (listing_type !== undefined && !LISTING_TYPES.includes(listing_type as (typeof LISTING_TYPES)[number])) {
+        return reply.status(400).send({ error: "listing_type must be 'sale' or 'rent'" });
+      }
+      if (price !== undefined && (typeof price !== 'number' || !Number.isFinite(price) || price <= 0)) {
+        return reply.status(400).send({ error: 'price must be a positive number' });
+      }
+      if (exclusivity !== undefined && !EXCLUSIVITY_VALUES.includes(exclusivity as (typeof EXCLUSIVITY_VALUES)[number])) {
+        return reply.status(400).send({ error: "exclusivity must be 'exclusive' or 'open'" });
       }
 
       // tb-crm-buyer-001: sold is terminal (STATUS_TRANSITIONS.sold = []), so this
@@ -724,11 +760,13 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Listing not found in your workspace' });
       }
 
-      const legalNext = STATUS_TRANSITIONS[current.status] ?? [];
-      if (!legalNext.includes(status)) {
-        return reply
-          .status(400)
-          .send({ error: `Cannot move a listing from '${current.status}' to '${status}'` });
+      if (status !== undefined) {
+        const legalNext = STATUS_TRANSITIONS[current.status] ?? [];
+        if (!legalNext.includes(status)) {
+          return reply
+            .status(400)
+            .send({ error: `Cannot move a listing from '${current.status}' to '${status}'` });
+        }
       }
 
       if (status === 'sold') {
@@ -789,14 +827,17 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       const { data, error } = await supabase
         .from('listings')
         .update({
-          status,
+          ...(status !== undefined ? { status } : {}),
           ...(startsAt ? { authority_starts_at: startsAt.toISOString() } : {}),
           ...(expiresAt !== undefined ? { authority_expires_at: expiresAt?.toISOString() ?? null } : {}),
           ...(status === 'sold' ? { buyer_contact_id } : {}),
+          ...(listing_type !== undefined ? { listing_type } : {}),
+          ...(price !== undefined ? { price } : {}),
+          ...(exclusivity !== undefined ? { exclusivity } : {}),
         })
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .select('id, property_id, status, buyer_contact_id')
+        .select('id, property_id, status, buyer_contact_id, listing_type, price, exclusivity')
         .maybeSingle();
 
       if (error) {

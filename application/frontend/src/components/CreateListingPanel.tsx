@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { createListing } from '@/lib/listingsApi';
+import { createListing, updateListingFields, type Listing } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,16 @@ type Props = {
   initialPrice?: number | null;
   initialPriceCurrency?: string;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
+  // tb-listings-detail-edit-modal-001: when present, the form edits this
+  // existing listing's type/price/exclusivity (via updateListingFields)
+  // instead of creating a new one. Authority dates aren't editable here --
+  // that's still the separate renewal flow, relocated but unchanged, in
+  // ListingDetailModal.
+  editingListing?: Listing;
+  // When rendered inside another FloatingPanel consumer (ListingDetailModal),
+  // skip this component's own FloatingPanel wrapper -- only the form itself.
+  embedded?: boolean;
 };
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
@@ -26,17 +35,29 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // tb-listings-lifecycle-001 (UX follow-up): renders inside a FloatingPanel
 // (bottom-right, Messenger/Gmail-compose style) instead of a full-page route
 // -- propertyId now comes from a prop, not useParams, and success closes the
-// panel via onCreated() instead of navigating away.
+// panel via onSaved() instead of navigating away.
 // tb-listings-autofill-from-property-001: price seeds from the property's own
 // price on file (passed in as initialPrice), falling back to blank when the
 // property has none -- still a normal editable field either way. Currency
 // isn't handled here: createListing's payload has no currency field today,
 // so initialPriceCurrency is only accepted for forward-compatibility and
 // currently unused (see listingsApi.ts's createListing input type).
-export function CreateListingPanel({ session, propertyId, propertyTitle, initialPrice, onClose, onCreated }: Props) {
-  const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
-  const [price, setPrice] = useState(initialPrice != null ? String(initialPrice) : '');
-  const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
+export function CreateListingPanel({
+  session,
+  propertyId,
+  propertyTitle,
+  initialPrice,
+  onClose,
+  onSaved,
+  editingListing,
+  embedded,
+}: Props) {
+  const isEditing = editingListing !== undefined;
+  const [listingType, setListingType] = useState<'sale' | 'rent'>(editingListing?.listing_type ?? 'sale');
+  const [price, setPrice] = useState(
+    editingListing ? String(editingListing.price) : initialPrice != null ? String(initialPrice) : '',
+  );
+  const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>(editingListing?.exclusivity ?? 'open');
   const [authorityStartsAt, setAuthorityStartsAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [authorityExpiresAt, setAuthorityExpiresAt] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -54,15 +75,23 @@ export function CreateListingPanel({ session, propertyId, propertyTitle, initial
 
     setSubmitting(true);
     try {
-      await createListing(session.access_token, {
-        property_id: propertyId,
-        listing_type: listingType,
-        price: numericPrice,
-        exclusivity,
-        authority_starts_at: authorityStartsAt ? new Date(authorityStartsAt).toISOString() : undefined,
-        authority_expires_at: authorityExpiresAt ? new Date(authorityExpiresAt).toISOString() : null,
-      });
-      onCreated();
+      if (isEditing) {
+        await updateListingFields(session.access_token, editingListing.id, {
+          listing_type: listingType,
+          price: numericPrice,
+          exclusivity,
+        });
+      } else {
+        await createListing(session.access_token, {
+          property_id: propertyId,
+          listing_type: listingType,
+          price: numericPrice,
+          exclusivity,
+          authority_starts_at: authorityStartsAt ? new Date(authorityStartsAt).toISOString() : undefined,
+          authority_expires_at: authorityExpiresAt ? new Date(authorityExpiresAt).toISOString() : null,
+        });
+      }
+      onSaved();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -70,8 +99,7 @@ export function CreateListingPanel({ session, propertyId, propertyTitle, initial
     }
   }
 
-  return (
-    <FloatingPanel title="Create listing" documentTitle={`${propertyTitle} · Residoro`} onClose={onClose}>
+  const form = (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="listing_type">Listing type</Label>
@@ -109,29 +137,40 @@ export function CreateListingPanel({ session, propertyId, propertyTitle, initial
             <option value="exclusive">Exclusive</option>
           </select>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
-          <Input
-            id="authority_starts_at"
-            type="date"
-            value={authorityStartsAt}
-            onChange={(e) => setAuthorityStartsAt(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="authority_expires_at">Authority to Sell/Lease ends (optional)</Label>
-          <Input
-            id="authority_expires_at"
-            type="date"
-            value={authorityExpiresAt}
-            onChange={(e) => setAuthorityExpiresAt(e.target.value)}
-          />
-        </div>
+        {!isEditing && (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
+              <Input
+                id="authority_starts_at"
+                type="date"
+                value={authorityStartsAt}
+                onChange={(e) => setAuthorityStartsAt(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="authority_expires_at">Authority to Sell/Lease ends (optional)</Label>
+              <Input
+                id="authority_expires_at"
+                type="date"
+                value={authorityExpiresAt}
+                onChange={(e) => setAuthorityExpiresAt(e.target.value)}
+              />
+            </div>
+          </>
+        )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit" disabled={submitting}>
-          {submitting ? 'Creating…' : 'Create listing'}
+          {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Create listing'}
         </Button>
       </form>
+  );
+
+  if (embedded) return form;
+
+  return (
+    <FloatingPanel title={isEditing ? 'Edit listing' : 'Create listing'} documentTitle={`${propertyTitle} · Residoro`} onClose={onClose}>
+      {form}
     </FloatingPanel>
   );
 }
