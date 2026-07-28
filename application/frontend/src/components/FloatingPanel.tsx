@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Minus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -27,24 +27,23 @@ type Props = {
 // does NOT reverse the "one at a time" convention above, and does NOT persist
 // across page navigation (the panel still fully unmounts on route change,
 // collapsed or not).
+//
+// Also per explicit user decision: clicking outside the panel no longer
+// closes it -- the panel persists through outside clicks, same as the
+// collapsed badge already did. Minimizing (topbar or the minimize button) and
+// closing (the X button) are now the only ways to change state; Escape still
+// closes, matching a conventional dialog-dismiss key even though outside-click
+// no longer does the equivalent pointer gesture.
 export function FloatingPanel({ title, documentTitle, onClose, children, className }: Props) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (collapsed) return;
-    function handlePointerDown(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
     }
-    document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose, collapsed]);
@@ -75,7 +74,6 @@ export function FloatingPanel({ title, documentTitle, onClose, children, classNa
         </button>
       )}
       <div
-        ref={panelRef}
         role="dialog"
         aria-label={title}
         className={cn(
