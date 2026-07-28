@@ -22,7 +22,11 @@ export type Task = {
 
 export type TaskAssignee = { id: string; full_name: string; handle: string | null };
 
-export type TaskRoutingRule = { task_type: string; default_assignee_id: string | null };
+export type TaskRoutingRule = {
+  task_type: string;
+  default_assignee_id: string | null;
+  assignee_role: 'admin' | null;
+};
 
 export type TaskRoutingSettings = {
   task_types: string[];
@@ -129,12 +133,17 @@ export async function fetchTaskRoutingSettings(accessToken: string): Promise<Tas
 export async function updateTaskRoutingSetting(
   accessToken: string,
   taskType: string,
-  defaultAssigneeId: string | null,
+  routing: { defaultAssigneeId: string | null } | { assigneeRole: 'admin' },
 ): Promise<TaskRoutingRule & { can_edit: boolean }> {
+  const body =
+    'assigneeRole' in routing
+      ? { task_type: taskType, assignee_role: routing.assigneeRole }
+      : { task_type: taskType, default_assignee_id: routing.defaultAssigneeId };
+
   const response = await fetch(`${BACKEND_URL}/settings/tasks`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ task_type: taskType, default_assignee_id: defaultAssigneeId }),
+    body: JSON.stringify(body),
   });
   return parseJsonOrThrow(response);
 }

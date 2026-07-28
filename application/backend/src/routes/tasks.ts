@@ -1,6 +1,42 @@
 import type { FastifyInstance } from 'fastify';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { canEditSetting } from '../lib/settingsDelegation.js';
+
+// tb-buyer-leads-stage-tasks-001: shared by POST /tasks (below) and
+// stageTaskGeneration.ts's stage-change trigger, so both routes' notion of
+// "what does this task_type's default routing resolve to" stays identical.
+// assignee_role = 'admin' resolves to the tenant's single admin profile,
+// deterministic because tb-brokerage-permissions-admin-uniqueness-001
+// guarantees exactly one admin-role profile per tenant.
+export async function resolveRoutedAssignee(
+  supabase: SupabaseClient,
+  tenantId: string,
+  taskType: string,
+): Promise<string | null> {
+  const { data: routing, error: routingError } = await supabase
+    .from('workspace_task_routing_settings')
+    .select('default_assignee_id, assignee_role')
+    .eq('tenant_id', tenantId)
+    .eq('task_type', taskType)
+    .maybeSingle<{ default_assignee_id: string | null; assignee_role: 'admin' | null }>();
+
+  if (routingError) throw routingError;
+  if (!routing) return null;
+
+  if (routing.assignee_role === 'admin') {
+    const { data: admin, error: adminError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('role', 'admin')
+      .maybeSingle<{ id: string }>();
+    if (adminError) throw adminError;
+    return admin?.id ?? null;
+  }
+
+  return routing.default_assignee_id ?? null;
+}
 
 const STATUSES = ['open', 'in_progress', 'done'] as const;
 
@@ -48,7 +84,11 @@ type UpdateTaskBody = {
   task_type?: string;
 };
 
-type RoutingSettingsBody = { task_type?: string; default_assignee_id?: string | null };
+type RoutingSettingsBody = {
+  task_type?: string;
+  default_assignee_id?: string | null;
+  assignee_role?: 'admin' | null;
+};
 
 // tb-tasks-crud-001: TB1 of cap-tasks-001 -- task records, full CRUD,
 // manual/routed assignment, and the 'tasks' Settings sub-section that
@@ -120,20 +160,15 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     // tb-tasks-crud-001 End-to-End Flow step 1: no explicit assignee ->
     // look up this tenant's default routing for the task_type. No row for
     // that task_type means "no default" -- the task is created unassigned,
-    // not an error.
+    // not an error. tb-buyer-leads-stage-tasks-001 extended this lookup to
+    // also resolve a role-based default ('admin').
     if (!resolvedAssigneeId) {
-      const { data: routing, error: routingError } = await supabase
-        .from('workspace_task_routing_settings')
-        .select('default_assignee_id')
-        .eq('tenant_id', request.user!.tenantId)
-        .eq('task_type', resolvedTaskType)
-        .maybeSingle<{ default_assignee_id: string | null }>();
-
-      if (routingError) {
+      try {
+        resolvedAssigneeId = await resolveRoutedAssignee(supabase, request.user!.tenantId, resolvedTaskType);
+      } catch (routingError) {
         request.log.error(routingError);
         return reply.status(500).send({ error: 'Could not look up routing settings' });
       }
-      resolvedAssigneeId = routing?.default_assignee_id ?? null;
     }
 
     const { data, error } = await supabase
@@ -246,9 +281,9 @@ export async function registerTasksRoutes(app: FastifyInstance) {
 
     const { data: rules, error: rulesError } = await supabase
       .from('workspace_task_routing_settings')
-      .select('task_type, default_assignee_id')
+      .select('task_type, default_assignee_id, assignee_role')
       .eq('tenant_id', tenantId)
-      .returns<{ task_type: string; default_assignee_id: string | null }[]>();
+      .returns<{ task_type: string; default_assignee_id: string | null; assignee_role: 'admin' | null }[]>();
 
     if (rulesError) {
       request.log.error(rulesError);
@@ -287,18 +322,32 @@ export async function registerTasksRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only an admin or a delegated member can edit task routing settings' });
     }
 
-    const { task_type, default_assignee_id } = request.body ?? {};
+    const { task_type, default_assignee_id, assignee_role } = request.body ?? {};
     if (!task_type || !task_type.trim()) {
       return reply.status(400).send({ error: 'task_type is required' });
     }
+    if (default_assignee_id && assignee_role) {
+      return reply.status(400).send({ error: 'default_assignee_id and assignee_role cannot both be given' });
+    }
+    if (assignee_role && assignee_role !== 'admin') {
+      return reply.status(400).send({ error: "assignee_role must be 'admin'" });
+    }
 
+    // Explicitly null out whichever field wasn't given, so switching a rule
+    // from "person" to "the admin" (or back) fully replaces the prior
+    // default rather than leaving a stale value in the unused column.
     const { data, error } = await supabase
       .from('workspace_task_routing_settings')
       .upsert(
-        { tenant_id: tenantId, task_type: task_type.trim(), default_assignee_id: default_assignee_id ?? null },
+        {
+          tenant_id: tenantId,
+          task_type: task_type.trim(),
+          default_assignee_id: assignee_role ? null : (default_assignee_id ?? null),
+          assignee_role: assignee_role ?? null,
+        },
         { onConflict: 'tenant_id,task_type' },
       )
-      .select('task_type, default_assignee_id')
+      .select('task_type, default_assignee_id, assignee_role')
       .single();
 
     if (error) {

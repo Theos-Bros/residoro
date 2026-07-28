@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { canEditSetting } from '../lib/settingsDelegation.js';
+import { createStageChangeTask } from '../lib/stageTaskGeneration.js';
 import {
   scoreListing,
   TOGGLE_FIELDS,
@@ -279,7 +280,8 @@ export async function registerMatchingRoutes(app: FastifyInstance) {
         // bumps a fresh/stalled Lead into 'searching'. Leaves every other
         // stage untouched -- a Lead already past this point (options_sent
         // and beyond) isn't pulled backward by running another search.
-        if (lead.stage === 'registered' || lead.stage === 'stalled') {
+        const stageChanged = lead.stage === 'registered' || lead.stage === 'stalled';
+        if (stageChanged) {
           updateFields.stage = 'searching';
         }
 
@@ -288,6 +290,16 @@ export async function registerMatchingRoutes(app: FastifyInstance) {
           .update(updateFields)
           .eq('id', lead.id)
           .eq('tenant_id', request.user!.tenantId);
+
+        // tb-buyer-leads-stage-tasks-001: fire-and-log, doesn't fail the
+        // search response that already succeeded.
+        if (stageChanged) {
+          try {
+            await createStageChangeTask(supabase, request.user!.tenantId, request.user!.id, lead.id, 'searching');
+          } catch (taskError) {
+            request.log.error(taskError, 'Could not create stage-change task');
+          }
+        }
 
         return { results };
       } catch (err) {

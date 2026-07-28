@@ -16,6 +16,13 @@ type Props = {
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
 
+// tb-buyer-leads-stage-tasks-001: a sentinel option in the same dropdown,
+// alongside "Unassigned" and each specific person -- routes to whoever holds
+// the tenant's admin role (assignee_role='admin') rather than one hardcoded
+// person. Encoded as a value the select's onChange can distinguish from a
+// real assignee id.
+const ADMIN_ROLE_VALUE = '__admin__';
+
 // tb-tasks-crud-001: Settings' "Tasks" sub-section -- one row per known
 // task_type (in use, or already routed) with a default-assignee picker,
 // following MatchingSettingsPanel/PerformanceSettingsPanel's exact
@@ -37,7 +44,12 @@ export function TaskRoutingSettingsPanel({ session }: Props) {
       .then(([settings, assigneesResult]) => {
         setTaskTypes(settings.task_types);
         setDefaults(
-          Object.fromEntries(settings.routing_rules.map((r) => [r.task_type, r.default_assignee_id ?? ''])),
+          Object.fromEntries(
+            settings.routing_rules.map((r) => [
+              r.task_type,
+              r.assignee_role === 'admin' ? ADMIN_ROLE_VALUE : (r.default_assignee_id ?? ''),
+            ]),
+          ),
         );
         setCanEdit(settings.can_edit);
         setAssignees(assigneesResult.members);
@@ -48,12 +60,16 @@ export function TaskRoutingSettingsPanel({ session }: Props) {
 
   useEffect(reload, [session.access_token]);
 
-  async function handleChange(taskType: string, assigneeId: string) {
+  async function handleChange(taskType: string, value: string) {
     setError(null);
     setPendingKey(taskType);
     try {
-      await updateTaskRoutingSetting(session.access_token, taskType, assigneeId || null);
-      setDefaults((prev) => ({ ...prev, [taskType]: assigneeId }));
+      await updateTaskRoutingSetting(
+        session.access_token,
+        taskType,
+        value === ADMIN_ROLE_VALUE ? { assigneeRole: 'admin' } : { defaultAssigneeId: value || null },
+      );
+      setDefaults((prev) => ({ ...prev, [taskType]: value }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -71,7 +87,7 @@ export function TaskRoutingSettingsPanel({ session }: Props) {
     setError(null);
     setPendingKey(trimmed);
     try {
-      await updateTaskRoutingSetting(session.access_token, trimmed, null);
+      await updateTaskRoutingSetting(session.access_token, trimmed, { defaultAssigneeId: null });
       setTaskTypes((prev) => [...prev, trimmed].sort());
       setDefaults((prev) => ({ ...prev, [trimmed]: '' }));
       setNewTaskType('');
@@ -126,6 +142,7 @@ export function TaskRoutingSettingsPanel({ session }: Props) {
                       onChange={(e) => handleChange(taskType, e.target.value)}
                     >
                       <option value="">Unassigned</option>
+                      <option value={ADMIN_ROLE_VALUE}>The tenant's admin</option>
                       {assignees.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.full_name}

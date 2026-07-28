@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
+import { createStageChangeTask } from '../lib/stageTaskGeneration.js';
 
 const STAGES = [
   'registered',
@@ -211,10 +212,27 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: validationError });
       }
 
+      // tb-buyer-leads-stage-tasks-001: need the pre-update stage to tell a
+      // real change from a no-op PATCH that sets stage to its current value.
+      let priorStage: string | undefined;
       if (stage !== undefined) {
         if (!STAGES.includes(stage as (typeof STAGES)[number])) {
           return reply.status(400).send({ error: `stage must be one of: ${STAGES.join(', ')}` });
         }
+        const { data: current, error: currentError } = await supabase
+          .from('buyer_requirements')
+          .select('stage')
+          .eq('id', request.params.id)
+          .eq('tenant_id', request.user!.tenantId)
+          .maybeSingle<{ stage: string }>();
+        if (currentError) {
+          request.log.error(currentError);
+          return reply.status(500).send({ error: 'Could not load the lead' });
+        }
+        if (!current) {
+          return reply.status(404).send({ error: 'Lead not found in your workspace' });
+        }
+        priorStage = current.stage;
         updateFields.stage = stage;
       }
 
@@ -233,6 +251,18 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
       if (!data) {
         return reply.status(404).send({ error: 'Lead not found in your workspace' });
       }
+
+      // tb-buyer-leads-stage-tasks-001: fire-and-log, doesn't fail the
+      // request that already successfully changed stage -- the task is a
+      // side effect of the stage change, not a precondition for it.
+      if (stage !== undefined && priorStage !== undefined && priorStage !== stage) {
+        try {
+          await createStageChangeTask(supabase, request.user!.tenantId, request.user!.id, data.id, stage);
+        } catch (taskError) {
+          request.log.error(taskError, 'Could not create stage-change task');
+        }
+      }
+
       return data;
     },
   );
@@ -265,10 +295,10 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
 
       const { data: lead, error: leadError } = await supabase
         .from('buyer_requirements')
-        .select('id')
+        .select('id, stage')
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .maybeSingle();
+        .maybeSingle<{ id: string; stage: string }>();
 
       if (leadError) {
         request.log.error(leadError);
@@ -360,6 +390,14 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Options recorded, but could not update the lead stage' });
       }
 
+      if (lead.stage !== 'options_sent') {
+        try {
+          await createStageChangeTask(supabase, request.user!.tenantId, request.user!.id, lead.id, 'options_sent');
+        } catch (taskError) {
+          request.log.error(taskError, 'Could not create stage-change task');
+        }
+      }
+
       return reply.status(201).send({ buyer_requirement: updated, matches: matches ?? [] });
     },
   );
@@ -394,6 +432,21 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'listing_id was not sent as an option to this lead' });
       }
 
+      const { data: before, error: beforeError } = await supabase
+        .from('buyer_requirements')
+        .select('stage')
+        .eq('id', request.params.id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle<{ stage: string }>();
+
+      if (beforeError) {
+        request.log.error(beforeError);
+        return reply.status(500).send({ error: 'Could not load the lead' });
+      }
+      if (!before) {
+        return reply.status(404).send({ error: 'Lead not found in your workspace' });
+      }
+
       const { data, error } = await supabase
         .from('buyer_requirements')
         .update({ won_listing_id: listing_id, stage: 'won' })
@@ -409,6 +462,15 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
       if (!data) {
         return reply.status(404).send({ error: 'Lead not found in your workspace' });
       }
+
+      if (before.stage !== 'won') {
+        try {
+          await createStageChangeTask(supabase, request.user!.tenantId, request.user!.id, request.params.id, 'won');
+        } catch (taskError) {
+          request.log.error(taskError, 'Could not create stage-change task');
+        }
+      }
+
       return data;
     },
   );
