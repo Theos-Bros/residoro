@@ -73,9 +73,22 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background">
         <div className="mx-auto flex h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6">
-          <Link to="/properties" className="text-sm font-semibold tracking-tight">
-            Residoro
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/properties" className="text-sm font-semibold tracking-tight">
+              Residoro
+            </Link>
+            {workspaceStatus && (
+              // tb-design-system-role-badge-001: workspaceStatus.role is already fetched via
+              // useWorkspaceStatus above -- no new request. profiles.role's real value set
+              // reaching this route is 'admin' | 'member' (see platform_foundation.sql's
+              // profiles_role_check); 'operator' exists as a third DB value but requireAuth
+              // (which /me/workspace-status runs behind) rejects operators outright since they
+              // have no tenant_id, so this component never sees 'operator' in practice.
+              <span className="text-xs text-muted-foreground">
+                {workspaceStatus.role === 'admin' ? 'Admin' : 'Member'}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted-foreground sm:inline">{session.user.email}</span>
             <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
