@@ -87,12 +87,12 @@ export function SearchPage({ session }: Props) {
     }
   }
 
-  async function handleSendAsOption(listingId: string) {
+  async function handleSendAsOption(listingId: string, score: number) {
     if (state?.sourceType !== 'lead' || !state.sourceId) return;
     setSendingId(listingId);
     setError(null);
     try {
-      await sendOptions(session.access_token, state.sourceId, [listingId]);
+      await sendOptions(session.access_token, state.sourceId, [listingId], { [listingId]: score });
       setSentIds((prev) => new Set(prev).add(listingId));
     } catch (err) {
       setError((err as Error).message);
@@ -209,7 +209,7 @@ export function SearchPage({ session }: Props) {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleSendAsOption(result.listing_id)}
+                        onClick={() => handleSendAsOption(result.listing_id, result.score)}
                         disabled={sendingId === result.listing_id || alreadySent}
                       >
                         {alreadySent ? 'Sent' : sendingId === result.listing_id ? 'Sending…' : 'Send as option'}

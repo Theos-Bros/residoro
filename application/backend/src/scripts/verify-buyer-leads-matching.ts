@@ -232,10 +232,40 @@ async function main() {
     console.log('\n--- 6. Send docket-sourced match as an option (options-sent accepts a shared, active docket listing) ---');
     const sendRes = await call(recipientToken, `/buyer-requirements/${leadId}/options-sent`, {
       method: 'POST',
-      body: JSON.stringify({ listing_ids: [sharerListingId] }),
+      body: JSON.stringify({ listing_ids: [sharerListingId], scores: { [sharerListingId!]: docketResult.score } }),
     });
     if (sendRes.status !== 201) throw new Error(`FAIL: options-sent for docket listing: ${JSON.stringify(sendRes.body)}`);
     console.log('PASS');
+
+    console.log('\n--- 6b. Birds-eye audit fix (2026-07-28): sent score is persisted, matches the search result ---');
+    const leadWithMatches = await call(recipientToken, `/buyer-requirements/${leadId}`);
+    const persistedMatch = (leadWithMatches.body.buyer_requirement_matches as any[]).find(
+      (m) => m.listing_id === sharerListingId,
+    );
+    if (!persistedMatch) throw new Error('FAIL: sent match not found on lead');
+    if (persistedMatch.score !== docketResult.score) {
+      throw new Error(`FAIL: expected persisted score=${docketResult.score}, got ${persistedMatch.score}`);
+    }
+    console.log(`PASS (persisted score=${persistedMatch.score})`);
+
+    console.log('\n--- 6c. Plain unranked send (no scores param, mirrors LeadDetailPanel) still stores null ---');
+    const unrankedLead = await call(recipientToken, '/buyer-requirements', {
+      method: 'POST',
+      body: JSON.stringify({ create_contact: { name: 'Unranked Send Buyer' }, intent: 'buy' }),
+    });
+    const unrankedSend = await call(recipientToken, `/buyer-requirements/${unrankedLead.body.id}/options-sent`, {
+      method: 'POST',
+      body: JSON.stringify({ listing_ids: [recipientOwnListingId] }),
+    });
+    if (unrankedSend.status !== 201) throw new Error(`FAIL: unranked options-sent: ${JSON.stringify(unrankedSend.body)}`);
+    const unrankedLeadAfter = await call(recipientToken, `/buyer-requirements/${unrankedLead.body.id}`);
+    const unrankedMatch = (unrankedLeadAfter.body.buyer_requirement_matches as any[]).find(
+      (m) => m.listing_id === recipientOwnListingId,
+    );
+    if (!unrankedMatch || unrankedMatch.score !== null) {
+      throw new Error(`FAIL: expected null score with no scores param, got ${JSON.stringify(unrankedMatch)}`);
+    }
+    console.log('PASS (score stayed null)');
 
     console.log('\n--- 7. Revoke the docket -> it stops appearing in search ---');
     const revoke = await call(sharerToken, `/listing-dockets/${docketId}`, { method: 'PATCH', body: JSON.stringify({ status: 'revoked' }) });

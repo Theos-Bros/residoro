@@ -106,11 +106,12 @@ export async function sendOptions(
   accessToken: string,
   id: string,
   listingIds: string[],
+  scores?: Record<string, number>,
 ): Promise<{ buyer_requirement: BuyerRequirement; matches: BuyerRequirementMatch[] }> {
   const response = await fetch(`${BACKEND_URL}/buyer-requirements/${id}/options-sent`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ listing_ids: listingIds }),
+    body: JSON.stringify({ listing_ids: listingIds, scores }),
   });
   return parseJsonOrThrow(response);
 }

@@ -51,7 +51,7 @@ type CreateLeadBody = {
 
 type UpdateLeadBody = Partial<Record<(typeof REQUIREMENT_FIELDS)[number], unknown>> & { stage?: string };
 
-type OptionsSentBody = { listing_ids?: string[] };
+type OptionsSentBody = { listing_ids?: string[]; scores?: Record<string, number> };
 type MarkWonBody = { listing_id?: string };
 
 function extractRequirementFields(body: Record<string, unknown>): Record<string, unknown> {
@@ -237,10 +237,12 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
     },
   );
 
-  // tb-buyer-leads-schema-001: plain, unranked options picker -- score stays
-  // null until tb-buyer-leads-matching-001 (TB2) populates it. Each listing_id
-  // is re-verified tenant-owned + active, same "never trust the client" as
-  // every other write route.
+  // tb-buyer-leads-schema-001: plain, unranked options picker -- no score
+  // available here, so scores[listing_id] is absent and the insert falls back
+  // to null. tb-buyer-leads-matching-001 (TB2)'s ranked Search page passes a
+  // real score per listing_id instead. Each listing_id is re-verified
+  // tenant-owned + active, same "never trust the client" as every other write
+  // route.
   //
   // tb-buyer-leads-matching-001: a listing_id not found in the caller's own
   // active inventory is also accepted if it's the source_listing_id of an
@@ -255,7 +257,7 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
     { preHandler: requireAuth },
     async (request, reply) => {
       const supabase = getScopedClient(request);
-      const { listing_ids } = request.body ?? {};
+      const { listing_ids, scores } = request.body ?? {};
 
       if (!listing_ids || !Array.isArray(listing_ids) || listing_ids.length === 0) {
         return reply.status(400).send({ error: 'listing_ids is required and must be a non-empty array' });
@@ -334,7 +336,7 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
             tenant_id: request.user!.tenantId,
             buyer_requirement_id: lead.id,
             listing_id,
-            score: null,
+            score: scores?.[listing_id] ?? null,
             created_by: request.user!.id,
           })),
         )
