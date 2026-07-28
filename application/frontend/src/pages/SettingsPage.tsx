@@ -4,6 +4,7 @@ import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { SharingTemplatesPanel } from '@/components/SharingTemplatesPanel';
 import { PerformanceSettingsPanel } from '@/components/PerformanceSettingsPanel';
 import { MatchingSettingsPanel } from '@/components/MatchingSettingsPanel';
+import { TaskRoutingSettingsPanel } from '@/components/TaskRoutingSettingsPanel';
 import { PermissionsSettingsPanel } from '@/components/PermissionsSettingsPanel';
 import { cn } from '@/lib/utils';
 
@@ -24,10 +25,15 @@ type Props = {
 // admin-only to view at all, pushed onto SECTIONS conditionally below rather
 // than living in the static array, since who-can-edit-what is an
 // admin-management concern, not something a regular member needs to see.
+//
+// tb-tasks-crud-001: fourth sub-section -- the exact extension point this
+// file's own code comment (above, dated 2026-07-27, before cap-tasks-001
+// existed) anticipated ("task/lead routing to team members").
 const BASE_SECTIONS = [
   { id: 'sharing-templates', label: 'Sharing Templates' },
   { id: 'performance', label: 'Performance' },
   { id: 'matching', label: 'Matching' },
+  { id: 'tasks', label: 'Tasks' },
 ] as const;
 const PERMISSIONS_SECTION = { id: 'permissions', label: 'Permissions' } as const;
 type SectionId = (typeof BASE_SECTIONS)[number]['id'] | typeof PERMISSIONS_SECTION.id;
@@ -61,6 +67,7 @@ export function SettingsPage({ session }: Props) {
           {activeSection === 'sharing-templates' && <SharingTemplatesPanel session={session} />}
           {activeSection === 'performance' && <PerformanceSettingsPanel session={session} />}
           {activeSection === 'matching' && <MatchingSettingsPanel session={session} />}
+          {activeSection === 'tasks' && <TaskRoutingSettingsPanel session={session} />}
           {activeSection === 'permissions' && isAdmin && <PermissionsSettingsPanel session={session} />}
         </div>
       </div>

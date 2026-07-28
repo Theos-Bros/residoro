@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { InquiryDetailPanel } from '@/components/InquiryDetailPanel';
 import { LeadDetailPanel } from '@/components/LeadDetailPanel';
 import { BroadcastModal } from '@/components/BroadcastModal';
+import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import type { BroadcastEntityType } from '@/lib/broadcastApi';
 
 type Props = {
@@ -20,6 +21,10 @@ type Props = {
 type OpenPanel =
   | { type: 'inquiry' | 'lead'; id: string | 'new' }
   | { type: 'broadcast'; entityType: BroadcastEntityType; id: string }
+  // tb-tasks-crud-001: swaps out the Lead panel (FloatingPanel is "one at a
+  // time") -- returnToLeadId lets closing this panel go back to the Lead it
+  // was opened from, rather than closing everything.
+  | { type: 'task'; taskId: string | 'new'; returnToLeadId: string }
   | null;
 
 function budgetLabel(min?: number | null, max?: number | null, currency?: string | null): string {
@@ -206,6 +211,9 @@ export function LeadsPage({ session }: Props) {
             openPanel.id !== 'new' &&
             setOpenPanel({ type: 'broadcast', entityType: 'buyer_requirement', id: openPanel.id })
           }
+          onOpenTask={(taskId) =>
+            openPanel.id !== 'new' && setOpenPanel({ type: 'task', taskId, returnToLeadId: openPanel.id })
+          }
         />
       )}
       {openPanel?.type === 'broadcast' && (
@@ -214,6 +222,16 @@ export function LeadsPage({ session }: Props) {
           entityType={openPanel.entityType}
           entityId={openPanel.id}
           onClose={() => setOpenPanel(null)}
+        />
+      )}
+      {openPanel?.type === 'task' && (
+        <TaskDetailPanel
+          session={session}
+          taskId={openPanel.taskId}
+          isAdmin={isAdmin}
+          prefillEntity={{ entityType: 'buyer_requirement', entityId: openPanel.returnToLeadId }}
+          onClose={() => setOpenPanel({ type: 'lead', id: openPanel.returnToLeadId })}
+          onSaved={() => {}}
         />
       )}
     </div>

@@ -14,6 +14,7 @@ import {
 import type { RequirementFields } from '@/lib/inquiriesApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import type { Listing } from '@/lib/listingsApi';
+import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,12 @@ type Props = {
   onSaved: () => void;
   onGoMarkSold: (listingId: string, buyerContactId: string) => void;
   onBroadcast: () => void;
+  // tb-tasks-crud-001: FloatingPanel is "one at a time" by this codebase's own
+  // convention (see FloatingPanel.tsx) -- opening a task swaps this panel out
+  // for a standalone TaskDetailPanel at the LeadsPage level (same pattern
+  // onBroadcast already uses), rather than nesting a second fixed-position
+  // panel on top of this one.
+  onOpenTask: (taskId: string | 'new') => void;
 };
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
@@ -38,7 +45,7 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // plain unscored options-sent picker, and a bookkeeping-only mark-won that
 // hands off to the existing ListingsPage sold flow rather than writing
 // listings.buyer_contact_id itself.
-export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, onGoMarkSold, onBroadcast }: Props) {
+export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, onGoMarkSold, onBroadcast, onOpenTask }: Props) {
   const navigate = useNavigate();
   const activeListings = listings.filter((l) => l.status === 'active');
   const isNew = leadId === 'new';
@@ -55,6 +62,20 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
 
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [wonListingId, setWonListingId] = useState('');
+
+  // tb-tasks-crud-001: inline task list linked to this Lead
+  // (entity_type='buyer_requirement'), plus a "New Task" action that
+  // pre-fills the link and isn't editable from this entry point.
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  function reloadTasks() {
+    if (isNew) return;
+    fetchTasks(session.access_token, { entity_type: 'buyer_requirement', entity_id: leadId })
+      .then(({ tasks }) => setTasks(tasks))
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadTasks, [isNew, leadId, session.access_token]);
 
   useEffect(() => {
     if (isNew) {
@@ -319,6 +340,32 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               <Button size="sm" onClick={() => onGoMarkSold(lead.won_listing_id!, lead.contact_id)}>
                 Mark Sold on Listings Page
               </Button>
+            </div>
+          )}
+
+          {!isNew && (
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Tasks</p>
+                <Button size="sm" variant="outline" onClick={() => onOpenTask('new')}>
+                  New Task
+                </Button>
+              </div>
+              {tasks.length === 0 && <p className="text-xs text-muted-foreground">No tasks linked to this lead.</p>}
+              {tasks.length > 0 && (
+                <ul className="space-y-1 text-sm">
+                  {tasks.map((task) => (
+                    <li
+                      key={task.id}
+                      className="flex cursor-pointer items-center justify-between text-muted-foreground hover:text-foreground"
+                      onClick={() => onOpenTask(task.id)}
+                    >
+                      <span>{task.title}</span>
+                      <span className="text-xs">{task.status.replace(/_/g, ' ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
