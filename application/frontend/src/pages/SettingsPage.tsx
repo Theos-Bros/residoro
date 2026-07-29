@@ -6,6 +6,7 @@ import { PerformanceSettingsPanel } from '@/components/PerformanceSettingsPanel'
 import { MatchingSettingsPanel } from '@/components/MatchingSettingsPanel';
 import { TaskRoutingSettingsPanel } from '@/components/TaskRoutingSettingsPanel';
 import { PermissionsSettingsPanel } from '@/components/PermissionsSettingsPanel';
+import { TeamSettingsPanel } from '@/components/TeamSettingsPanel';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -29,6 +30,10 @@ type Props = {
 // tb-tasks-crud-001: fourth sub-section -- the exact extension point this
 // file's own code comment (above, dated 2026-07-27, before cap-tasks-001
 // existed) anticipated ("task/lead routing to team members").
+//
+// tb-client-lifecycle-member-invite-001: fifth sub-section, and the second
+// (after Permissions) that's admin-only to view at all -- who's-on-the-team
+// is the same admin-management concern as who-can-edit-what.
 const BASE_SECTIONS = [
   { id: 'sharing-templates', label: 'Sharing Templates' },
   { id: 'performance', label: 'Performance' },
@@ -36,13 +41,14 @@ const BASE_SECTIONS = [
   { id: 'tasks', label: 'Tasks' },
 ] as const;
 const PERMISSIONS_SECTION = { id: 'permissions', label: 'Permissions' } as const;
-type SectionId = (typeof BASE_SECTIONS)[number]['id'] | typeof PERMISSIONS_SECTION.id;
+const TEAM_SECTION = { id: 'team', label: 'Team' } as const;
+type SectionId = (typeof BASE_SECTIONS)[number]['id'] | typeof PERMISSIONS_SECTION.id | typeof TEAM_SECTION.id;
 
 export function SettingsPage({ session }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>('sharing-templates');
   const { status } = useWorkspaceStatus(session);
   const isAdmin = status?.role === 'admin';
-  const sections = isAdmin ? [...BASE_SECTIONS, PERMISSIONS_SECTION] : BASE_SECTIONS;
+  const sections = isAdmin ? [...BASE_SECTIONS, PERMISSIONS_SECTION, TEAM_SECTION] : BASE_SECTIONS;
 
   return (
     <div className="space-y-6">
@@ -69,6 +75,7 @@ export function SettingsPage({ session }: Props) {
           {activeSection === 'matching' && <MatchingSettingsPanel session={session} />}
           {activeSection === 'tasks' && <TaskRoutingSettingsPanel session={session} />}
           {activeSection === 'permissions' && isAdmin && <PermissionsSettingsPanel session={session} />}
+          {activeSection === 'team' && isAdmin && <TeamSettingsPanel session={session} />}
         </div>
       </div>
     </div>
