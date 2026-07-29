@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchInquiries, type Inquiry } from '@/lib/inquiriesApi';
-import { fetchBuyerRequirements, type BuyerRequirement } from '@/lib/buyerRequirementsApi';
+import {
+  fetchBuyerRequirements,
+  updateBuyerRequirement,
+  LEAD_STAGES,
+  type BuyerRequirement,
+  type LeadStage,
+} from '@/lib/buyerRequirementsApi';
 import { fetchListings, type Listing } from '@/lib/listingsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
@@ -83,6 +89,22 @@ export function LeadsPage({ session }: Props) {
   const activeLeads = leads?.filter((lead) => lead.stage !== 'won') ?? [];
   const wonLeads = leads?.filter((lead) => lead.stage === 'won') ?? [];
 
+  const [savingStageId, setSavingStageId] = useState<string | null>(null);
+
+  // Inline stage change: reuses the same PATCH LeadDetailPanel's own Stage
+  // dropdown calls (updateBuyerRequirement with just { stage }), so the two
+  // stay behaviorally identical. Reloads the full leads list on success
+  // rather than patching local state, since a stage change into/out of
+  // 'won' needs the row to move between the Leads/Won sections above.
+  function handleInlineStageChange(leadId: string, stage: LeadStage) {
+    setSavingStageId(leadId);
+    setError(null);
+    updateBuyerRequirement(session.access_token, leadId, { stage })
+      .then(() => reloadLeads())
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setSavingStageId(null));
+  }
+
   function renderLeadsTable(rows: BuyerRequirement[]) {
     return (
       <div className="overflow-x-auto rounded-lg border">
@@ -105,10 +127,19 @@ export function LeadsPage({ session }: Props) {
                 onClick={() => setOpenPanel({ type: 'lead', id: lead.id })}
               >
                 <TableCell className="font-medium">{lead.contacts?.name ?? '—'}</TableCell>
-                <TableCell>
-                  <Badge variant={lead.stage === 'won' ? 'default' : 'secondary'}>
-                    {lead.stage.replace(/_/g, ' ')}
-                  </Badge>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                    value={lead.stage}
+                    disabled={savingStageId === lead.id}
+                    onChange={(e) => handleInlineStageChange(lead.id, e.target.value as LeadStage)}
+                  >
+                    {LEAD_STAGES.map((s) => (
+                      <option key={s} value={s}>
+                        {s.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
                 </TableCell>
                 <TableCell className="capitalize">{lead.intent}</TableCell>
                 <TableCell>{budgetLabel(lead.budget_min, lead.budget_max, lead.budget_currency)}</TableCell>
