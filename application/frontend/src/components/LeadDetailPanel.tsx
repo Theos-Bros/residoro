@@ -89,7 +89,34 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
       .then((found) => {
         if (cancelled) return;
         setLead(found);
-        setRequirement(found);
+        // Bug fix: `found` is a BuyerRequirement, which is RequirementFields
+        // plus stage/won_listing_id/etc. Assigning it wholesale into
+        // `requirement` silently smuggled those extra fields along for the
+        // ride. `stage` in particular has its own dedicated save path
+        // (handleStageChange, via the Stage dropdown below) -- if `requirement`
+        // also carried a frozen copy of the stage from page-load time,
+        // clicking Save later would PATCH that stale value and silently
+        // revert any stage change made via the dropdown in between. Picking
+        // only the real RequirementFields keys here keeps requirement's PATCH
+        // payload scoped to what this form actually edits.
+        setRequirement({
+          intent: found.intent,
+          property_type: found.property_type,
+          budget_min: found.budget_min,
+          budget_max: found.budget_max,
+          budget_currency: found.budget_currency,
+          target_city: found.target_city,
+          target_province: found.target_province,
+          floor_area_sqm_min: found.floor_area_sqm_min,
+          lot_area_sqm_min: found.lot_area_sqm_min,
+          storeys: found.storeys,
+          bedrooms: found.bedrooms,
+          bathrooms: found.bathrooms,
+          household_adults: found.household_adults,
+          household_kids: found.household_kids,
+          household_pets: found.household_pets,
+          notes: found.notes,
+        });
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
