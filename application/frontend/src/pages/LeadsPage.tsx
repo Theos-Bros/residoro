@@ -14,6 +14,7 @@ import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InquiryDetailPanel } from '@/components/InquiryDetailPanel';
+import { QualifyInquiryModal } from '@/components/QualifyInquiryModal';
 import { LeadDetailPanel } from '@/components/LeadDetailPanel';
 import { BroadcastModal } from '@/components/BroadcastModal';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
@@ -55,6 +56,7 @@ export function LeadsPage({ session }: Props) {
   const [listings, setListings] = useState<Listing[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
+  const [qualifyingInquiry, setQualifyingInquiry] = useState<Inquiry | null>(null);
 
   function reloadInquiries() {
     fetchInquiries(session.access_token)
@@ -205,6 +207,7 @@ export function LeadsPage({ session }: Props) {
                   <TableHead>Budget</TableHead>
                   <TableHead>Target City</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -238,6 +241,26 @@ export function LeadsPage({ session }: Props) {
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
                       {new Date(inquiry.created_at).toLocaleDateString()}
                     </TableCell>
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                      {/* Button's own disabled state already grays it out
+                          (disabled:opacity-50, ui/button.tsx) but also sets
+                          disabled:pointer-events-none, which stops a native
+                          disabled <button> from showing any hover cursor at
+                          all (not even not-allowed) in most browsers. Wrapping
+                          it in a span that keeps pointer-events lets the wrapper
+                          catch the hover and render cursor-not-allowed while
+                          the button itself stays fully inert. */}
+                      <span className={inquiry.stage !== 'probing' ? 'cursor-not-allowed' : undefined}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={inquiry.stage !== 'probing'}
+                          onClick={() => setQualifyingInquiry(inquiry)}
+                        >
+                          Qualify
+                        </Button>
+                      </span>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -245,6 +268,20 @@ export function LeadsPage({ session }: Props) {
           </div>
         )}
       </section>
+
+      {qualifyingInquiry && (
+        <QualifyInquiryModal
+          session={session}
+          inquiryId={qualifyingInquiry.id}
+          buyerName={qualifyingInquiry.buyer_name ?? ''}
+          onClose={() => setQualifyingInquiry(null)}
+          onQualified={() => {
+            setQualifyingInquiry(null);
+            reloadInquiries();
+            reloadLeads();
+          }}
+        />
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
