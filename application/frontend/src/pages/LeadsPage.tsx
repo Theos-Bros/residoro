@@ -38,6 +38,8 @@ function budgetLabel(min?: number | null, max?: number | null, currency?: string
 // spam-tolerant pre-qualification pen) and LeadsPipeline below (the real
 // Leads pipeline) -- both plain filterable tables, matching this codebase's
 // existing list conventions (see ListingsPage), not a drag-drop kanban board.
+// tb-listings-status-ladder-001: the Leads section itself is split further,
+// into an active-pipeline table and a separate Won table below it.
 export function LeadsPage({ session }: Props) {
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
@@ -73,6 +75,53 @@ export function LeadsPage({ session }: Props) {
   function handleGoMarkSold(listingId: string, buyerContactId: string) {
     setOpenPanel(null);
     navigate('/listings', { state: { prefillListingId: listingId, prefillBuyerContactId: buyerContactId } });
+  }
+
+  // tb-listings-status-ladder-001: split the flat `leads` array into the
+  // active pipeline and already-won leads for two separate page sections --
+  // a client-side partition of data already fetched, no new API call.
+  const activeLeads = leads?.filter((lead) => lead.stage !== 'won') ?? [];
+  const wonLeads = leads?.filter((lead) => lead.stage === 'won') ?? [];
+
+  function renderLeadsTable(rows: BuyerRequirement[]) {
+    return (
+      <div className="overflow-x-auto rounded-lg border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Contact</TableHead>
+              <TableHead>Stage</TableHead>
+              <TableHead>Intent</TableHead>
+              <TableHead>Budget</TableHead>
+              <TableHead>Target City</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((lead) => (
+              <TableRow
+                key={lead.id}
+                className="cursor-pointer"
+                onClick={() => setOpenPanel({ type: 'lead', id: lead.id })}
+              >
+                <TableCell className="font-medium">{lead.contacts?.name ?? '—'}</TableCell>
+                <TableCell>
+                  <Badge variant={lead.stage === 'won' ? 'default' : 'secondary'}>
+                    {lead.stage.replace(/_/g, ' ')}
+                  </Badge>
+                </TableCell>
+                <TableCell className="capitalize">{lead.intent}</TableCell>
+                <TableCell>{budgetLabel(lead.budget_min, lead.budget_max, lead.budget_currency)}</TableCell>
+                <TableCell>{lead.target_city ?? '—'}</TableCell>
+                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                  {new Date(lead.created_at).toLocaleDateString()}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
   }
 
   return (
@@ -143,45 +192,26 @@ export function LeadsPage({ session }: Props) {
         </div>
         {leads === null && <p className="text-sm text-muted-foreground">Loading…</p>}
         {leads?.length === 0 && <p className="text-sm text-muted-foreground">No leads yet.</p>}
-        {leads && leads.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Stage</TableHead>
-                  <TableHead>Intent</TableHead>
-                  <TableHead>Budget</TableHead>
-                  <TableHead>Target City</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leads.map((lead) => (
-                  <TableRow
-                    key={lead.id}
-                    className="cursor-pointer"
-                    onClick={() => setOpenPanel({ type: 'lead', id: lead.id })}
-                  >
-                    <TableCell className="font-medium">{lead.contacts?.name ?? '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={lead.stage === 'won' ? 'default' : 'secondary'}>
-                        {lead.stage.replace(/_/g, ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="capitalize">{lead.intent}</TableCell>
-                    <TableCell>{budgetLabel(lead.budget_min, lead.budget_max, lead.budget_currency)}</TableCell>
-                    <TableCell>{lead.target_city ?? '—'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {new Date(lead.created_at).toLocaleDateString()}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        {leads && activeLeads.length > 0 && renderLeadsTable(activeLeads)}
+        {leads && leads.length > 0 && activeLeads.length === 0 && (
+          <p className="text-sm text-muted-foreground">No active leads — see Won below.</p>
         )}
       </section>
+
+      {/* tb-listings-status-ladder-001: backlog item #10 -- a won lead must not
+          sit in the same list as the active pipeline. Same flat-table
+          convention as above (see the comment on LeadsPage), a second
+          section, not a kanban column. Listings and leads stay decoupled --
+          this is a client-side partition of the same `leads` array by
+          `stage`, not a new coupling to listing status. */}
+      {leads && wonLeads.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium">Won</h2>
+          </div>
+          {renderLeadsTable(wonLeads)}
+        </section>
+      )}
 
       {openPanel?.type === 'inquiry' && (
         <InquiryDetailPanel

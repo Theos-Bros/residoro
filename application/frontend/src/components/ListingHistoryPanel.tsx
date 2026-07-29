@@ -17,6 +17,7 @@ const STATUS_LABEL: Record<ListingStatus, string> = {
   sold: 'Sold',
   expired: 'Expired',
   withdrawn: 'Withdrawn',
+  inactive: 'Inactive',
 };
 
 // tb-listings-lifecycle-001: "full listing history in chronological order"

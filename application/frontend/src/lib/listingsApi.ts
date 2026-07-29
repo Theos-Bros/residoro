@@ -52,7 +52,14 @@ export type Listing = {
   buyer_name: string | null;
 };
 
-export type ListingStatus = 'draft' | 'active' | 'under_offer' | 'sold' | 'expired' | 'withdrawn';
+export type ListingStatus =
+  | 'draft'
+  | 'active'
+  | 'under_offer'
+  | 'sold'
+  | 'expired'
+  | 'withdrawn'
+  | 'inactive';
 
 // tb-listings-detail-edit-modal-001: moved here from ListingsPage.tsx so
 // ListingDetailModal can share the same labels for the relocated
@@ -64,6 +71,7 @@ export const STATUS_LABEL: Record<ListingStatus, string> = {
   sold: 'Sold',
   expired: 'Expired',
   withdrawn: 'Withdrawn',
+  inactive: 'Inactive',
 };
 
 // tb-listings-lifecycle-001: mirrors the backend's STATUS_TRANSITIONS in
@@ -79,9 +87,14 @@ export const STATUS_LABEL: Record<ListingStatus, string> = {
 // ListingsPage special-cases 'expired' rows into a renewal control instead
 // (see handleRenew), since reactivating without a new authority_expires_at
 // just gets auto-re-expired on the next read.
+//
+// tb-listings-status-ladder-001: 'inactive' is a new pausable state reachable
+// from 'active' (active <-> inactive), additive alongside 'draft'. 'sold' was
+// already terminal before this change.
 export const LISTING_STATUS_TRANSITIONS: Record<ListingStatus, readonly ListingStatus[]> = {
   draft: ['active', 'withdrawn'],
-  active: ['under_offer', 'withdrawn'],
+  active: ['under_offer', 'inactive', 'withdrawn'],
+  inactive: ['active', 'withdrawn'],
   under_offer: ['sold', 'active'],
   sold: [],
   expired: ['active', 'withdrawn'],
