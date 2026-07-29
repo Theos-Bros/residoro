@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { fetchInquiries, type Inquiry } from '@/lib/inquiriesApi';
+import { fetchInquiries, updateInquiry, INQUIRY_STAGES, type Inquiry, type InquiryStage } from '@/lib/inquiriesApi';
 import {
   fetchBuyerRequirements,
   updateBuyerRequirement,
@@ -12,7 +12,6 @@ import {
 import { fetchListings, type Listing } from '@/lib/listingsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InquiryDetailPanel } from '@/components/InquiryDetailPanel';
 import { LeadDetailPanel } from '@/components/LeadDetailPanel';
@@ -101,6 +100,25 @@ export function LeadsPage({ session }: Props) {
     setError(null);
     updateBuyerRequirement(session.access_token, leadId, { stage })
       .then(() => reloadLeads())
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setSavingStageId(null));
+  }
+
+  // tb-buyer-leads-inline-stage-002: 'qualified' is deliberately excluded --
+  // InquiryDetailPanel's own comment explains why: it's reachable only
+  // through the dedicated Qualify action (which atomically creates the
+  // promoted Lead + sets promoted_lead_id), never as a raw PATCH, so an
+  // inquiry can't end up "qualified" with no promoted Lead behind it. The
+  // backend itself doesn't block a raw PATCH to 'qualified' (Decision #3, no
+  // transition graph) -- this is a UI-level guard mirroring the existing
+  // panel's, not a new backend constraint.
+  const INLINE_INQUIRY_STAGES = INQUIRY_STAGES.filter((s) => s !== 'qualified');
+
+  function handleInlineInquiryStageChange(inquiryId: string, stage: InquiryStage) {
+    setSavingStageId(inquiryId);
+    setError(null);
+    updateInquiry(session.access_token, inquiryId, { stage })
+      .then(() => reloadInquiries())
       .catch((err: Error) => setError(err.message))
       .finally(() => setSavingStageId(null));
   }
@@ -197,8 +215,22 @@ export function LeadsPage({ session }: Props) {
                     onClick={() => setOpenPanel({ type: 'inquiry', id: inquiry.id })}
                   >
                     <TableCell className="font-medium">{inquiry.buyer_name || '(no name)'}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{inquiry.stage.replace(/_/g, ' ')}</Badge>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <select
+                        className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                        value={inquiry.stage}
+                        disabled={savingStageId === inquiry.id || inquiry.stage === 'qualified'}
+                        onChange={(e) => handleInlineInquiryStageChange(inquiry.id, e.target.value as InquiryStage)}
+                      >
+                        {(inquiry.stage === 'qualified'
+                          ? [...INLINE_INQUIRY_STAGES, inquiry.stage]
+                          : INLINE_INQUIRY_STAGES
+                        ).map((s) => (
+                          <option key={s} value={s}>
+                            {s.replace(/_/g, ' ')}
+                          </option>
+                        ))}
+                      </select>
                     </TableCell>
                     <TableCell className="capitalize">{inquiry.intent ?? '—'}</TableCell>
                     <TableCell>{budgetLabel(inquiry.budget_min, inquiry.budget_max, inquiry.budget_currency)}</TableCell>

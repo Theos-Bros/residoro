@@ -74,7 +74,30 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
           buyer_address: found.buyer_address ?? '',
           source: found.source ?? '',
         });
-        setRequirement(found);
+        // tb-buyer-leads-inline-stage-002: same bug as LeadDetailPanel had --
+        // `found` is an Inquiry (RequirementFields plus stage/id/promoted_lead_id/
+        // etc.), and assigning it wholesale into `requirement` silently smuggled
+        // a frozen `stage` along. `stage` has its own dedicated save path
+        // (handleStage below); a stale copy here would let Save revert a stage
+        // change made via handleStage or the new inline Inquiries dropdown.
+        setRequirement({
+          intent: found.intent,
+          property_type: found.property_type,
+          budget_min: found.budget_min,
+          budget_max: found.budget_max,
+          budget_currency: found.budget_currency,
+          target_city: found.target_city,
+          target_province: found.target_province,
+          floor_area_sqm_min: found.floor_area_sqm_min,
+          lot_area_sqm_min: found.lot_area_sqm_min,
+          storeys: found.storeys,
+          bedrooms: found.bedrooms,
+          bathrooms: found.bathrooms,
+          household_adults: found.household_adults,
+          household_kids: found.household_kids,
+          household_pets: found.household_pets,
+          notes: found.notes,
+        });
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
