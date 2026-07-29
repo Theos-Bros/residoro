@@ -3,7 +3,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 
 const LISTING_TYPES = ['sale', 'rent'] as const;
-const STATUSES = ['draft', 'active', 'under_offer', 'sold', 'expired', 'withdrawn'] as const;
+const STATUSES = [
+  'draft',
+  'active',
+  'under_offer',
+  'sold',
+  'expired',
+  'withdrawn',
+  'inactive',
+] as const;
 const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
 
 // tb-listings-lifecycle-001: the real state machine cap-listings-001
@@ -22,9 +30,15 @@ const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
 // a legal move back out of it, but only actually escapes expiry if the PATCH
 // also supplies a new (future) authority_expires_at -- renewing without
 // fixing the date just gets auto-re-expired the next time listings are read.
+//
+// tb-listings-status-ladder-001: 'inactive' is a new pausable state reachable
+// from 'active' (active <-> inactive), additive alongside 'draft' -- not a
+// replacement for it. 'sold' was already terminal before this change; no
+// change to its transitions.
 const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
   draft: ['active', 'withdrawn'],
-  active: ['under_offer', 'withdrawn'],
+  active: ['under_offer', 'inactive', 'withdrawn'],
+  inactive: ['active', 'withdrawn'],
   under_offer: ['sold', 'active'],
   sold: [],
   expired: ['active', 'withdrawn'],
