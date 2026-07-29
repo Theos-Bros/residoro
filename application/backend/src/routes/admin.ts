@@ -72,16 +72,33 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not create the workspace' });
     }
 
-    const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(admin_email, {
-      data: { tenant_id: workspace.id },
+    // 2026-07-29 security review: tenant_id must never travel through
+    // inviteUserByEmail's `data` option -- that maps to raw_user_meta_data,
+    // the same field Supabase Auth's public POST /auth/v1/signup lets ANY
+    // caller set, which is exactly how a workspace hijack was possible.
+    // handle_new_user() now always creates an inert profile; the real
+    // assignment happens here, immediately after, keyed by the invite
+    // response's own trusted user id.
+    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(admin_email, {
       redirectTo: `${frontendUrl}/accept-invite`,
     });
 
-    if (inviteError) {
+    if (inviteError || !inviteData.user) {
       // Don't leave an orphaned, admin-less workspace behind.
       await supabaseAdmin.from('workspaces').delete().eq('id', workspace.id);
       request.log.error(inviteError);
-      return reply.status(502).send({ error: `Could not send the invite: ${inviteError.message}` });
+      return reply.status(502).send({ error: `Could not send the invite: ${inviteError?.message ?? 'unknown error'}` });
+    }
+
+    const { error: assignError } = await supabaseAdmin
+      .from('profiles')
+      .update({ tenant_id: workspace.id, role: 'admin' })
+      .eq('id', inviteData.user.id);
+
+    if (assignError) {
+      await supabaseAdmin.from('workspaces').delete().eq('id', workspace.id);
+      request.log.error(assignError);
+      return reply.status(500).send({ error: 'Could not assign the invited admin to the workspace' });
     }
 
     return { workspace_id: workspace.id, status: 'created', invite_status: 'pending' };

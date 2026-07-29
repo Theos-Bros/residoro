@@ -29,18 +29,34 @@ async function main() {
     process.exit(1);
   }
 
+  // 2026-07-29 security review: app_role must never travel through
+  // inviteUserByEmail's `data` option -- that maps to raw_user_meta_data,
+  // the same field Supabase Auth's public POST /auth/v1/signup lets ANY
+  // caller set, which is exactly how self-granting the operator role was
+  // possible. handle_new_user() now always creates an inert profile; the
+  // real role assignment happens here, immediately after, keyed by the
+  // invite response's own trusted user id.
   const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    data: { app_role: 'operator' },
     redirectTo: `${frontendUrl}/accept-invite`,
   });
 
-  if (error) {
-    console.error('Failed to invite operator:', error.message);
+  if (error || !data.user) {
+    console.error('Failed to invite operator:', error?.message ?? 'unknown error');
+    process.exit(1);
+  }
+
+  const { error: assignError } = await supabaseAdmin
+    .from('profiles')
+    .update({ role: 'operator' })
+    .eq('id', data.user.id);
+
+  if (assignError) {
+    console.error('Invited the user but failed to assign the operator role:', assignError.message);
     process.exit(1);
   }
 
   console.log(`Invited ${email} as an operator. They'll receive an email to set their password.`);
-  console.log(`auth.users id: ${data.user?.id}`);
+  console.log(`auth.users id: ${data.user.id}`);
 }
 
 main();

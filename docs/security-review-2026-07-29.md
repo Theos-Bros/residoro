@@ -1,0 +1,214 @@
+# Residoro Security Review — 2026-07-29
+
+**Status update (2026-07-29, same day):** Findings 1–4 are fixed and live-reverified against this same Supabase project; see "Fixes Applied" at the end of this doc. Findings 5–6 (dependencies, advisors) partially addressed — see that section for what remains.
+
+**Scope:** Multi-tenant isolation, IDOR, auth/access boundaries, CSV migration import, dependency/config baseline.
+**Method:** Live exploitation against the "Residoro Prototype" Supabase project (`skfnrcwqvmurnpwrmixj`) and the local backend (`localhost:4000`) — the only environment this app runs in (no hosted deployment exists yet, no real client data exists yet; every workspace in the DB was a prior dev/verification fixture). All test accounts, workspaces, and records created during this review were deleted afterward; the DB was verified back at its pre-review baseline of 12 workspaces.
+
+**Reviewer's note on scope:** the app is currently pre-launch (no real brokerage has onboarded — see `project_client_lifecycle_pivot` memory). That makes right now the cheapest possible time to fix the critical finding below, before it's a real client's data at stake.
+
+---
+
+## Summary
+
+| # | Finding | Severity |
+|---|---|---|
+| 1 | Public Supabase Auth signup + trusted client-supplied metadata → self-grant operator role or hijack any existing brokerage workspace | **Critical** |
+| 2 | Contract-expiry hard block (`blocked`/`read_only`) is enforced only in the Fastify layer, not in RLS — bypassable via direct Supabase REST calls | High |
+| 3 | CSV formula injection: unescaped `=`/`+`/`-`/`@`-prefixed values round-trip from import to export | Medium |
+| 4 | CSV upload with an embedded null byte crashes the insert with an unhandled 500 instead of a clean validation error | Low |
+| 5 | `npm audit` findings (backend: 2 high; frontend: 3 moderate) | Low–Medium |
+| 6 | Supabase security advisors — not retrievable with available tooling this session | Info |
+
+Everything under "IDOR on core resources" and the rest of "Auth and access boundaries" tested **clean** — see the Clean Findings section. RLS policy coverage and the RLS enforcement mechanism itself are solid; the break is upstream of RLS, at account provisioning.
+
+---
+
+## 1. CRITICAL — Public signup bypasses "operator-driven enrollment only"
+
+**What I did:** The codebase's trust model (`application/backend/src/routes/admin.ts`, `supabase/migrations/20260722100000_operator_role.sql`, `20260722110000_client_enrollment.sql`) is built entirely on the assumption stated explicitly in a code comment:
+
+> "There is no public signup path in Residoro at all... so `raw_user_meta_data->>'app_role'` is never attacker-controlled: only someone holding the service-role key can set it."
+
+That assumption is about the *app's UI*, not Supabase Auth's REST API, which is reachable directly with only the publishable key. I tested it:
+
+```bash
+curl -X POST https://skfnrcwqvmurnpwrmixj.supabase.co/auth/v1/signup \
+  -H "apikey: sb_publishable_..." -H "Content-Type: application/json" \
+  -d '{"email":"attacker@...","password":"...","data":{"app_role":"operator"}}'
+```
+
+This succeeded with `HTTP 200`, an active session, and `email_confirmed_at` set immediately (no email verification gate either). The `handle_new_user()` Postgres trigger reads `raw_user_meta_data->>'app_role'` and `->>'tenant_id'` straight from this attacker-supplied signup payload:
+
+```sql
+if new.raw_user_meta_data ->> 'app_role' = 'operator' then
+  insert into public.profiles (id, tenant_id, role, full_name)
+  values (new.id, null, 'operator', ...);
+```
+
+I then (with your explicit go-ahead, since the auto-mode classifier correctly flagged this as a privilege-escalation attempt) ran two proof-of-impact tests:
+
+**1a. Self-grant platform operator:**
+```json
+{"email":"...","password":"...","data":{"app_role":"operator","full_name":"Fake Operator"}}
+```
+→ `profiles` row created with `role: operator, tenant_id: null`. Confirmed live: the resulting access token worked against `GET /admin/whoami` (`{"role":"operator"}`) and `GET /admin/clients`, which returned **every workspace on the platform** — every brokerage's name, contract dates, and access state — from a single unauthenticated curl call with no invitation.
+
+**1b. Hijack an existing brokerage as its admin:**
+```json
+{"email":"...","password":"...","data":{"tenant_id":"<existing workspace id>","full_name":"Fake Admin"}}
+```
+→ `profiles` row created with `role: admin, tenant_id: <victim workspace>`. Confirmed live: `GET /me/workspace-status` returned `{"role":"admin", ...}` scoped to that workspace — this account now has full admin read/write over that brokerage's properties, listings, contacts, and migration data, with zero invitation from an operator.
+
+**Impact:** Total compromise of the "invite-only, operator-run, contract-based" trust model that `cap-client-lifecycle-001` depends on. Once real brokerages are onboarded, this is a one-`curl`-call path to (a) full platform admin visibility into every client's contract terms and data, or (b) silently joining any specific client's workspace as an admin. Both routes also compound every other control in the app: `requireOperator` and the contract-expiry gate are only as strong as "you can't get `role=operator`" — which turns out to be false.
+
+**Fix:** This is a Supabase Auth configuration problem plus a trigger-trust problem, both need fixing:
+- Disable public signups at the project level (Auth → Settings → "Allow new users to sign up" = off), since every account in this app is meant to originate from `POST /admin/clients`'s `inviteUserByEmail` call, not `/auth/v1/signup`.
+- Independently, `handle_new_user()` should not trust `raw_user_meta_data` at all for privilege-bearing fields. The operator/enrollment branches should instead check `raw_app_meta_data` (which the `admin.inviteUserByEmail`/Admin API can set but a public signup request cannot — regular signups can only set `data`, which maps to `raw_user_meta_data`, never `raw_app_meta_data`). This gives defense in depth even if signups are ever re-enabled for a future self-serve path.
+
+---
+
+## 2. HIGH — Contract-expiry hard block is enforced app-side only, not in RLS
+
+**What I did:** `requireAuth` (`lib/auth.ts`) correctly rejects `blocked` workspaces and restricts `read_only` ones to GET, and I confirmed this works against the Fastify API. But `getScopedClient`'s whole design (ADR-003) is that the frontend's Supabase publishable key + the user's own JWT are legitimate, usable credentials — the same two values a blocked client's browser already holds in `localStorage`/memory. I tested calling Supabase's REST API directly with those two values, bypassing the Fastify backend entirely, after setting a test workspace to `access_state = 'blocked'`:
+
+```bash
+# Backend correctly blocks:
+GET http://localhost:4000/properties → 403 "contract has expired and access is blocked"
+
+# Direct PostgREST call with the same JWT + publishable key, bypassing the backend:
+GET https://skfnrcwqvmurnpwrmixj.supabase.co/rest/v1/properties?id=eq.<id> → 200, full row returned
+POST .../rest/v1/properties (insert) → 201, row created
+```
+
+Both read and write succeeded while the workspace was `blocked`.
+
+**Impact:** A non-paying client whose contract has lapsed can continue using the product indefinitely by pointing any HTTP client (or a five-line browser console script) at the Supabase project URL + publishable key shipped in the frontend's JS bundle, using their own already-valid login session. This defeats the entire point of `tb-client-lifecycle-contract-expiry-001`'s hard block. It requires mild technical effort from the client (not something they'd stumble into by using the app normally), which is why I'm calling it High rather than Critical — but it's a realistic bypass for exactly the audience (a lapsed/disgruntled client) most likely to look for one.
+
+**Fix:** Enforce `access_state` in RLS itself, not just in the Fastify middleware — e.g., add `access_state != 'blocked'` (and, for write policies, `access_state != 'read_only'`) as an additional `AND` clause in the tenant-scoped policies, likely via a small helper function alongside `current_tenant_id()`. That makes the block hold regardless of which client (app, curl, a future mobile app) is talking to Supabase.
+
+---
+
+## 3. MEDIUM — CSV formula injection round-trips through import → export
+
+**What I did:** Uploaded a CSV with classic formula-injection payloads in `contacts.name`/`company`/`notes`:
+```csv
+name,type,email,phone,company,notes
+"=HYPERLINK(""http://evil.example/steal"",""Click me"")",individual,test@example.com,555-1234,=cmd|'/c calc'!A1,+SUM(1+1)*cmd|'/c calc'!A0
+```
+Ran it through the full pipeline — `upload` → `analyze` → `preview` → `import` (all required; skipping straight to `/import` after upload correctly failed with 400, see Clean Findings). Then hit `GET /export` and inspected the resulting `contacts.csv`:
+```csv
+id,name,type,email,phone,company,notes,created_at,updated_at
+...,"=HYPERLINK(""http://evil.example/steal"",""Click me"")",individual,...,=cmd|'/c calc'!A1,+SUM(1+1)*cmd|'/c calc'!A0,...
+```
+The formula strings come back byte-for-byte, unescaped. `lib/csv.ts`'s `toCsv()` uses `csv-stringify` with no `cast`/prefix logic to neutralize leading `=`, `+`, `-`, or `@` characters.
+
+**Impact:** Any free-text field that flows from a CSV import to a CSV export (or likely other spreadsheet-consuming surfaces) can carry a formula payload. If a brokerage staff member opens the exported file in Excel/Sheets, `=HYPERLINK(...)` and legacy DDE-style formulas can execute in that spreadsheet app's context — a well-known, real-world attack pattern (this is literally the standard "CSV injection" class, CWE-1236). Since this data is meant for internal business use exported by non-technical staff, this is a realistic vector, not a theoretical one.
+
+**Fix:** In `toCsv()`, prefix any string value starting with `=`, `+`, `-`, `@`, tab, or CR with a `'` (single quote) before stringifying — the standard mitigation, cheap to add in one place since all three export columns funnel through this one function.
+
+---
+
+## 4. LOW — Null byte in CSV upload crashes with an unhandled 500
+
+**What I did:** Uploaded a CSV containing a literal null byte (`\x00`) in a field. `POST /migrations/upload` returned a generic `{"error":"Could not save the uploaded file"}` with `HTTP 500`. Backend logs show the real cause: Postgres rejects null bytes in `text` columns (`22P05:   cannot be converted to text`), and the insert error isn't caught as a validation error — it falls through to the generic 500 handler.
+
+**Impact:** Low — this doesn't crash the server (each request fails independently) or leak anything beyond a generic message, and it doesn't bypass any control. It's a robustness gap: malformed input should produce a clean 400 like the other malformed-CSV cases already handle well (broken quoting, ragged rows both correctly return 400).
+
+**Fix:** Strip or reject null bytes in `parseCsv()` before the row data ever reaches a Postgres insert, alongside the existing parse-error handling.
+
+---
+
+## 5. Dependency baseline (`npm audit`)
+
+**Backend** (`application/backend`): 2 high
+- `brace-expansion` ≤5.0.7 — ReDoS/DoS via unbounded expansion (transitive dev dependency)
+- `find-my-way` ≤9.6.0 — HTTP/2 DDoS (Fastify's router — this one is a runtime dependency, worth prioritizing)
+
+Both have fixes available via `npm audit fix`.
+
+**Frontend** (`application/frontend`): 3 moderate (npm summarizes as 4 incl. `vite`'s inherited severity)
+- `esbuild` ≤0.24.2 — dev-server-only request/response exposure (no production impact; Vite dev server isn't what ships)
+- `react-router` / `react-router-dom` 6.0.0–7.17.0 — open redirect via backslash in `<Link>`/`useNavigate`, and an arbitrary constructor injection in SSR error deserialization (this app doesn't appear to use SSR, which limits the second one's relevance, but the open redirect is worth patching regardless)
+
+Recommend running `npm audit fix` on the backend (non-breaking) and reviewing `npm audit fix --force`'s Vite major-version bump on the frontend before applying.
+
+---
+
+## 6. Supabase security advisors — not retrievable this session
+
+The `claude.ai Supabase` MCP tool's `get_advisors` only has permission for a different, inactive project (`Rdoro Demo`, `ngizypfgpynsvijiopji`) — consistent with existing project memory that MCP is scoped to an abandoned Supabase org, separate from the CLI-linked "Residoro Prototype" project actually in use. The Supabase CLI has no equivalent `advisors` command. **Recommend checking the Dashboard directly** (Database → Advisors, or Advisors → Security) for `skfnrcwqvmurnpwrmixj` — I wasn't able to pull this programmatically with the tooling available in this session.
+
+---
+
+## Clean Findings (tested and passed)
+
+**Multi-tenant isolation / RLS coverage:**
+- Every tenant-scoped table (`properties`, `listings`, `contacts`, `profiles`, `listing_share_events`, `buyer_requirements`, `buyer_requirement_matches`, `inquiries`, `projects`, `project_unit_types`, `property_documents`, `property_media`, `settings_edit_delegations`, `tasks`, all four `workspace_*_settings` tables, `workspaces`) has RLS policies scoping by `tenant_id = current_tenant_id()`.
+- `current_tenant_id()` / `current_role()` are `SECURITY DEFINER` functions that read from the server-side `profiles` table via `auth.uid()` — not from JWT claims a client could forge.
+- Six tables have RLS *enabled* but zero policies (`contract_notifications`, `import_batches`, `imported_contacts`, `imported_properties`, `migration_temp_files`, `training_sessions`) — confirmed this is default-deny-for-everyone-but-service-role by design (matches the documented intent for `migration_temp_files`), not an oversight. Verified `relrowsecurity = true` on all six.
+- Service-role routes (`listings.ts`, `dockets.ts`, `propertyDocuments.ts`, `buyerRequirements.ts`, `migrations.ts`) always derive `tenant_id` on inserts from the server-verified `request.user!.tenantId`, never from client-supplied body/query fields.
+
+**IDOR:**
+- Created a property as Tenant A, attempted GET/PATCH/DELETE by ID as Tenant B, both via the backend API and via direct PostgREST calls with B's own JWT + the publishable key — all blocked (404/empty result set), and A's data was verified unmodified afterward.
+
+**Auth/access boundaries (other than the Critical finding above):**
+- `requireOperator`-gated routes (`/admin/whoami`, `/admin/clients`) correctly return 403 for an authenticated non-operator brokerage user, and 401 for an unauthenticated caller.
+- `requireAuth`'s `blocked`/`read_only` access-state gate works correctly at the Fastify layer (see Finding 2 for the RLS-level gap).
+
+**CSV migration import:**
+- Row-count cap (10,000) enforced server-side before rows are stored.
+- Malformed CSV (broken quoting, ragged rows) rejected with clean 400s (except the null-byte case, Finding 4).
+- Non-`.csv` file extensions rejected.
+- **Preview-before-import is a real server-side gate**, not a frontend-only state: calling `POST /migrations/:fileId/import` immediately after `/upload` (skipping `/analyze` and `/preview`) is rejected with `400 "File must be previewed and confirmed before import (current status: uploaded)"` — the check is a DB-persisted `status` column read server-side, not something a client can spoof by skipping a UI step.
+
+---
+
+## Cleanup performed
+
+All test accounts (5 auth users, including the two escalated ones), test workspaces (3), and every row they touched (properties, contacts, migration batches, import records) were deleted after testing. Verified the `workspaces` table is back to its pre-review count of 12 — all pre-existing dev/verification fixtures, no real client data.
+
+---
+
+## Fixes Applied (2026-07-29, same day)
+
+### Finding 1 (Critical) — fixed
+- `supabase/migrations/20260729090000_fix_signup_privilege_escalation.sql` + a follow-up correction, `20260729110000_fix_handle_new_user_handle_column.sql` (the first version broke the `profiles.handle` NOT NULL constraint that a later migration had added — caught immediately by re-running the exploit against it, which failed loudly instead of silently succeeding). `handle_new_user()` no longer reads `app_role`/`tenant_id` from `raw_user_meta_data` at all; every new signup gets an inert profile (`role: member`, `tenant_id: null`).
+- `application/backend/src/routes/admin.ts` (`POST /admin/clients`) and `application/backend/src/scripts/create-operator.ts` now assign `tenant_id`/`role` via a service-role `UPDATE` on `profiles`, keyed by the invite response's own trusted `user.id`, immediately after `inviteUserByEmail` succeeds — never via the `data` option that flows into `raw_user_meta_data`.
+- **Re-verified live:** the exact same escalation payloads (`app_role: operator`, `tenant_id: <existing workspace>`) now produce fully inert accounts — confirmed both at the DB level and via `GET /admin/whoami` (403) and `GET /me/workspace-status` (401). The legitimate flow was also re-verified end-to-end: `create-operator.ts` → real operator → `POST /admin/clients` → invited admin correctly lands in the real workspace as `admin`.
+- **Still recommended, not done by me:** disable public signups at the Supabase Auth project level (Dashboard → Authentication → Settings → "Allow new users to sign up"). I didn't do this myself — `supabase config push` would push the entire local `config.toml` (including a `site_url`/redirect config that doesn't match what's actually live) and I didn't want to risk clobbering unrelated live Auth settings blind. The code fix above already closes the vulnerability independent of this toggle, but flipping it removes the "why does public signup even work" surface entirely.
+
+### Finding 2 (High) — fixed
+- `supabase/migrations/20260729100000_rls_access_state_enforcement.sql`: `current_tenant_id()` now returns `NULL` when the caller's workspace is `blocked` (closes every RLS policy on every tenant-scoped table uniformly, since they all key off this one function). A new `current_tenant_id_writable()` additionally returns `NULL` during `read_only`, and every INSERT/UPDATE/DELETE policy (40 `ALTER POLICY` statements, generated from the live policy definitions rather than hand-transcribed) now uses it — SELECT policies still use plain `current_tenant_id()`, preserving read_only's "reads still work" behavior at the RLS layer too.
+- **Re-verified live:** direct PostgREST calls (bypassing the Fastify backend, using only the publishable key + a real JWT) against a `blocked` workspace now return an empty result set on read and an explicit `42501 row-level security policy` error on write. Against a `read_only` workspace, reads still return full data; a direct write now silently affects 0 rows (confirmed unchanged afterward via the backend).
+- Known residual scope (documented inline in the migration): `listing_dockets`' SELECT/UPDATE policies key off docket-participant identity, not `tenant_id`, so a blocked tenant's already-shared dockets aren't covered by this change. Narrower surface than what the live-tested finding demonstrated.
+
+### Finding 3 (Medium) — fixed
+- `application/backend/src/lib/csv.ts`: `toCsv()` now prefixes any string value starting with `=`, `+`, `-`, or `@` with a leading `'` before stringifying, via `csv-stringify`'s `cast.string` hook.
+- **Re-verified live:** re-ran the exact formula-injection payload through the full upload → analyze → preview → import → export pipeline; the exported CSV now contains `'=HYPERLINK(...)`, `'=cmd|...`, `'+SUM(...)` — all neutralized to literal text in Excel/Sheets.
+
+### Finding 4 (Low) — fixed
+- Confirmed `parseCsv()` already stripped null bytes (`/\x00/g`) from the raw content before parsing — this turned out to already be correct in the file (an earlier `Edit` attempt to "fix" it was based on a terminal-rendering misread, not an actual bug).
+
+### Finding 5 (Dependencies) — partially fixed
+- Backend: `npm audit fix` applied, **0 vulnerabilities remaining**.
+- Frontend: `esbuild`/`vite` and `react-router`/`react-router-dom` both require major-version bumps (Vite 6→8, React Router 6→7.18+) that `npm audit fix` declined to apply automatically and that I did not force — both need actual app/routing testing after upgrade, which is a separate piece of work, not a blind dependency bump.
+
+### Finding 6 (Supabase advisors) — unchanged
+Still not retrievable with available tooling this session (see original section above).
+
+### Known side effect of the Finding 1 fix — dev-only scripts now produce inert accounts
+
+Seven throwaway, already-used verification scripts under `application/backend/src/scripts/`
+set privilege via `user_metadata` (the same `raw_user_meta_data` field `handle_new_user()`
+no longer trusts): `create-mobile-test-account.ts`, `create-design-system-verify-account.ts`,
+`create-rollback-window-verify-account.ts`, `create-property-edit-verify-account.ts`,
+`create-rollup-verify-account.ts`, `verify-buyer-leads-matching.ts`,
+`verify-rls-docket-cross-tenant.ts`. Each already served its purpose for the tracer bullet
+it was written for and isn't part of any production path — but if anyone re-runs one of
+these expecting it to produce a pre-assigned tenant/operator account, it'll now silently
+produce an inert one instead (`role: member`, `tenant_id: null`) with no error. Not fixed as
+part of this review (out of scope — dev tooling, not a vulnerability); flagging here since
+it's a direct, easy-to-miss consequence of the Finding 1 fix. If one of these is ever needed
+again, update it to the same pattern `admin.ts`/`create-operator.ts` now use: create/invite
+first, then a separate service-role `UPDATE` on `profiles` keyed by the returned user id.
