@@ -11,6 +11,7 @@ const STATUS_LABELS: Record<string, string> = {
   reserved: 'reserved',
   sold: 'sold',
   off_market: 'off market',
+  leased: 'leased',
 };
 
 function StatusBadges({ byStatus }: { byStatus: StatusCounts }) {

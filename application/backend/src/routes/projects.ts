@@ -15,13 +15,17 @@ const PROPERTY_TYPES = [
   'industrial',
 ] as const;
 // tb-properties-project-rollup-001: mirrors properties.status's check
-// constraint (20260721120000_platform_foundation.sql) -- no shared-types
-// package in this codebase, so kept in sync by hand like every other enum.
-const PROPERTY_STATUSES = ['available', 'reserved', 'sold', 'off_market'] as const;
+// constraint (20260721120000_platform_foundation.sql, widened by
+// 20260730120000_properties_leased_status.sql to add 'leased') -- no
+// shared-types package in this codebase, so kept in sync by hand like every
+// other enum. A second, independent copy of this same list lives in
+// application/backend/src/routes/listings.ts (PATCH /properties/:id's own
+// PROPERTY_STATUSES) -- kept in sync by hand there too.
+const PROPERTY_STATUSES = ['available', 'reserved', 'sold', 'off_market', 'leased'] as const;
 type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
 
 function emptyStatusCounts(): Record<PropertyStatus, number> {
-  return { available: 0, reserved: 0, sold: 0, off_market: 0 };
+  return { available: 0, reserved: 0, sold: 0, off_market: 0, leased: 0 };
 }
 
 // tb-properties-bulk-units-001: comfortably above the "100+ units" Success
@@ -612,7 +616,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       };
 
       function emptyUnitLists(): Record<PropertyStatus, string[]> {
-        return { available: [], reserved: [], sold: [], off_market: [] };
+        return { available: [], reserved: [], sold: [], off_market: [], leased: [] };
       }
 
       // Seeded from project_unit_types first (in creation order) so a unit

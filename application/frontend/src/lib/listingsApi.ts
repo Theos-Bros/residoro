@@ -31,9 +31,20 @@ export type PropertyType =
 
 export type OwnerType = 'developer' | 'individual' | 'company';
 
-export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market';
+// tb-properties-unit-leasing-001: 'leased' is a fifth, unit-level terminal
+// status distinct from listings.listing_type = 'rent' (an unrelated concept
+// -- listing_type is active marketing/authority for a unit, not that the
+// unit is already rented out). lease_monthly_rent/lease_term_months (see
+// Property/updateProperty below) are only ever populated for this status.
+export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market' | 'leased';
 
-export const PROPERTY_STATUSES: readonly PropertyStatus[] = ['available', 'reserved', 'sold', 'off_market'];
+export const PROPERTY_STATUSES: readonly PropertyStatus[] = [
+  'available',
+  'reserved',
+  'sold',
+  'off_market',
+  'leased',
+];
 
 export type Listing = {
   id: string;
@@ -198,6 +209,8 @@ export async function updateProperty(
     price?: number;
     price_currency?: string;
     status?: PropertyStatus;
+    lease_monthly_rent?: number;
+    lease_term_months?: number;
     owner_type?: OwnerType;
     owner_id?: string | null;
   },
