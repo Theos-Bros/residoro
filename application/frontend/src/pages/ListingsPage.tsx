@@ -1,13 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
-import { fetchListings, authorityWarningLabel, STATUS_LABEL, type Listing } from '@/lib/listingsApi';
+import {
+  fetchListings,
+  authorityWarningLabel,
+  STATUS_LABEL,
+  type Listing,
+  type ListingStatus,
+} from '@/lib/listingsApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { ShareDetailsModal } from '@/components/ShareDetailsModal';
 import { ListingDetailModal } from '@/components/ListingDetailModal';
+import { ListingFilterTabs, type FilterTabOption } from '@/components/ListingFilterTabs';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -16,6 +23,52 @@ type Props = {
 
 type OpenHistory = { propertyId: string; propertyTitle: string } | null;
 type OpenShare = { listingId: string; propertyTitle: string } | null;
+
+// tb-listings-filters-001: three independent, combinable (AND) client-side
+// filters over the already-fetched `listings` array -- no new API surface,
+// no persistence across reload/navigation (state resets on remount by
+// design, per the tracer bullet's non-goals).
+type StatusFilter = 'all' | ListingStatus;
+type TypeFilter = 'all' | 'sale' | 'rent';
+type ExpiryBucket = 'active' | 'expiring_soon' | 'expired';
+type ExpiryFilter = 'all' | ExpiryBucket;
+
+const STATUS_FILTER_OPTIONS: readonly FilterTabOption<StatusFilter>[] = [
+  { value: 'all', label: 'All' },
+  { value: 'draft', label: STATUS_LABEL.draft },
+  { value: 'active', label: STATUS_LABEL.active },
+  { value: 'under_offer', label: STATUS_LABEL.under_offer },
+  { value: 'sold', label: STATUS_LABEL.sold },
+  { value: 'expired', label: STATUS_LABEL.expired },
+  { value: 'withdrawn', label: STATUS_LABEL.withdrawn },
+  { value: 'inactive', label: STATUS_LABEL.inactive },
+];
+
+const TYPE_FILTER_OPTIONS: readonly FilterTabOption<TypeFilter>[] = [
+  { value: 'all', label: 'All' },
+  { value: 'sale', label: 'Sale' },
+  { value: 'rent', label: 'Rent' },
+];
+
+const EXPIRY_FILTER_OPTIONS: readonly FilterTabOption<ExpiryFilter>[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'expiring_soon', label: 'Expiring Soon' },
+  { value: 'expired', label: 'Expired' },
+];
+
+// Hardcoded per the tracer bullet's non-goals -- not configurable.
+const EXPIRING_SOON_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Purely a read-only client-side derivation over authority_expires_at -- does
+// not touch, and is independent of, the listing's `status` field or the
+// backend's autoExpireLapsedListings sweep.
+function expiryBucket(listing: Listing, now: number): ExpiryBucket {
+  const expiresAt = listing.authority_expires_at ? new Date(listing.authority_expires_at).getTime() : null;
+  if (expiresAt !== null && expiresAt < now) return 'expired';
+  if (expiresAt !== null && expiresAt < now + EXPIRING_SOON_WINDOW_MS) return 'expiring_soon';
+  return 'active';
+}
 
 // UX follow-up: "History" opens a floating panel (bottom-right) instead of
 // navigating to a separate route, same as PropertiesListPage. A row whose
@@ -53,6 +106,21 @@ export function ListingsPage({ session }: Props) {
   // across a plain prop change.
   const [openDetailToken, setOpenDetailToken] = useState(0);
   const openDetailListing = listings?.find((l) => l.id === openDetailId) ?? null;
+
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('all');
+
+  const filteredListings = useMemo(() => {
+    if (!listings) return null;
+    const now = Date.now();
+    return listings.filter((listing) => {
+      if (statusFilter !== 'all' && listing.status !== statusFilter) return false;
+      if (typeFilter !== 'all' && listing.listing_type !== typeFilter) return false;
+      if (expiryFilter !== 'all' && expiryBucket(listing, now) !== expiryFilter) return false;
+      return true;
+    });
+  }, [listings, statusFilter, typeFilter, expiryFilter]);
 
   function openDetail(listingId: string) {
     setOpenDetailId(listingId);
@@ -96,6 +164,18 @@ export function ListingsPage({ session }: Props) {
       )}
 
       {listings && listings.length > 0 && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <ListingFilterTabs label="Status" options={STATUS_FILTER_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
+          <ListingFilterTabs label="Type" options={TYPE_FILTER_OPTIONS} value={typeFilter} onChange={setTypeFilter} />
+          <ListingFilterTabs label="Expiry" options={EXPIRY_FILTER_OPTIONS} value={expiryFilter} onChange={setExpiryFilter} />
+        </div>
+      )}
+
+      {listings && listings.length > 0 && filteredListings?.length === 0 && (
+        <p className="text-sm text-muted-foreground">No listings match the selected filters.</p>
+      )}
+
+      {filteredListings && filteredListings.length > 0 && (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
@@ -110,7 +190,7 @@ export function ListingsPage({ session }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {listings.map((listing) => (
+              {filteredListings.map((listing) => (
                 <TableRow
                   key={listing.id}
                   onClick={() => openDetail(listing.id)}
