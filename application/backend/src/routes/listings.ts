@@ -56,7 +56,12 @@ const PROPERTY_TYPES = [
 ] as const;
 const OWNER_TYPES = ['developer', 'individual', 'company'] as const;
 const VERIFICATION_STATUSES = ['unverified', 'pending', 'verified', 'flagged'] as const;
-const PROPERTY_STATUSES = ['available', 'reserved', 'sold', 'off_market'] as const;
+// tb-properties-unit-leasing-001: widened to add 'leased', mirroring
+// properties.status's check constraint (20260730120000_properties_leased_
+// status.sql). A second, independent copy of this same list lives in
+// application/backend/src/routes/projects.ts -- kept in sync by hand there
+// too (no shared-types package in this codebase).
+const PROPERTY_STATUSES = ['available', 'reserved', 'sold', 'off_market', 'leased'] as const;
 
 type CreateListingBody = {
   property_id?: string;
@@ -106,6 +111,12 @@ type UpdatePropertyVerificationBody = {
 // POST /properties until now. owner_type/owner_id are admin-only (see the
 // route below) -- everything else is open to any authenticated tenant user,
 // matching POST /properties' own lack of a role check.
+//
+// tb-properties-unit-leasing-001: lease_monthly_rent/lease_term_months are
+// only ever writable together, and only when the property's status is (or
+// is being set to, in this same request) 'leased' -- see the validation in
+// the route below. Not required-together with `status` itself: a later
+// PATCH to an already-leased property can update just the rent/term.
 type UpdatePropertyBody = {
   title?: string;
   address?: string;
@@ -119,6 +130,8 @@ type UpdatePropertyBody = {
   price?: number;
   price_currency?: string;
   status?: string;
+  lease_monthly_rent?: number;
+  lease_term_months?: number;
   owner_type?: string;
   owner_id?: string | null;
 };
@@ -419,6 +432,8 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         price,
         price_currency,
         status,
+        lease_monthly_rent,
+        lease_term_months,
         owner_type,
         owner_id,
       } = request.body ?? {};
@@ -451,6 +466,72 @@ export async function registerListingsRoutes(app: FastifyInstance) {
           return reply.status(400).send({ error: `status must be one of: ${PROPERTY_STATUSES.join(', ')}` });
         }
         updateFields.status = status;
+      }
+
+      // tb-properties-unit-leasing-001: lease_monthly_rent/lease_term_months
+      // are only ever set together, and only for a property whose status is
+      // (or is being set to, right here) 'leased' -- everywhere else they
+      // must stay null. If this PATCH doesn't touch `status` at all but does
+      // supply lease fields, the property's *current* status is what's
+      // checked (a follow-up edit to an already-leased unit's rent/term
+      // doesn't need to resend status every time).
+      const hasLeaseFields = lease_monthly_rent !== undefined || lease_term_months !== undefined;
+      if (hasLeaseFields && (lease_monthly_rent === undefined || lease_term_months === undefined)) {
+        return reply
+          .status(400)
+          .send({ error: 'lease_monthly_rent and lease_term_months must be provided together' });
+      }
+      if (status === 'leased' && !hasLeaseFields) {
+        return reply
+          .status(400)
+          .send({ error: 'lease_monthly_rent and lease_term_months are required when marking a unit leased' });
+      }
+      if (hasLeaseFields) {
+        if (typeof lease_monthly_rent !== 'number' || !Number.isFinite(lease_monthly_rent) || lease_monthly_rent <= 0) {
+          return reply.status(400).send({ error: 'lease_monthly_rent must be a positive number' });
+        }
+        if (
+          typeof lease_term_months !== 'number' ||
+          !Number.isInteger(lease_term_months) ||
+          lease_term_months <= 0
+        ) {
+          return reply.status(400).send({ error: 'lease_term_months must be a positive integer' });
+        }
+      }
+
+      let targetStatus = status;
+      if (targetStatus === undefined && hasLeaseFields) {
+        const { data: currentProperty, error: currentError } = await supabase
+          .from('properties')
+          .select('status')
+          .eq('id', request.params.id)
+          .eq('tenant_id', request.user!.tenantId)
+          .maybeSingle<{ status: string }>();
+
+        if (currentError) {
+          request.log.error(currentError);
+          return reply.status(500).send({ error: 'Could not verify the property' });
+        }
+        if (!currentProperty) {
+          return reply.status(404).send({ error: 'Property not found in your workspace' });
+        }
+        targetStatus = currentProperty.status;
+      }
+
+      if (hasLeaseFields) {
+        if (targetStatus !== 'leased') {
+          return reply
+            .status(400)
+            .send({ error: 'lease_monthly_rent and lease_term_months can only be set on a leased unit' });
+        }
+        updateFields.lease_monthly_rent = lease_monthly_rent;
+        updateFields.lease_term_months = lease_term_months;
+      } else if (status !== undefined && status !== 'leased') {
+        // Moving to (or staying at) any non-leased status clears any lease
+        // data left over from a prior 'leased' period -- the invariant is
+        // these two columns are null for every status except 'leased'.
+        updateFields.lease_monthly_rent = null;
+        updateFields.lease_term_months = null;
       }
 
       if (owner_type !== undefined || owner_id !== undefined) {
@@ -494,7 +575,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         .update(updateFields)
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .select('id, title, price, price_currency, status, owner_type, owner_id')
+        .select('id, title, price, price_currency, status, lease_monthly_rent, lease_term_months, owner_type, owner_id')
         .single();
 
       if (error || !property) {

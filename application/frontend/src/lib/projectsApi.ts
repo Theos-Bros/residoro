@@ -63,8 +63,17 @@ export type ProjectUnitType = {
   price_currency: string;
 };
 
-export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market';
-export const PROPERTY_STATUSES: readonly PropertyStatus[] = ['available', 'reserved', 'sold', 'off_market'];
+// tb-properties-unit-leasing-001: a third, independent copy of this same
+// enum (see application/backend/src/routes/{projects,listings}.ts) -- kept
+// in sync by hand, no shared-types package in this codebase.
+export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market' | 'leased';
+export const PROPERTY_STATUSES: readonly PropertyStatus[] = [
+  'available',
+  'reserved',
+  'sold',
+  'off_market',
+  'leased',
+];
 
 export type StatusCounts = Record<PropertyStatus, number>;
 
