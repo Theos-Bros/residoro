@@ -62,6 +62,10 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
 
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [wonListingId, setWonListingId] = useState('');
+  // tb-buyer-leads-revisit-page-001: only asked for -- and only required --
+  // when the selected won listing is rent-type; a sale-type win never sends
+  // this along (see handleMarkWon below).
+  const [leaseEndDate, setLeaseEndDate] = useState('');
 
   // tb-tasks-crud-001: inline task list linked to this Lead
   // (entity_type='buyer_requirement'), plus a "New Task" action that
@@ -201,13 +205,17 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
 
   async function handleMarkWon() {
     if (isNew || !wonListingId) return;
+    if (wonListingIsRental && !leaseEndDate) {
+      setError('Lease end date is required for a rental win');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       // Same embed gap as sendOptions -- mark-won's own response doesn't
       // include buyer_requirement_matches either, so re-fetch to keep the
       // Options Sent list visible alongside the new Won banner.
-      await markWon(session.access_token, leadId, wonListingId);
+      await markWon(session.access_token, leadId, wonListingId, wonListingIsRental ? leaseEndDate : undefined);
       const refreshed = await fetchBuyerRequirement(session.access_token, leadId);
       setLead(refreshed);
       onSaved();
@@ -220,6 +228,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
 
   const title = isNew ? 'New Lead' : `Lead — ${lead?.contacts?.name ?? '…'}`;
   const matches = lead?.buyer_requirement_matches ?? [];
+  const wonListingIsRental = listings.find((l) => l.id === wonListingId)?.listing_type === 'rent';
 
   return (
     <FloatingPanel title={title} onClose={onClose} className="max-w-lg sm:max-w-xl">
@@ -339,21 +348,38 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               </ul>
 
               {lead && lead.stage !== 'won' && (
-                <div className="flex items-center gap-2">
-                  <select className={selectClass} value={wonListingId} onChange={(e) => setWonListingId(e.target.value)}>
-                    <option value="">Select won listing…</option>
-                    {matches.map((m) => {
-                      const listing = listings.find((l) => l.id === m.listing_id);
-                      return (
-                        <option key={m.id} value={m.listing_id}>
-                          {listing?.property_title ?? m.listing_id}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <Button size="sm" onClick={handleMarkWon} disabled={saving || !wonListingId}>
-                    Mark Won
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <select className={selectClass} value={wonListingId} onChange={(e) => setWonListingId(e.target.value)}>
+                      <option value="">Select won listing…</option>
+                      {matches.map((m) => {
+                        const listing = listings.find((l) => l.id === m.listing_id);
+                        return (
+                          <option key={m.id} value={m.listing_id}>
+                            {listing?.property_title ?? m.listing_id}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <Button size="sm" onClick={handleMarkWon} disabled={saving || !wonListingId}>
+                      Mark Won
+                    </Button>
+                  </div>
+                  {/* tb-buyer-leads-revisit-page-001: a rent-type won listing
+                      is a lease -- the agent enters the actual lease end date
+                      directly (never calculated) so it can surface on the
+                      Revisit page. Sale-type wins never show or send this. */}
+                  {wonListingId && wonListingIsRental && (
+                    <div className="space-y-1">
+                      <Label htmlFor="lease_end_date">Lease end date</Label>
+                      <Input
+                        id="lease_end_date"
+                        type="date"
+                        value={leaseEndDate}
+                        onChange={(e) => setLeaseEndDate(e.target.value)}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -364,6 +390,11 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               <p className="text-sm text-emerald-900">
                 Won: {listings.find((l) => l.id === lead.won_listing_id)?.property_title ?? lead.won_listing_id}
               </p>
+              {lead.lease_end_date && (
+                <p className="text-sm text-emerald-900">
+                  Lease ends: {new Date(lead.lease_end_date).toLocaleDateString()}
+                </p>
+              )}
               <Button size="sm" onClick={() => onGoMarkSold(lead.won_listing_id!, lead.contact_id)}>
                 Mark Sold on Listings Page
               </Button>

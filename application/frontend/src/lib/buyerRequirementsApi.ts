@@ -40,6 +40,9 @@ export type BuyerRequirement = RequirementFields & {
   stage: LeadStage;
   last_searched_at: string | null;
   won_listing_id: string | null;
+  // tb-buyer-leads-revisit-page-001: only ever non-null for a rent-type won
+  // listing -- see mark-won's server-side validation in buyerRequirements.ts.
+  lease_end_date: string | null;
   created_at: string;
   updated_at: string;
   contacts: { name: string } | null;
@@ -116,11 +119,39 @@ export async function sendOptions(
   return parseJsonOrThrow(response);
 }
 
-export async function markWon(accessToken: string, id: string, listingId: string): Promise<BuyerRequirement> {
+export async function markWon(
+  accessToken: string,
+  id: string,
+  listingId: string,
+  leaseEndDate?: string,
+): Promise<BuyerRequirement> {
   const response = await fetch(`${BACKEND_URL}/buyer-requirements/${id}/mark-won`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ listing_id: listingId }),
+    body: JSON.stringify({ listing_id: listingId, lease_end_date: leaseEndDate }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+// tb-buyer-leads-revisit-page-001: a won lead's own lease term (client-facing),
+// captured on mark-won when the won listing is rent-type. Deliberately unrelated
+// to tb-properties-unit-leasing-001's properties.status='leased' (a developer's
+// own unit inventory) -- same word, two different concepts, no shared schema.
+export type RevisitLead = {
+  id: string;
+  lease_end_date: string;
+  contacts: { name: string } | null;
+  listing: {
+    listing_type: 'sale' | 'rent';
+    price: number;
+    price_currency: string;
+    properties: { title: string; address: string | null; city: string | null; province: string | null } | null;
+  } | null;
+};
+
+export async function fetchRevisitLeads(accessToken: string): Promise<{ revisit_leads: RevisitLead[] }> {
+  const response = await fetch(`${BACKEND_URL}/buyer-requirements/revisit`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);
 }

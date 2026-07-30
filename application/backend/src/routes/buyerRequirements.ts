@@ -53,7 +53,10 @@ type CreateLeadBody = {
 type UpdateLeadBody = Partial<Record<(typeof REQUIREMENT_FIELDS)[number], unknown>> & { stage?: string };
 
 type OptionsSentBody = { listing_ids?: string[]; scores?: Record<string, number> };
-type MarkWonBody = { listing_id?: string };
+// tb-buyer-leads-revisit-page-001: lease_end_date is the lead's own client-facing
+// lease term, captured only when the won deal is a rental -- see the mark-won
+// handler below for the listing_type-conditional validation.
+type MarkWonBody = { listing_id?: string; lease_end_date?: string };
 
 function extractRequirementFields(body: Record<string, unknown>): Record<string, unknown> {
   const fields: Record<string, unknown> = {};
@@ -176,6 +179,33 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not create the lead' });
     }
     return reply.status(201).send(data);
+  });
+
+  // tb-buyer-leads-revisit-page-001: every won lead with a captured lease-end
+  // date, for the Revisit page (leased-deal renewal tracking). Registered as
+  // a static path ahead of the /:id param route below so it's never shadowed.
+  // Filters on both stage='won' and lease_end_date not null -- Decision #3
+  // (buyer-leads-schema-001) allows a lead's stage to be freely reverted, so
+  // a lease_end_date set during a since-undone win shouldn't surface here.
+  // Sorting (soonest lease-end first) and Expired/Expiring-Soon/Active
+  // bucketing both happen client-side in the Revisit page, not here.
+  app.get('/buyer-requirements/revisit', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
+    const { data, error } = await supabase
+      .from('buyer_requirements')
+      .select(
+        'id, lease_end_date, contacts(name), listing:listings!won_listing_id(listing_type, price, price_currency, properties(title, address, city, province))',
+      )
+      .eq('tenant_id', request.user!.tenantId)
+      .eq('stage', 'won')
+      .not('lease_end_date', 'is', null)
+      .order('lease_end_date', { ascending: true });
+
+    if (error) {
+      request.log.error(error);
+      return reply.status(500).send({ error: 'Could not load leased deals' });
+    }
+    return { revisit_leads: data ?? [] };
   });
 
   app.get<{ Params: { id: string } }>('/buyer-requirements/:id', { preHandler: requireAuth }, async (request, reply) => {
@@ -410,7 +440,7 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
     { preHandler: requireAuth },
     async (request, reply) => {
       const supabase = getScopedClient(request);
-      const { listing_id } = request.body ?? {};
+      const { listing_id, lease_end_date } = request.body ?? {};
 
       if (!listing_id) {
         return reply.status(400).send({ error: 'listing_id is required' });
@@ -432,6 +462,32 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'listing_id was not sent as an option to this lead' });
       }
 
+      // tb-buyer-leads-revisit-page-001: whether lease_end_date is required
+      // is derived from the won listing's own listing_type, not passed by the
+      // client -- a rent-type won deal is a lease and needs a lease-end date
+      // for the Revisit page; a sale-type deal never gets one, so any
+      // lease_end_date sent alongside a sale is silently dropped (leniency
+      // call from the tracer bullet doc: don't error on it, just ignore it).
+      const { data: wonListing, error: listingError } = await supabase
+        .from('listings')
+        .select('listing_type')
+        .eq('id', listing_id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle<{ listing_type: string }>();
+
+      if (listingError) {
+        request.log.error(listingError);
+        return reply.status(500).send({ error: 'Could not verify the listing type' });
+      }
+      if (!wonListing) {
+        return reply.status(404).send({ error: 'Listing not found in your workspace' });
+      }
+
+      const isRental = wonListing.listing_type === 'rent';
+      if (isRental && !lease_end_date) {
+        return reply.status(400).send({ error: 'lease_end_date is required when the won listing is a rental' });
+      }
+
       const { data: before, error: beforeError } = await supabase
         .from('buyer_requirements')
         .select('stage')
@@ -449,7 +505,11 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
 
       const { data, error } = await supabase
         .from('buyer_requirements')
-        .update({ won_listing_id: listing_id, stage: 'won' })
+        .update({
+          won_listing_id: listing_id,
+          stage: 'won',
+          lease_end_date: isRental ? lease_end_date : null,
+        })
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
         .select('*, contacts(name)')
