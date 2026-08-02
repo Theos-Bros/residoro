@@ -208,6 +208,28 @@ export async function fetchProjectUnitsSummary(
   return parseJsonOrThrow(response);
 }
 
+// tb-properties-project-link-001: lets an already-existing property (created
+// standalone, or via Migration import) join a project after the fact --
+// "Add existing unit" on ProjectDetailPage.tsx. Backed by the extended
+// PATCH /properties/:id (listings.ts), not a projects.ts route -- project_id
+// lives on `properties`, so the write goes through the same endpoint
+// updateProperty (listingsApi.ts) already uses, just with a narrower body.
+// The backend re-verifies the property is (already) owner_type ===
+// 'developer' and that the project belongs to the caller's own tenant --
+// this helper does no validation of its own.
+export async function linkPropertyToProject(
+  accessToken: string,
+  propertyId: string,
+  projectId: string,
+): Promise<{ id: string; project_id: string | null }> {
+  const response = await fetch(`${BACKEND_URL}/properties/${propertyId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_id: projectId }),
+  });
+  return parseJsonOrThrow(response);
+}
+
 export async function generateUnits(
   accessToken: string,
   projectId: string,
