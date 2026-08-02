@@ -210,11 +210,14 @@ async function coverPhotoUrlsByProperty(
 // only had an admin-facing export path before this -- GET /properties is the
 // smallest read an agent needs to pick one and create a listing against it.
 export async function registerListingsRoutes(app: FastifyInstance) {
+  // tb-listings-properties-keyword-search-001: address added to the select
+  // so ListingsPage/PropertiesListPage's client-side keyword filter can match
+  // against it alongside title -- purely additive, no other behavior change.
   app.get('/properties', { preHandler: requireAuth }, async (request, reply) => {
     const supabase = getScopedClient(request);
     const { data, error } = await supabase
       .from('properties')
-      .select('id, title, price, price_currency, status, verification_status')
+      .select('id, title, address, price, price_currency, status, verification_status')
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
 
@@ -648,7 +651,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     const { data, error } = await supabase
       .from('listings')
       .select(
-        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title), contacts(name)',
+        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title, address), contacts(name)',
       )
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
@@ -671,12 +674,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       status: string;
       created_at: string;
       buyer_contact_id: string | null;
-      properties: { title: string } | null;
+      properties: { title: string; address: string | null } | null;
       contacts: { name: string } | null;
     }>).map((l) => ({
       id: l.id,
       property_id: l.property_id,
       property_title: l.properties?.title ?? '',
+      // tb-listings-properties-keyword-search-001: mirrors how property_title
+      // is derived from the same properties(...) embed above.
+      property_address: l.properties?.address ?? null,
       agent_id: l.agent_id,
       listing_type: l.listing_type,
       price: l.price,
