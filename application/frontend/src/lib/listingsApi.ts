@@ -12,6 +12,9 @@ export const VERIFICATION_STATUSES: readonly VerificationStatus[] = [
 export type Property = {
   id: string;
   title: string;
+  // tb-listings-properties-keyword-search-001: added so PropertiesListPage's
+  // keyword filter can match against address alongside title.
+  address: string | null;
   price: number | null;
   price_currency: string;
   status: string;
@@ -50,6 +53,9 @@ export type Listing = {
   id: string;
   property_id: string;
   property_title: string;
+  // tb-listings-properties-keyword-search-001: added so ListingsPage's
+  // keyword filter can match against address alongside property_title.
+  property_address: string | null;
   agent_id: string;
   listing_type: 'sale' | 'rent';
   price: number;
@@ -117,6 +123,18 @@ export const LISTING_STATUS_TRANSITIONS: Record<ListingStatus, readonly ListingS
 // knows what to go re-secure, not just that "something" expired.
 export function authorityWarningLabel(listingType: 'sale' | 'rent'): string {
   return listingType === 'rent' ? 'Needs updated ATL' : 'Needs updated ATS';
+}
+
+// tb-listings-properties-keyword-search-001: shared by ListingsPage's
+// filteredListings useMemo and PropertiesListPage's filteredProperties
+// useMemo -- case-insensitive substring match against title and/or address
+// only, per this tracer bullet's semantic_scope (no owner-name or other
+// joined-field matching). An empty/whitespace-only keyword always matches
+// (keyword filter is a no-op when cleared).
+export function matchesKeyword(title: string, address: string | null, keyword: string): boolean {
+  const trimmed = keyword.trim().toLowerCase();
+  if (!trimmed) return true;
+  return title.toLowerCase().includes(trimmed) || (address ?? '').toLowerCase().includes(trimmed);
 }
 
 async function parseJsonOrThrow(response: Response) {

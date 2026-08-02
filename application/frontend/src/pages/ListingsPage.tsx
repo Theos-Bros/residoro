@@ -4,6 +4,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   fetchListings,
   authorityWarningLabel,
+  matchesKeyword,
   STATUS_LABEL,
   type Listing,
   type ListingStatus,
@@ -110,6 +111,10 @@ export function ListingsPage({ session }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [expiryFilter, setExpiryFilter] = useState<ExpiryFilter>('all');
+  // tb-listings-properties-keyword-search-001: a fourth, AND-combined
+  // predicate alongside the three tab filters above -- plain title/address
+  // substring match, component-local state (not persisted), same pattern.
+  const [keyword, setKeyword] = useState('');
 
   const filteredListings = useMemo(() => {
     if (!listings) return null;
@@ -118,9 +123,10 @@ export function ListingsPage({ session }: Props) {
       if (statusFilter !== 'all' && listing.status !== statusFilter) return false;
       if (typeFilter !== 'all' && listing.listing_type !== typeFilter) return false;
       if (expiryFilter !== 'all' && expiryBucket(listing, now) !== expiryFilter) return false;
+      if (!matchesKeyword(listing.property_title, listing.property_address, keyword)) return false;
       return true;
     });
-  }, [listings, statusFilter, typeFilter, expiryFilter]);
+  }, [listings, statusFilter, typeFilter, expiryFilter, keyword]);
 
   function openDetail(listingId: string) {
     setOpenDetailId(listingId);
@@ -168,6 +174,19 @@ export function ListingsPage({ session }: Props) {
           <ListingFilterTabs label="Status" options={STATUS_FILTER_OPTIONS} value={statusFilter} onChange={setStatusFilter} />
           <ListingFilterTabs label="Type" options={TYPE_FILTER_OPTIONS} value={typeFilter} onChange={setTypeFilter} />
           <ListingFilterTabs label="Expiry" options={EXPIRY_FILTER_OPTIONS} value={expiryFilter} onChange={setExpiryFilter} />
+          <div className="flex items-center gap-2">
+            <span className="w-24 shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Search
+            </span>
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Search by title or address…"
+              aria-label="Search listings by title or address"
+              className="h-8 w-full max-w-sm rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+            />
+          </div>
         </div>
       )}
 

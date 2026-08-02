@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchProperties,
   updatePropertyVerification,
+  matchesKeyword,
   VERIFICATION_STATUSES,
   type Property,
   type VerificationStatus,
@@ -52,6 +53,17 @@ export function PropertiesListPage({ session }: Props) {
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
+
+  // tb-listings-properties-keyword-search-001: this page's first-ever
+  // client-side filter -- previously every fetched property rendered
+  // unfiltered. Same component-local, non-persisted pattern as ListingsPage's
+  // filter state.
+  const [keyword, setKeyword] = useState('');
+
+  const filteredProperties = useMemo(() => {
+    if (!properties) return null;
+    return properties.filter((property) => matchesKeyword(property.title, property.address, keyword));
+  }, [properties, keyword]);
 
   function reload() {
     fetchProperties(session.access_token)
@@ -103,6 +115,28 @@ export function PropertiesListPage({ session }: Props) {
       {properties?.length === 0 && <p className="text-sm text-muted-foreground">No properties yet.</p>}
 
       {properties && properties.length > 0 && (
+        <div className="space-y-2 rounded-lg border p-3">
+          <div className="flex items-center gap-2">
+            <span className="w-24 shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Search
+            </span>
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Search by title or address…"
+              aria-label="Search properties by title or address"
+              className="h-8 w-full max-w-sm rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+            />
+          </div>
+        </div>
+      )}
+
+      {properties && properties.length > 0 && filteredProperties?.length === 0 && (
+        <p className="text-sm text-muted-foreground">No properties match the search.</p>
+      )}
+
+      {filteredProperties && filteredProperties.length > 0 && (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
@@ -116,7 +150,7 @@ export function PropertiesListPage({ session }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {properties.map((property) => (
+              {filteredProperties.map((property) => (
                 <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
                   <TableCell>
                     {property.cover_photo_url ? (
