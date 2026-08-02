@@ -11,6 +11,7 @@ import {
 } from '@/lib/projectsApi';
 import { UnitTypesSection } from '@/components/UnitTypesSection';
 import { UnitsSummarySection } from '@/components/UnitsSummarySection';
+import { AddExistingUnitPanel } from '@/components/AddExistingUnitPanel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -24,6 +25,10 @@ export function ProjectDetailPage({ session }: Props) {
   const [unitTypes, setUnitTypes] = useState<ProjectUnitType[] | null>(null);
   const [unitsSummary, setUnitsSummary] = useState<ProjectUnitsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // tb-properties-project-link-001: "Add existing unit" -- lets a property
+  // created outside the project-aware flow (standalone creation, Migration
+  // import) join this project after the fact.
+  const [addingUnit, setAddingUnit] = useState(false);
 
   const refetchUnitsSummary = useCallback(() => {
     if (!id) return;
@@ -83,7 +88,12 @@ export function ProjectDetailPage({ session }: Props) {
           <p className="text-sm text-muted-foreground">Total units: {project.total_units ?? '—'}</p>
 
           <div className="space-y-2 pt-4">
-            <h2 className="text-lg font-semibold tracking-tight">Units summary</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold tracking-tight">Units summary</h2>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setAddingUnit(true)}>
+                Add existing unit
+              </Button>
+            </div>
             {unitsSummary === null ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
@@ -108,6 +118,17 @@ export function ProjectDetailPage({ session }: Props) {
             )}
           </div>
         </div>
+      )}
+
+      {addingUnit && project && (
+        <AddExistingUnitPanel
+          session={session}
+          projectId={id}
+          projectName={project.name}
+          unitsSummary={unitsSummary}
+          onClose={() => setAddingUnit(false)}
+          onLinked={refetchUnitsSummary}
+        />
       )}
     </div>
   );

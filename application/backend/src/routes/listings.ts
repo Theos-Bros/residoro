@@ -117,6 +117,12 @@ type UpdatePropertyVerificationBody = {
 // is being set to, in this same request) 'leased' -- see the validation in
 // the route below. Not required-together with `status` itself: a later
 // PATCH to an already-leased property can update just the rent/term.
+//
+// tb-properties-project-link-001: project_id is no longer create-time-only
+// (see tb-properties-project-001's original carve-out) -- it may now be set
+// here too, `null` to unlink or a UUID to link. Reuses POST /properties'
+// exact tenant-scoped project lookup and `owner_type === 'developer'` guard
+// (see the route below), rather than duplicating slightly-different rules.
 type UpdatePropertyBody = {
   title?: string;
   address?: string;
@@ -134,6 +140,7 @@ type UpdatePropertyBody = {
   lease_term_months?: number;
   owner_type?: string;
   owner_id?: string | null;
+  project_id?: string | null;
 };
 
 // UX follow-up: "the expiry of the authority to sell should be automatic,
@@ -407,13 +414,25 @@ export async function registerListingsRoutes(app: FastifyInstance) {
   // tb-properties-project-001, tb-properties-bulk-units-001, and
   // tb-properties-owner-linking-001's own "What Happens Next" sections --
   // every field here except verification_status (its own route above) and
-  // project_id/unit_number/type (still create-time-only, see semantic_scope)
-  // was previously only writable via POST /properties. Reuses POST's exact
-  // numeric-field validation and owner-table lookup rather than duplicating
-  // slightly-different rules. owner_type/owner_id are gated admin-only and
-  // must be given together (a partial ownership change could leave owner_id
-  // pointing at the wrong table) -- owner_id may be explicitly null to clear
-  // ownership.
+  // unit_number/type (still create-time-only) was previously only writable
+  // via POST /properties. Reuses POST's exact numeric-field validation and
+  // owner-table lookup rather than duplicating slightly-different rules.
+  // owner_type/owner_id are gated admin-only and must be given together (a
+  // partial ownership change could leave owner_id pointing at the wrong
+  // table) -- owner_id may be explicitly null to clear ownership.
+  //
+  // tb-properties-project-link-001: project_id was still create-time-only
+  // until now (see the comment on UpdatePropertyBody above) -- this lets a
+  // property created outside the project-aware flow (standalone creation,
+  // Migration import) join a project afterward, from ProjectDetailPage's new
+  // "Add existing unit" picker. `null` clears the link unconditionally,
+  // matching owner_id's existing "may be null to clear" convention just
+  // above. A UUID re-runs POST /properties' exact tenant-scoped project
+  // lookup (404 if the project isn't in the caller's own tenant) and then
+  // requires the property to *already* be owner_type = 'developer' -- this
+  // route doesn't also flip ownership in the same request, so it checks the
+  // property's current owner_type rather than any owner_type also present in
+  // this same body.
   app.patch<{ Params: { id: string }; Body: UpdatePropertyBody }>(
     '/properties/:id',
     { preHandler: requireAuth },
@@ -436,6 +455,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         lease_term_months,
         owner_type,
         owner_id,
+        project_id,
       } = request.body ?? {};
 
       const updateFields: Record<string, unknown> = {};
@@ -566,6 +586,47 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         updateFields.owner_id = owner_id;
       }
 
+      if (project_id !== undefined) {
+        if (project_id === null) {
+          updateFields.project_id = null;
+        } else {
+          const { data: project, error: projectError } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('id', project_id)
+            .eq('tenant_id', request.user!.tenantId)
+            .maybeSingle();
+
+          if (projectError) {
+            request.log.error(projectError);
+            return reply.status(500).send({ error: 'Could not verify the project' });
+          }
+          if (!project) {
+            return reply.status(404).send({ error: 'Project not found in your workspace' });
+          }
+
+          const { data: currentProperty, error: currentError } = await supabase
+            .from('properties')
+            .select('owner_type')
+            .eq('id', request.params.id)
+            .eq('tenant_id', request.user!.tenantId)
+            .maybeSingle<{ owner_type: string }>();
+
+          if (currentError) {
+            request.log.error(currentError);
+            return reply.status(500).send({ error: 'Could not verify the property' });
+          }
+          if (!currentProperty) {
+            return reply.status(404).send({ error: 'Property not found in your workspace' });
+          }
+          if (currentProperty.owner_type !== 'developer') {
+            return reply.status(400).send({ error: 'project_id can only be set when owner_type is developer' });
+          }
+
+          updateFields.project_id = project_id;
+        }
+      }
+
       if (Object.keys(updateFields).length === 0) {
         return reply.status(400).send({ error: 'No editable fields were provided' });
       }
@@ -575,7 +636,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         .update(updateFields)
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
-        .select('id, title, price, price_currency, status, lease_monthly_rent, lease_term_months, owner_type, owner_id')
+        .select(
+          'id, title, price, price_currency, status, lease_monthly_rent, lease_term_months, owner_type, owner_id, project_id',
+        )
         .single();
 
       if (error || !property) {
