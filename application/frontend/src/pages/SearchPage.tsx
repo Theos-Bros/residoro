@@ -188,8 +188,16 @@ export function SearchPage({ session }: Props) {
                 <Card key={key}>
                   <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
                     <CardTitle className="text-base">{result.property_title ?? '(untitled)'}</CardTitle>
-                    <Badge variant={result.source === 'inventory' ? 'secondary' : 'outline'}>
-                      {result.source === 'inventory' ? 'Your inventory' : `Shared by @${result.shared_by_handle ?? 'unknown'}`}
+                    <Badge
+                      variant={
+                        result.source === 'inventory' ? 'secondary' : result.source === 'project_unit' ? 'default' : 'outline'
+                      }
+                    >
+                      {result.source === 'inventory'
+                        ? 'Your inventory'
+                        : result.source === 'project_unit'
+                          ? 'Project inventory — not yet listed'
+                          : `Shared by @${result.shared_by_handle ?? 'unknown'}`}
                     </Badge>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -205,7 +213,7 @@ export function SearchPage({ session }: Props) {
                     {result.excluded_fields.length > 0 && (
                       <p className="text-xs text-muted-foreground">Not matched: {result.excluded_fields.join(', ')}</p>
                     )}
-                    {state?.sourceType === 'lead' && (
+                    {state?.sourceType === 'lead' && result.source !== 'project_unit' && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -214,6 +222,11 @@ export function SearchPage({ session }: Props) {
                       >
                         {alreadySent ? 'Sent' : sendingId === result.listing_id ? 'Sending…' : 'Send as option'}
                       </Button>
+                    )}
+                    {state?.sourceType === 'lead' && result.source === 'project_unit' && (
+                      <p className="text-xs text-muted-foreground">
+                        Not yet listed — create a Listing for this unit before sending it as an option.
+                      </p>
                     )}
                   </CardContent>
                 </Card>
