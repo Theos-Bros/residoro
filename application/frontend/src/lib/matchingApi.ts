@@ -25,7 +25,7 @@ export const TOGGLE_FIELD_LABELS: Record<Exclude<MatchableField, 'intent'>, stri
 };
 
 export type MatchResult = {
-  source: 'inventory' | 'docket';
+  source: 'inventory' | 'docket' | 'project_unit';
   listing_id: string;
   docket_id?: string;
   shared_by_handle?: string | null;

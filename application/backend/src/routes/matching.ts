@@ -16,7 +16,7 @@ type AdHocSearchBody = { hard_filter_fields?: string[]; requirement?: Requiremen
 type MatchingSettingsBody = { match_score_threshold?: number };
 
 type MatchResult = {
-  source: 'inventory' | 'docket';
+  source: 'inventory' | 'docket' | 'project_unit';
   listing_id: string;
   docket_id?: string;
   shared_by_handle?: string | null;
@@ -187,6 +187,84 @@ async function scoreReceivedDockets(
   return results;
 }
 
+type ProjectUnitRow = {
+  id: string;
+  project_id: string;
+  type: string | null;
+  city: string | null;
+  province: string | null;
+  floor_area_sqm: number | null;
+  lot_area_sqm: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  price: number | null;
+  price_currency: string | null;
+  title: string | null;
+  projects: { name: string | null } | null;
+};
+
+// tb-buyer-leads-matching-project-units-001: a tenant's own available,
+// project_id-linked properties that have no Listing yet (pre-selling /
+// developer inventory). Buy-intent-only, confirmed with the user -- a
+// lease-intent search skips this source entirely, and listing_type is set
+// unconditionally to 'sale' so scoreListing()'s existing hard intent filter
+// (unchanged) naturally passes buy searches and never matches lease ones.
+// status='available' excludes reserved/sold/off_market and 'leased'
+// (tb-properties-unit-leasing-001 -- occupied, not available inventory).
+// Read-only, exactly like scoreReceivedDockets -- never writes to properties.
+async function scoreProjectUnits(
+  supabase: ReturnType<typeof getScopedClient>,
+  tenantId: string,
+  requirement: RequirementLike,
+  hardFilterFields: readonly Exclude<MatchableField, 'intent'>[],
+): Promise<MatchResult[]> {
+  if (requirement.intent === 'lease') return [];
+
+  const { data, error } = await supabase
+    .from('properties')
+    .select(
+      'id, project_id, type, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, price, price_currency, title, projects(name)',
+    )
+    .eq('tenant_id', tenantId)
+    .not('project_id', 'is', null)
+    .eq('status', 'available');
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as unknown as ProjectUnitRow[];
+  const results: MatchResult[] = [];
+
+  for (const row of rows) {
+    const candidate: MatchCandidate = {
+      listing_type: 'sale',
+      property_type: row.type,
+      price: row.price,
+      city: row.city,
+      province: row.province,
+      floor_area_sqm: row.floor_area_sqm,
+      lot_area_sqm: row.lot_area_sqm,
+      bedrooms: row.bedrooms,
+      bathrooms: row.bathrooms,
+    };
+
+    const scored = scoreListing(requirement, candidate, hardFilterFields);
+    if (!scored) continue;
+
+    results.push({
+      source: 'project_unit',
+      listing_id: row.id,
+      property_title: `${row.title ?? '(untitled)'} (${row.projects?.name ?? 'Project'})`,
+      price: row.price,
+      price_currency: row.price_currency,
+      score: scored.score,
+      matched_fields: scored.matched_fields,
+      excluded_fields: scored.excluded_fields,
+    });
+  }
+
+  return results;
+}
+
 function parseHardFilterFields(body: SearchBody | undefined, reply: { status: (code: number) => { send: (body: unknown) => unknown } } ): readonly Exclude<MatchableField, 'intent'>[] | null {
   const raw = body?.hard_filter_fields ?? [];
   if (!Array.isArray(raw)) return null;
@@ -223,11 +301,12 @@ export async function registerMatchingRoutes(app: FastifyInstance) {
       }
 
       try {
-        const [inventory, dockets] = await Promise.all([
+        const [inventory, dockets, projectUnits] = await Promise.all([
           scoreOwnInventory(supabase, request.user!.tenantId, inquiry, hardFilterFields),
           scoreReceivedDockets(supabase, request.user!.id, inquiry, hardFilterFields),
+          scoreProjectUnits(supabase, request.user!.tenantId, inquiry, hardFilterFields),
         ]);
-        const results = [...inventory, ...dockets].sort((a, b) => b.score - a.score);
+        const results = [...inventory, ...dockets, ...projectUnits].sort((a, b) => b.score - a.score);
 
         await supabase
           .from('inquiries')
@@ -269,11 +348,12 @@ export async function registerMatchingRoutes(app: FastifyInstance) {
       }
 
       try {
-        const [inventory, dockets] = await Promise.all([
+        const [inventory, dockets, projectUnits] = await Promise.all([
           scoreOwnInventory(supabase, request.user!.tenantId, lead, hardFilterFields),
           scoreReceivedDockets(supabase, request.user!.id, lead, hardFilterFields),
+          scoreProjectUnits(supabase, request.user!.tenantId, lead, hardFilterFields),
         ]);
-        const results = [...inventory, ...dockets].sort((a, b) => b.score - a.score);
+        const results = [...inventory, ...dockets, ...projectUnits].sort((a, b) => b.score - a.score);
 
         const updateFields: Record<string, unknown> = { last_searched_at: new Date().toISOString() };
         // cap-buyer-leads-001's "How It Works" step 3: a successful search
@@ -324,11 +404,12 @@ export async function registerMatchingRoutes(app: FastifyInstance) {
 
     const supabase = getScopedClient(request);
     try {
-      const [inventory, dockets] = await Promise.all([
+      const [inventory, dockets, projectUnits] = await Promise.all([
         scoreOwnInventory(supabase, request.user!.tenantId, requirement, hardFilterFields),
         scoreReceivedDockets(supabase, request.user!.id, requirement, hardFilterFields),
+        scoreProjectUnits(supabase, request.user!.tenantId, requirement, hardFilterFields),
       ]);
-      const results = [...inventory, ...dockets].sort((a, b) => b.score - a.score);
+      const results = [...inventory, ...dockets, ...projectUnits].sort((a, b) => b.score - a.score);
       return { results };
     } catch (err) {
       request.log.error(err);
