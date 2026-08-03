@@ -26,6 +26,16 @@ function htmlToPlainText(html: string): string {
 // "copied" state), never calls logShareEvent() or any equivalent --
 // cap-buyer-leads-001: "Does NOT track whether/when a Buyer Wanted broadcast
 // was actually posted anywhere."
+//
+// Residoro Design Language (tb-design-system-modals-001): adds the
+// mandatory description line under the title (FloatingPanel's `description`
+// prop). Design doc section 10 illustrates an audience select + message
+// textarea + "Send to N agents" footer button, but this component's actual
+// flow is copy-to-clipboard, not a send/audience action -- it has no
+// audience prop and no send callback, only a template body to copy. That
+// content isn't invented here; the description instead states the real
+// one-way/no-reply nature of a broadcast, and the existing Copy action is
+// kept and restyled in place.
 export function BroadcastModal({ session, entityType, entityId, onClose }: Props) {
   const [html, setHtml] = useState('');
   const [templateConfigured, setTemplateConfigured] = useState(true);
@@ -80,7 +90,12 @@ export function BroadcastModal({ session, entityType, entityId, onClose }: Props
   }
 
   return (
-    <FloatingPanel title="Buyer Wanted Broadcast" onClose={onClose} className="max-w-lg sm:max-w-xl">
+    <FloatingPanel
+      title="Broadcast to agents"
+      description="A one-way announcement — agents can't reply. Use it for price changes, new inventory and deadlines, not conversations."
+      onClose={onClose}
+      className="max-w-lg sm:max-w-xl"
+    >
       <div className="space-y-4">
         {error && (
           <p role="alert" className="text-sm text-destructive">
@@ -98,7 +113,7 @@ export function BroadcastModal({ session, entityType, entityId, onClose }: Props
         {!loading && !error && templateConfigured && (
           <>
             <RichTextEditor value={html} onChange={setHtml} className="max-h-64 overflow-y-auto" />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 border-t pt-4">
               <Button onClick={handleCopy}>Copy to clipboard</Button>
               {copied && <span className="text-sm text-muted-foreground">Copied.</span>}
             </div>

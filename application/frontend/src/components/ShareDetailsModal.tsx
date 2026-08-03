@@ -45,6 +45,19 @@ function htmlToPlainText(html: string): string {
 // existing modal-equivalent, see ListingHistoryPanel) rather than
 // introducing a new Dialog primitive, widened via className for the
 // audience picker + rich-text editor.
+//
+// Residoro Design Language (tb-design-system-modals-001): adds the
+// mandatory description line and widens further toward the design doc's
+// 700px target (still FloatingPanel's shell, not swapped to Dialog, per the
+// "keep the existing shell choice" rule). Design doc section 10 illustrates
+// a 2-col grid (Send to/expiry/note fields + a "Client will see" checkbox
+// list gating price/album/floor-plan/turnover/payment-terms visibility), but
+// this component's actual props/state are audience ('public' | 'co_broker' |
+// 'internal') + a single rich-text body to copy -- there's no per-field
+// visibility toggle, expiry, or recipient data to bind that structure to.
+// Adding it would require new props/state, out of scope for a markup-only
+// pass, so the existing audience-tab + copy-to-clipboard flow is restyled in
+// place instead.
 export function ShareDetailsModal({ session, listingId, propertyTitle, onClose }: Props) {
   const [audience, setAudience] = useState<ShareAudience>('public');
   const [html, setHtml] = useState('');
@@ -102,9 +115,10 @@ export function ShareDetailsModal({ session, listingId, propertyTitle, onClose }
 
   return (
     <FloatingPanel
-      title={`Share Details — ${propertyTitle}`}
+      title={`Share details · ${propertyTitle}`}
+      description="Creates client-facing text for the audience you pick below — internal-only fields like commission and owner contact are never included."
       onClose={onClose}
-      className="max-w-lg sm:max-w-xl"
+      className="max-w-lg sm:max-w-2xl"
     >
       <div className="space-y-4">
         <div className="flex gap-1">
@@ -131,7 +145,7 @@ export function ShareDetailsModal({ session, listingId, propertyTitle, onClose }
         {!loading && !error && (
           <>
             <RichTextEditor value={html} onChange={setHtml} className="max-h-64 overflow-y-auto" />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 border-t pt-4">
               <Button onClick={handleCopy}>Copy to clipboard</Button>
               {copied && <span className="text-sm text-muted-foreground">Copied.</span>}
             </div>
