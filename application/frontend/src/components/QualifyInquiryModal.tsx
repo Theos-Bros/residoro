@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { qualifyInquiry } from '@/lib/inquiriesApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -22,6 +29,19 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // qualifyInquiry call, same new-vs-existing-contact choice, just reachable
 // directly from the Inquiries row's Qualify button instead of requiring the
 // full detail panel to be open first.
+//
+// Residoro Design Language (tb-design-system-modals-001): header/footer
+// pattern matches ListingDetailModal (title + ink-600 description, cancel +
+// gold confirm right, confirm names the object). Design doc section 10
+// illustrates a 700px-wide modal with a Budget/Timeline/Financing field grid,
+// a "what they sent" quoted-inquiry card, a matching-inventory checklist, and
+// a third "Not a fit -- file it" decline action. None of that data or
+// callback exists on this component's actual props (session, inquiryId,
+// buyerName, onClose, onQualified -- just a new-vs-existing-contact choice),
+// so none of it is added here -- would require new props/state/a decline
+// callback, out of scope for a markup-only pass. Kept at the default Dialog
+// width rather than forced to 700px since the content genuinely doesn't need
+// it.
 export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, onQualified }: Props) {
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [useNewContact, setUseNewContact] = useState(true);
@@ -62,7 +82,10 @@ export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, on
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Qualify {buyerName || 'Inquiry'}</DialogTitle>
+          <DialogTitle>Qualify {buyerName || 'inquiry'}</DialogTitle>
+          <DialogDescription>
+            Decide whether this becomes a working lead. Qualifying creates a contact and a lead for {buyerName || 'this inquiry'}.
+          </DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -73,12 +96,22 @@ export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, on
 
         <div className="space-y-2">
           <div className="flex gap-4 text-sm">
-            <label className="flex items-center gap-1">
-              <input type="radio" checked={useNewContact} onChange={() => setUseNewContact(true)} />
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                checked={useNewContact}
+                onChange={() => setUseNewContact(true)}
+                className="h-4 w-4 border-input text-primary"
+              />
               New contact
             </label>
-            <label className="flex items-center gap-1">
-              <input type="radio" checked={!useNewContact} onChange={() => setUseNewContact(false)} />
+            <label className="flex items-center gap-1.5">
+              <input
+                type="radio"
+                checked={!useNewContact}
+                onChange={() => setUseNewContact(false)}
+                className="h-4 w-4 border-input text-primary"
+              />
               Existing contact
             </label>
           </div>
@@ -101,7 +134,7 @@ export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, on
             Cancel
           </Button>
           <Button size="sm" onClick={handleConfirm} disabled={saving}>
-            Confirm Qualify
+            {saving ? 'Qualifying…' : `Qualify ${buyerName || 'inquiry'}`}
           </Button>
         </DialogFooter>
       </DialogContent>
