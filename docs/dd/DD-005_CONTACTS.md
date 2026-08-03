@@ -1,10 +1,10 @@
 # DD-005 — Contacts
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-03
 
 ---
 
@@ -36,6 +36,7 @@ CRM relationship data (lead status, assignment, activity history) a future CRM d
 | `phone` | `text` | nullable | |
 | `company` | `text` | nullable | |
 | `notes` | `text` | nullable | |
+| `is_company` | `boolean` | not null, default `false` | Added by `tb-crm-developer-consolidation-001` (2026-07-28, `cap-crm-001` Milestone 1) when the standalone `developers` table was dropped and folded in here (`type = 'developer'`, `is_company = true` for former `developers` rows) — see DD-007 for that table's history |
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | Nullable, same rationale as `properties.created_by` — bulk/service-role writes may not have a single acting user |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
@@ -60,9 +61,16 @@ Standard tenant-scoped CRUD, matching `properties`'s pattern exactly (DD-002).
 | `contacts_update_tenant` | `update` where/with check `tenant_id = current_tenant_id()` |
 | `contacts_delete_admin` | `delete` where `tenant_id = current_tenant_id()` and `current_role() = 'admin'` |
 
-`authenticated` is granted `select, insert, update, delete`. `service_role` has full access —
-as with every other tenant-scoped table, the backend currently uses `service_role` for all
-`contacts` routes (see ADR-002's "Superseded By (partial)" note and ADR-003).
+`authenticated` is granted `select, insert, update, delete`. `service_role` has full access.
+**Update, 2026-07-28 (`tb-platform-rls-scoped-client-001`, per ADR-003):** `contacts.ts` is now
+fully on the per-request scoped client — RLS is the real enforcement boundary for `contacts`
+routes now, not `service_role`.
+
+**Also unrepresented in this DD:** `tb-crm-contacts-page-001` (2026-07-28) shipped a unified
+Contacts page (list + full CRUD via `contacts.ts`/`contactsApi.ts`) on top of this table without
+changing its shape — a frontend/API-surface addition, not a schema change, so it doesn't add a
+row here, but a reader relying on this doc alone wouldn't know a first-class Contacts UI exists.
+See `cap-crm-001` in the Theos Registry for that capability's full scope.
 
 ---
 
@@ -71,10 +79,13 @@ as with every other tenant-scoped table, the backend currently uses `service_rol
 - DD-002 — Properties (parallel table shape and RLS pattern)
 - DD-004 — Import Batches & Row Tracking (`imported_contacts`, the migration write-tracking sibling)
 - `cap-migration-001` (Theos Registry) — generic Contact entity decision, scoped for migration purposes
+- `cap-crm-001` (Theos Registry) — `is_company`, the Contacts page, Buyer/Seller relationships
+- DD-007 — Developers & Projects (the dropped `developers` table `is_company` absorbed)
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation & Row-Level Security
 - ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 - `supabase/migrations/20260722140000_contacts.sql` — implements this doc
+- `supabase/migrations/20260728140000_crm_developer_consolidation.sql` — `is_company` added
 
 ---
 
@@ -83,3 +94,4 @@ as with every other tenant-scoped table, the backend currently uses `service_rol
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review. |
+| 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: added `is_company` (from the `developers` consolidation), corrected the stale `service_role`-for-all-routes RLS claim, noted the unified Contacts page shipped on top of this table. |

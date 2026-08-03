@@ -1,10 +1,10 @@
 # ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 
-**Status:** Approved — Implemented
-**Version:** 1.1.1
+**Status:** Approved — Implemented (with one known gap, see below)
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-03
 
 ---
 
@@ -92,6 +92,36 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
      turned out to be a straightforward full migration (all reads are the caller's own tenant,
      no cross-tenant join) — the "may need per-query treatment" hedge in this ADR's original
      Consequences section didn't end up applying there.
+   - **Added 2026-08-03 (birds-eye review):** `matching.ts` (`scoreReceivedDockets`) and
+     `buyerRequirements.ts` (`/buyer-requirements/:id/options-sent`), both shipped by
+     `tb-buyer-leads-matching-001`/`tb-buyer-leads-schema-001` (2026-07-28), after this ADR's
+     last revision. Both reuse the exact `dockets.ts` cross-tenant-docket-join pattern above —
+     scoring/showing a docket the caller received necessarily reads through to the *sharer's*
+     tenant's listing/property data, which a scoped client would silently null out under
+     `properties_select_tenant`/`listings_select_tenant`. Same rationale as `dockets.ts`, just
+     not recorded here until now.
+
+---
+
+## Known Gap (not an exception — flagged, not yet fixed)
+
+**`migrations.ts` (CSV import routes: upload/analyze/preview/confirm/rollback) does not comply
+with Decision #1.** Decision #1 explicitly names "the tenant-facing migration-preview/upload
+routes" as required to use the scoped client. In current code, every one of `migrations.ts`'s 29
+data calls uses `supabaseAdmin`, for both its operator-driven branch (`requireMigrationAccess`
+with `role = 'operator'`, a query-param `tenant_id` — a legitimate Decision #2 case) **and** its
+self-service branch (`requireAuth`, an ordinary brokerage caller — the branch Decision #1
+actually covers).
+
+Unlike the exceptions above, this isn't a case where a blanket swap would break a feature — it's
+simply not yet done. Verified manually (2026-08-03 birds-eye review, full file read) that every
+query in `migrations.ts` and its `findPropertyConflicts` helper filters by `tenant_id` (either
+directly, or via an `id`/`batch_id` already tenant-verified earlier in the same request), so
+there is no known cross-tenant leak today — but that safety currently rests entirely on
+hand-written filtering with no RLS backstop, exactly the pre-ADR-003 posture this ADR exists to
+move away from for tenant-user-facing routes. Migrating the self-service branch to the scoped
+client (while the operator branch, which reads an arbitrary tenant's data by design, stays on
+`supabaseAdmin`) is open follow-up work, not scheduled as of this writing.
 
 ---
 
@@ -135,4 +165,5 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial decision record, written from RFC-002's approved decision. |
 | 1.1.1 | 2026-07-27 | `tb-properties-media-external-links-001` removed the `property-media` Storage bucket entirely (photos/videos are now pasted external links) — noted that the storage-write exception in Decision #4 no longer applies to `propertyMedia.ts`, only to `propertyDocuments.ts`. |
+| 1.2.0 | 2026-08-03 | Birds-eye review: added `matching.ts`/`buyerRequirements.ts` to Decision #4's exception list (same `dockets.ts` cross-tenant-join pattern, shipped 2026-07-28 but never recorded). Added a new "Known Gap" section documenting `migrations.ts`'s non-compliance with Decision #1 — verified manually safe (every query tenant-filtered) but not yet migrated to the scoped client; this is open follow-up work, not a designed exception. |
 | 1.1.0 | 2026-07-27 | Implemented via `tb-platform-rls-scoped-client-001`. Added Decision #4 recording implementation-time exceptions found within "tenant-user-facing" scope (dockets.ts's genuinely cross-tenant reads, workspace.ts's contract_notifications no-policy table, storage write operations) and updated Consequences with live verification results. |

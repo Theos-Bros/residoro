@@ -200,10 +200,10 @@ docs/
 
 - ✅ ADR-001 Shared-Schema Multi-Tenant Architecture
 - ✅ ADR-002 Workspace Isolation & Row-Level Security
-- ⏳ ADR-003 Configuration Over Customization
-- ⏳ ADR-004 Documentation-First Development
-- ⏳ ADR-005 AI-Assisted Migration
-- ⏳ ADR-006 Workspace Naming Convention
+- ✅ ADR-003 Scoped-Client Enforcement for Tenant-User-Facing Routes
+- ✅ ADR-004 Per-Setting Tables for Delegated Permissions
+- ⏳ ADR-005 (not yet written; no number-005 topic has been proposed)
+- ⏳ ADR-006 (not yet written; no number-006 topic has been proposed)
 
 ---
 

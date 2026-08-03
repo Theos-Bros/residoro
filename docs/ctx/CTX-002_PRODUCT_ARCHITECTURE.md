@@ -1,10 +1,10 @@
 # CTX-002 — Product Architecture
 
 **Status:** Approved  
-**Version:** 2.0.0  
+**Version:** 2.1.0  
 **Owner:** Residoro Engineering  
 **Created:** 2026-07-20  
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-03
 
 ---
 
@@ -125,11 +125,16 @@ decision, not a missing feature. See DS-006, `cap-client-lifecycle-001` for full
 
 ## CRM — **Partially Built**
 
-Built: Contacts (generic entity, migration-scoped — see DS-005), Developers (minimal
-placeholder — DS-007).
+Built (as of 2026-07-28, `cap-crm-001`): Contacts (generic entity — DS-005), Company as a
+distinct concept (`contacts.is_company`, not a separate table), Buyer as a first-class
+relationship on listings (`listings.buyer_contact_id`, required on transition to `status =
+'sold'`), a unified Contacts page (list/detail CRUD). The standalone `developers` placeholder
+table (DS-007) was consolidated into Contacts, not built out further — Developer is now a
+Contact with `is_company = true`.
 
-Not yet built: Companies as a distinct entity, Buyers/Sellers as CRM concepts (they exist only
-implicitly, through Contacts and Listings), lead pipelines, activity history.
+Not yet built: lead pipelines (see Buyer Operations below — since built separately, not as part
+of this domain), activity history, Seller as a distinct relationship (still implicit via
+`properties.owner_id`, which needed no equivalent change since it already served that role).
 
 ---
 
@@ -154,10 +159,19 @@ semantic_scope, reserved for a future Distribution capability).
 
 ---
 
-## Buyer Operations — **Future**
+## Buyer Operations — **Partially Built**
 
-Not started. Lead intake, qualification, property matching, viewings, offers, reservation,
-closing — none of this exists in code. Named here as intended direction only.
+Built (`cap-buyer-leads-001`, shipped 2026-07-28 through 2026-07-30): a two-table lead pipeline
+— Inquiries (lightweight pre-qualification pen) promoted into Leads on Qualify — with pipeline
+stages, scored requirement-matching against the brokerage's own active listings and cross-tenant
+docket-shared listings, a "Buyer Wanted" broadcast fallback when no match exists, stage-change
+task auto-generation, and a Revisit page tracking leased deals by lease-end date for renewal
+outreach. See DS/DD coverage gap noted in the 2026-08-03 birds-eye review — no DS/DD doc exists
+yet for this domain despite it being fully built.
+
+Not yet built: viewings, offers, reservation, closing as distinct workflow stages (they exist
+only as manual pipeline-stage labels with no automation behind them — see Transaction
+Management below).
 
 ---
 
@@ -183,12 +197,18 @@ schema or backend.
 
 ---
 
-## Task & Workflow Engine — **Future**
+## Task & Workflow Engine — **Partially Built**
 
-Not started, as a general-purpose engine. The automated-notification pattern (TS-003) covers a
-narrow slice of "Automations"/"Notifications" for three specific business events
-(contract expiry, training reminders, listing-authority expiry) — not a general task/workflow
-system.
+Built (`cap-tasks-001`, shipped 2026-07-28): a real Task entity with a standalone Tasks page,
+admin-configurable per-event routing settings (assign to a specific person or "the tenant's
+admin"), and auto-generation on every buyer-requirement pipeline stage change. Still not a
+general-purpose workflow engine — task types and triggers are hardcoded per business event, not
+user-definable. The separate automated-notification pattern (TS-003) still covers the earlier,
+narrower "Automations"/"Notifications" slice (contract expiry, training reminders,
+listing-authority expiry) — that pattern and the Task entity are two different mechanisms, not
+merged into one.
+
+Not yet built: user-definable task types/triggers, a general workflow-automation builder.
 
 ---
 
@@ -199,9 +219,13 @@ document store for contracts, IDs, or other document types beyond property-attac
 
 ---
 
-## Reporting & Analytics — **Future**
+## Reporting & Analytics — **Partially Built**
 
-Not started. No dashboards, pipeline analytics, or financial reporting exist.
+Built (`cap-analytics-001`, shipped 2026-07-28): a Performance page tracking share events
+(`listing_share_events`) — how often/where a listing's share text was generated, one slice of
+distribution effectiveness, not general pipeline or financial reporting.
+
+Not yet built: general dashboards, buyer-pipeline analytics, financial/commission reporting.
 
 ---
 
@@ -341,3 +365,4 @@ without requiring changes to the core business architecture.
 |----------|------|-------------|
 | 1.0.0 | 2026-07-20 | Initial version. |
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: added Built/Partially Built/Future status to every business domain (verified against actual code, not aspirational); added the Client Lifecycle domain, missing from the original PRD entirely despite being one of the most fully-built parts of the platform; flagged the Business Lifecycle diagram and AI Services section as largely aspirational relative to current implementation. Structural revision, hence major version bump per STD-002. |
+| 2.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: a full day of feature work (2026-07-28) landed the day immediately after this doc's last revision and was never reflected here. Flipped Buyer Operations, Task & Workflow Engine, and Reporting & Analytics from Future to Partially Built; updated the CRM section for Company/Buyer/Developer-consolidation. |

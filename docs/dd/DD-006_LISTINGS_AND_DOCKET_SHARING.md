@@ -1,10 +1,10 @@
 # DD-006 — Listings & Docket Sharing
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-03
 
 ---
 
@@ -38,7 +38,9 @@ time. Mirrors `properties`'s table shape and RLS pattern.
 | `listing_type` | `text` | not null, `CHECK` in (`sale`, `rent`) | |
 | `price` | `numeric(14,2)` | not null | |
 | `price_currency` | `text` | not null, default `'PHP'` | |
-| `status` | `text` | not null, default `'draft'`, `CHECK` in (`draft`, `active`, `under_offer`, `sold`, `expired`, `withdrawn`) | Widened from an original `draft`/`active`/`withdrawn`-only set by `tb-listings-lifecycle-001`. Legal transitions enforced in application code (`listings.ts`), not a DB trigger. Listings are never deleted — reassigning to a new agent means withdrawing this row and creating a new one |
+| `status` | `text` | not null, default `'draft'`, `CHECK` in (`draft`, `active`, `under_offer`, `sold`, `expired`, `withdrawn`, `inactive`) | Widened from an original `draft`/`active`/`withdrawn`-only set by `tb-listings-lifecycle-001`; `'inactive'` added by `tb-listings-status-ladder-001` (2026-07-29) as a pausable state reachable from `active` (`active <-> inactive`), additive alongside `draft`. Legal transitions enforced in application code (`listings.ts`), not a DB trigger. Listings are never deleted — reassigning to a new agent means withdrawing this row and creating a new one |
+| `buyer_contact_id` | `uuid` | nullable, FK → `contacts(id)` | Added by `tb-crm-buyer-001` (Milestone 3 of `cap-crm-001`). Required exactly on the transition to `status = 'sold'` — enforced in the route handler, not a column constraint; null for every other status |
+| `commission_note` | `text` | nullable | Added by `tb-distribution-share-text-001`. Free-form internal note; deliberately excluded from every external share-text template (public/co-broker) — internal-audience only |
 | `exclusivity` | `text` | not null, default `'open'`, `CHECK` in (`exclusive`, `open`) | Added by `tb-listings-authority-001`. Mirrors the real Authority to Sell/Lease agreement type. Enforcement is a soft warning by default (see `workspaces.exclusivity_hard_block`, DD-001) |
 | `authority_starts_at` | `timestamptz` | not null, default `now()` | Same migration |
 | `authority_expires_at` | `timestamptz` | nullable | Same migration. Nullable — open-ended authority is allowed |
@@ -94,9 +96,16 @@ Mirrors `profiles_update_own`'s existing `auth.uid()` pattern (DD-001) instead.
 | `listing_dockets_update_sharer` | `update` where/with check `shared_by = auth.uid()` |
 
 Both tables: `authenticated` granted `select, insert, update` (no `delete` on either — listings
-are withdrawn not deleted; dockets are revoked not deleted). `service_role` has full access —
-as with every other table, the backend currently uses `service_role` for all routes on both
-tables (see ADR-002's "Superseded By (partial)" note and ADR-003).
+are withdrawn not deleted; dockets are revoked not deleted). `service_role` has full access.
+**Update, 2026-07-27/29 (`tb-platform-rls-scoped-client-001`, per ADR-003):** `listings.ts` is
+now on the per-request scoped client for essentially all `listings`/`properties` data calls —
+RLS is the real enforcement boundary here, not `service_role`. `dockets.ts` is mostly scoped
+too, with three documented, deliberate exceptions for genuinely cross-tenant reads (recipient
+lookup by handle, sharers' profiles, the joined listing/property data for a docket whose source
+tenant isn't the recipient's own) — see ADR-003 Decision #4. Two other files added since ADR-003
+was last revised reuse the same cross-tenant-docket-join pattern but aren't yet listed in its
+exception table: `matching.ts` (`scoreReceivedDockets`) and `buyerRequirements.ts`
+(`/buyer-requirements/:id/options-sent`).
 
 ---
 
@@ -114,6 +123,9 @@ tables (see ADR-002's "Superseded By (partial)" note and ADR-003).
 - `supabase/migrations/20260724100000_listings_lifecycle.sql` — widened `status`
 - `supabase/migrations/20260725100000_listings_exclusivity_hardblock.sql` — `workspaces.exclusivity_hard_block` (DD-001)
 - `supabase/migrations/20260727110000_listing_authority_expiry_notification.sql` — `authority_warning_7d_sent_at`
+- `supabase/migrations/20260727160000_distribution_share_text.sql` — `commission_note`
+- `supabase/migrations/20260728150000_crm_buyer.sql` — `buyer_contact_id`
+- `supabase/migrations/20260729000000_listings_inactive_status.sql` — `'inactive'` status
 
 ---
 
@@ -122,3 +134,4 @@ tables (see ADR-002's "Superseded By (partial)" note and ADR-003).
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering five already-shipped tracer bullets. |
+| 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: `'inactive'` status, `buyer_contact_id`, `commission_note` columns added; corrected the stale "`service_role` for all routes" RLS claim now that `tb-platform-rls-scoped-client-001` moved `listings.ts`/`dockets.ts` mostly onto the scoped client per ADR-003. |

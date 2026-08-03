@@ -1,18 +1,19 @@
 # DS-007 — Developers & Projects
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-03
 
 ---
 
 ## Purpose
 
-Define Developer, Project, and Project Unit Type as business entities — the developer/
-pre-selling inventory hierarchy `cap-properties-001` always described but that shipped later
-than the base Property entity. Written retroactively as part of a 2026-07-27 birds-eye review.
+Define Project and Project Unit Type as business entities, plus the history of the Developer
+entity `cap-properties-001` always described — the pre-selling inventory hierarchy that shipped
+later than the base Property entity. Written retroactively as part of a 2026-07-27 birds-eye
+review; the Developer section rewritten 2026-08-03 after Developer was superseded by Contact.
 
 ---
 
@@ -24,17 +25,24 @@ Covers Developer, Project, and Project Unit Type. Does not cover Property itself
 
 ## Business Entities
 
-### Developer
+### Developer — superseded 2026-07-28 by Contact (`is_company = true`)
 
-A deliberately minimal placeholder owner entity — just enough to unblock `Project.developer_id`
-and, eventually, `Property.owner_id` when `owner_type = 'developer'`. `cap-properties-001`'s
-Decision #2 always named this as temporary: it is explicitly intended to be superseded by a real
-CRM Company record once that domain exists, not a considered permanent design.
+Originally a deliberately minimal placeholder owner entity — just enough to unblock
+`Project.developer_id` and, eventually, `Property.owner_id` when `owner_type = 'developer'`.
+`cap-properties-001`'s Decision #2 always named this as temporary: it was explicitly intended to
+be superseded by a real CRM Company record once that domain existed, not a considered permanent
+design — which is exactly what happened, one day after this DS's initial version was written.
 
 Live-verification immediately ahead of this entity shipping (2026-07-27) found that despite
 `cap-properties-001`'s Technical Architecture describing a `developers` table, it had never
 actually been created — a proposed model that was never built until `tb-properties-project-001`
 created it alongside `projects`, since `projects.developer_id`'s FK target had to exist first.
+
+**Superseded, 2026-07-28:** `tb-crm-developer-consolidation-001` (`cap-crm-001` Milestone 1)
+retired the standalone Developer entity — every `developers` row became a `contacts` row with
+`type = 'developer'`, `is_company = true` (same id preserved), and `Project.developer_id` now
+points at `contacts`. Developer is no longer a distinct business entity; it's a Contact that
+happens to be a company. See DS-005 (Contacts) and DD-007's "DROPPED" section for the mechanics.
 
 ### Project
 
@@ -66,7 +74,9 @@ DD-002 for the column, DD-004... no — `unit_number` lives on `properties`, doc
 - DD-007 — Developers & Projects (implements this doc)
 - DD-002 — Properties (`project_id`/`unit_type_id`/`unit_number` — the FK sources and rollup label)
 - DS-002 — Properties (Core) (the entity this hierarchy attaches to)
-- `cap-properties-001` (Theos Registry) — full design rationale, including Decision #2 on Developer's placeholder status
+- DS-005 / DD-005 — Contacts (Developer's successor entity, `is_company`)
+- `cap-properties-001` (Theos Registry) — original design rationale, including Decision #2 on Developer's placeholder status
+- `cap-crm-001` (Theos Registry) — Milestone 1, the Developer-into-Contact consolidation decision
 - ADR-001 — Shared-Schema Multi-Tenant Architecture
 - ADR-002 — Workspace Isolation & Row-Level Security
 
@@ -77,3 +87,4 @@ DD-002 for the column, DD-004... no — `unit_number` lives on `properties`, doc
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering three already-shipped tracer bullets. |
+| 2.0.0 | 2026-08-03 | Developer entity superseded by Contact (`is_company`) the day after this doc's initial version — rewrote that section as a historical record instead of a live entity description. Structural revision (entity removed), hence major version bump per STD-002. |

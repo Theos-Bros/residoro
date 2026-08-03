@@ -1,10 +1,10 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-03
 
 ---
 
@@ -80,42 +80,61 @@ posture as `migration_temp_files` (see DD-003). Every access goes through the ba
 
 ## Signup Provisioning: `handle_new_user()`
 
-Trigger function, fires `after insert on auth.users`, `SECURITY DEFINER`. Grown incrementally
-across four migrations (platform foundation → operator role → client enrollment → profiles
-handle) into four branches, checked in this order:
+Trigger function, fires `after insert on auth.users`, `SECURITY DEFINER`. **Rewritten
+2026-07-29** (`20260729090000_fix_signup_privilege_escalation.sql`, corrected same day by
+`20260729110000_fix_handle_new_user_handle_column.sql`) to fix a CRITICAL finding in
+`docs/security-review-2026-07-29.md` — see that doc for the full exploit and fix narrative.
+This section describes the **current, fixed** behavior only.
 
-1. **Operator** (`raw_user_meta_data->>'app_role' = 'operator'`) — inserts a `profiles` row
-   with `tenant_id = null`, `role = 'operator'`. Only ever created via the service-role
-   `create-operator.ts` script; there is no public path that can set `app_role`.
-2. **Invited into an existing workspace** (`raw_user_meta_data->>'tenant_id'` set) — inserts a
-   `profiles` row with `role = 'admin'` against that `tenant_id`. Only `POST /admin/clients`
-   (enrollment) ever sets this metadata key.
-3. **Direct signup (default/placeholder)** — auto-creates a new `workspaces` row (name from
-   `raw_user_meta_data->>'workspace_name'` or a default of `"{email}'s Workspace"`,
-   `contract_start_date`/`contract_end_date` both set to `current_date`) and makes the signing-up
-   user its `admin`. See DS-001's "Key Decision" section — this branch is a flagged placeholder,
-   not a final invite/onboarding design; Residoro has no real public signup path (see
-   `cap-client-lifecycle-001`'s invite-only model).
+The trigger now has exactly one branch, regardless of any `raw_user_meta_data` the caller
+supplied: it inserts a fully inert `profiles` row (`tenant_id = null`, `role = 'member'`,
+`full_name` from `raw_user_meta_data->>'full_name'` only, `handle` from
+`generate_unique_handle(new.email)`). It never reads `app_role` or `tenant_id` from
+`raw_user_meta_data`, and it no longer auto-creates a `workspaces` row for a direct signup —
+that branch, along with the operator/invited-admin branches keyed off client-supplied metadata,
+was removed entirely.
 
-Every branch also calls `generate_unique_handle(new.email)` and inserts the result into
-`profiles.handle` (added by `tb-accounts-handle-001`).
+Real privilege assignment now happens in exactly two trusted, service-role-only call sites,
+each immediately after a Supabase Admin API `inviteUserByEmail` call succeeds, keyed by that
+call's own returned `auth.users` id (never anything the invitee supplied):
 
-**Known gap, discovered via real usage (2026-07-21):** deleting a user (`auth.users` row)
-cascades `profiles` away (`on delete cascade`), but does **not** clean up the `workspaces` row
-that user's signup created — confirmed by testing: creating and then deleting an account left
-an orphaned `workspaces` row with no members. Not fixed here; needs a product decision first
-(delete the workspace when its last member leaves? require ownership transfer instead?) before
-adding a cleanup trigger — flagging so it isn't mistaken for an oversight nobody noticed.
+1. **`POST /admin/clients`** (`application/backend/src/routes/admin.ts`) — creates the
+   `workspaces` row first, invites the admin email, then `UPDATE profiles SET tenant_id =
+   <new workspace id>, role = 'admin' WHERE id = <invite response's user id>`. Rolls the
+   workspace back if either the invite or the assignment fails, so no orphaned admin-less
+   workspace is left behind.
+2. **`create-operator.ts`** (`application/backend/src/scripts/create-operator.ts`) — service-role
+   CLI script, invites the email, then `UPDATE profiles SET role = 'operator' WHERE id =
+   <invite response's user id>`. The only way an operator account is ever created; requires
+   holding `SUPABASE_SERVICE_ROLE_KEY` to run at all.
 
-**Auth confirmation setting (2026-07-21):** `mailer_autoconfirm` is set to `true` on the
-Residoro Prototype project (dashboard: Authentication → Email → "Confirm email" off). This
-was a deliberate fix for Supabase's default email-sending rate limit (2/hour) blocking
-repeated signups during testing — without custom SMTP configured, every signup otherwise
-tries to send a confirmation email and quickly exhausts that limit. Auto-confirming means
-anyone can sign up with any email address without proving ownership of it — acceptable for a
-prototype under our own testing, but **revisit before any real user-facing launch** (either
-configure custom SMTP and re-enable confirmation, or keep autoconfirm only for pre-launch
-internal testing).
+Why this closes the hole the old version had: `raw_user_meta_data` is the `data` payload of
+Supabase Auth's own public `POST /auth/v1/signup` endpoint, reachable with only the publishable
+key regardless of whether this app's UI exposes a signup form. The old trigger trusted
+`app_role`/`tenant_id` fields from that payload directly, so any unauthenticated caller could
+self-grant `operator` or hijack any existing workspace as its admin — proven live in the
+2026-07-29 review. The fix means every signup lands inert no matter what metadata is sent;
+`requireAuth` already rejects a `tenant_id = null` profile with 401, and `requireOperator`
+already rejects a non-`operator` role with 403, so an inert profile has no access to anything.
+
+**Known gap, discovered via real usage (2026-07-21), now moot for new signups:** the old
+direct-signup branch could leave an orphaned `workspaces` row behind if the user was later
+deleted (`profiles` cascades away, `workspaces` does not). Since direct signup no longer creates
+a `workspaces` row at all, this specific gap can't recur going forward — not fixed as a general
+cleanup-trigger, just no longer reachable via this path. Any already-orphaned rows from before
+2026-07-29 are not addressed by this migration.
+
+**Auth confirmation setting (2026-07-21, still current):** `mailer_autoconfirm` is set to `true`
+on the Residoro Prototype project (dashboard: Authentication → Email → "Confirm email" off).
+This was a deliberate fix for Supabase's default email-sending rate limit (2/hour) blocking
+repeated signups during testing — without custom SMTP configured (still true as of 2026-08-03,
+see the infra RFCs), every signup otherwise tries to send a confirmation email and quickly
+exhausts that limit. This setting is orthogonal to the privilege-escalation fix above — it
+controls whether email ownership is verified, not what role/tenant a new profile gets — but
+combined with `handle_new_user()`'s pre-2026-07-29 behavior it made the exploit easier to test
+repeatedly. **Revisit before any real user-facing launch.** The 2026-07-29 review's own
+"still recommended, not verifiable from code" item — disabling public signup at the Supabase
+Auth project level as defense-in-depth — has not been confirmed done.
 
 ---
 
@@ -179,6 +198,9 @@ reachable this way. See ADR-002's Consequences section.
 - `supabase/migrations/20260723100000_profiles_handle.sql` — `handle`
 - `supabase/migrations/20260725100000_listings_exclusivity_hardblock.sql` — `exclusivity_hard_block`
 - `supabase/migrations/20260726120000_migration_rollback_window.sql` — `rollback_window_hours`
+- `docs/security-review-2026-07-29.md` — the CRITICAL finding `20260729090000_fix_signup_privilege_escalation.sql` fixes
+- `supabase/migrations/20260729090000_fix_signup_privilege_escalation.sql`,
+  `20260729110000_fix_handle_new_user_handle_column.sql` — current `handle_new_user()`
 
 ---
 
@@ -188,3 +210,4 @@ reachable this way. See ADR-002's Consequences section.
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial version, matching the first platform foundation migration. |
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: added `operator` role, `handle`, `workspaces` contract/access-state/warning columns, `exclusivity_hard_block`, `rollback_window_hours`, and the `contract_notifications` table. Documented all four `handle_new_user()` branches. Structural revision (new table added), hence major version bump per STD-002. |
+| 2.1.0 | 2026-08-03 | Rewrote the Signup Provisioning section from a 2026-08-03 birds-eye review — the previous revision described the four-branch `handle_new_user()` that `20260729090000_fix_signup_privilege_escalation.sql` replaced to fix a CRITICAL finding in `docs/security-review-2026-07-29.md`. That section had gone eight days describing a patched vulnerability as current behavior; now describes the single-branch inert-profile trigger and the two trusted invite-then-assign call sites that actually grant privilege. |
