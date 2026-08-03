@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { supabase } from './lib/supabaseClient';
 import { useState } from 'react';
-import { Menu } from 'lucide-react';
+import { Building2, ClipboardList, Menu, Users } from 'lucide-react';
 import type { OperatorStatus } from './hooks/useOperatorStatus';
 import { useWorkspaceStatus } from './hooks/useWorkspaceStatus';
 import { exportData } from './lib/workspaceApi';
@@ -58,7 +58,20 @@ const NAV_GROUPS: { label: string; links: { to: string; label: string }[] }[] = 
     ],
   },
 ];
-const NAV_LINKS = NAV_GROUPS.flatMap((group) => group.links);
+
+// tb-design-system-states-mobile-001: the bottom nav's 3 direct-tap icons,
+// per design doc section 07's mock (Inventory/Leads/Tasks/More -- Inventory
+// is the whole "Inventory" NAV_GROUPS section since that's the group this
+// role spends the most time in on-site; Leads and Tasks are individual
+// Pipeline links, not the whole group, matching the doc exactly). "More"
+// (below, in JSX) opens the full 11-link sheet rather than getting its own
+// static entry here, so every route stays reachable -- reusing NAV_GROUPS'
+// existing data, not a second hand-maintained list.
+const BOTTOM_NAV_ITEMS: { groupLabel: string; to: string; label: string; icon: typeof Building2 }[] = [
+  { groupLabel: 'Inventory', to: '/properties', label: 'Inventory', icon: Building2 },
+  { groupLabel: 'Pipeline', to: '/leads', label: 'Leads', icon: Users },
+  { groupLabel: 'Pipeline', to: '/tasks', label: 'Tasks', icon: ClipboardList },
+];
 
 function initialsOf(email: string): string {
   const local = email.split('@')[0] ?? '';
@@ -79,6 +92,14 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const isActiveLink = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+  // Inventory's bottom-nav icon lights up for its whole NAV_GROUPS section
+  // (Properties/Projects/Listings), not just an exact "/properties" match --
+  // Leads/Tasks are single links, so they use isActiveLink directly instead.
+  const inventoryGroup = NAV_GROUPS.find((group) => group.label === 'Inventory')!;
+  const isBottomNavItemActive = (item: (typeof BOTTOM_NAV_ITEMS)[number]) =>
+    item.groupLabel === 'Inventory'
+      ? inventoryGroup.links.some((link) => isActiveLink(link.to))
+      : isActiveLink(item.to);
 
   if (loading || (session && operatorStatus === 'loading')) {
     return null;
@@ -184,50 +205,87 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
           notifications={workspaceStatus?.notifications ?? []}
           onDismissed={refetchWorkspaceStatus}
         />
-        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
+        <main className="min-w-0 flex-1 px-4 py-6 pb-24 sm:px-6 sm:pb-6">
           <Outlet />
         </main>
       </div>
-      {/* Mobile nav: a small floating trigger fixed near the bottom of the
-          viewport (below sm: only) opens a floating Sheet with the same nav
-          links, replacing the earlier horizontally-scrolling pill row.
-          Overrides SheetContent's default edge-to-edge `bottom` styling
-          (inset-x-0 bottom-0, flush border-t) with margin + rounded corners
-          so it actually reads as floating rather than a docked drawer. */}
-      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <SheetTrigger asChild>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Open navigation menu"
-            className="fixed bottom-4 left-1/2 z-40 h-12 w-12 -translate-x-1/2 rounded-full border shadow-lg sm:hidden"
+      {/* Mobile nav (Residoro Design Language, 2026-08-03): replaces
+          tb-brokerage-mobile-bottom-nav-001's floating-trigger + bottom-Sheet
+          mechanism with the persistent 4-icon bar the design doc's section 07
+          mock actually shows (Inventory/Leads/Tasks/More, three always-visible
+          icons + one overflow). Replaced rather than restyled because the two
+          patterns genuinely conflict, not just cosmetically: the design doc's
+          bar is *always on screen* with the active section visible in gold at
+          a glance, where the old mechanism hid all nav behind one extra tap
+          and had no persistent "where am I" indicator. The Sheet component
+          itself isn't discarded, though -- it's reused as "More"'s overflow
+          surface below, so all 11 routes (not just the 3 quick-tap ones)
+          stay one tap away and NAV_GROUPS stays the single source of truth
+          for nav data. */}
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t bg-card px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 sm:hidden"
+      >
+        {BOTTOM_NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active = isBottomNavItemActive(item);
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              aria-current={active ? 'page' : undefined}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-lg py-1.5 text-[11px] font-medium text-tertiary-foreground',
+                active && 'text-accent-foreground',
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              {item.label}
+            </Link>
+          );
+        })}
+        <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              aria-label="More navigation options"
+              className="flex flex-col items-center gap-1 rounded-lg py-1.5 text-[11px] font-medium text-tertiary-foreground"
+            >
+              <Menu className="h-5 w-5" />
+              More
+            </button>
+          </SheetTrigger>
+          <SheetContent
+            side="bottom"
+            className="inset-x-4 bottom-24 rounded-xl border shadow-2xl sm:hidden"
           >
-            <Menu className="h-5 w-5" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent
-          side="bottom"
-          className="inset-x-4 bottom-4 rounded-xl border shadow-2xl sm:hidden"
-        >
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <nav className="flex flex-col gap-1">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                onClick={() => setMobileNavOpen(false)}
-                aria-current={isActiveLink(link.to) ? 'page' : undefined}
-                className={cn(
-                  'rounded-md px-3 py-3 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
-                  isActiveLink(link.to) && 'bg-accent text-foreground',
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </SheetContent>
-      </Sheet>
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <nav className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
+              {NAV_GROUPS.map((group) => (
+                <div key={group.label} className="flex flex-col gap-0.5">
+                  <span className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-widest text-tertiary-foreground">
+                    {group.label}
+                  </span>
+                  {group.links.map((link) => (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      onClick={() => setMobileNavOpen(false)}
+                      aria-current={isActiveLink(link.to) ? 'page' : undefined}
+                      className={cn(
+                        'rounded-md px-3 py-2.5 text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
+                        isActiveLink(link.to) && 'bg-accent text-accent-foreground',
+                      )}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              ))}
+            </nav>
+          </SheetContent>
+        </Sheet>
+      </nav>
     </div>
   );
 }
