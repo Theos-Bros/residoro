@@ -42,27 +42,6 @@
     --radius: 0.625rem;
   }
 
-  .dark {
-    --background: 42.9 16.3% 8.4%; /* dark-bg #191712 */
-    --foreground: 41.5 33.3% 92.4%; /* dark-text #F2EEE5 */
-    --card: 40 15.8% 11.2%; /* dark-sidebar #211E18 */
-    --card-foreground: 41.5 33.3% 92.4%;
-    --primary: 44 69.2% 60.6%; /* dark-gold #E0BB55 */
-    --primary-foreground: 42.9 16.3% 8.4%; /* dark text on gold, per design doc's dark button */
-    --secondary: 40 13.6% 17.3%; /* dark-border #322E26 */
-    --secondary-foreground: 41.5 33.3% 92.4%;
-    --muted: 40 18.4% 9.6%; /* dark-header-bg #1D1A14 */
-    --muted-foreground: 40 13.7% 70%; /* dark-text-secondary #BDB6A8 */
-    --tertiary-foreground: 37.9 8.4% 44.1%; /* dark-text-tertiary #7A7367 */
-    --accent: 41.4 39.7% 14.3%; /* #332A16 -- dark active-nav bg */
-    --accent-foreground: 44 69.2% 60.6%; /* dark-gold #E0BB55 -- dark active-nav text */
-    --destructive: 7 59.4% 63.3%; /* lightened for dark-bg contrast */
-    --destructive-foreground: 42.9 16.3% 8.4%;
-    --border: 40 13.6% 17.3%; /* dark-border #322E26 */
-    --input: 40 13.6% 17.3%;
-    --ring: 44 69.2% 60.6%;
-  }
-
   * {
     @apply border-border;
   }
@@ -71,4 +50,32 @@
     @apply bg-background text-foreground;
     font-feature-settings: 'cv11', 'ss01';
   }
+}
+
+/* Deliberately outside @layer base: Tailwind 3.4.19 (this repo's pinned version, under
+   Node 24) silently drops a second custom-property-only rule declared inside the same
+   @layer base block as :root -- reproduced with a minimal repro (any second rule, any
+   property names, @layer base plus :root is sufficient to trigger it) and confirmed fixed
+   by moving it out. Cascade order still works correctly: :root and .dark have equal
+   specificity, so this rule -- appearing later in the compiled source than :root -- wins
+   for any element with the .dark class, and has no effect otherwise. */
+.dark {
+  --background: 42.9 16.3% 8.4%; /* dark-bg #191712 */
+  --foreground: 41.5 33.3% 92.4%; /* dark-text #F2EEE5 */
+  --card: 40 15.8% 11.2%; /* dark-sidebar #211E18 */
+  --card-foreground: 41.5 33.3% 92.4%;
+  --primary: 44 69.2% 60.6%; /* dark-gold #E0BB55 */
+  --primary-foreground: 42.9 16.3% 8.4%; /* dark text on gold, per design doc's dark button */
+  --secondary: 40 13.6% 17.3%; /* dark-border #322E26 */
+  --secondary-foreground: 41.5 33.3% 92.4%;
+  --muted: 40 18.4% 9.6%; /* dark-header-bg #1D1A14 */
+  --muted-foreground: 40 13.7% 70%; /* dark-text-secondary #BDB6A8 */
+  --tertiary-foreground: 37.9 8.4% 44.1%; /* dark-text-tertiary #7A7367 */
+  --accent: 41.4 39.7% 14.3%; /* #332A16 -- dark active-nav bg */
+  --accent-foreground: 44 69.2% 60.6%; /* dark-gold #E0BB55 -- dark active-nav text */
+  --destructive: 7 59.4% 63.3%; /* lightened for dark-bg contrast */
+  --destructive-foreground: 42.9 16.3% 8.4%;
+  --border: 40 13.6% 17.3%; /* dark-border #322E26 */
+  --input: 40 13.6% 17.3%;
+  --ring: 44 69.2% 60.6%;
 }
