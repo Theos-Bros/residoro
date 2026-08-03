@@ -33,6 +33,51 @@ const verificationSelectClass =
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm';
 
+// tb-design-system-states-mobile-001: design doc section 06 specs 3 visual
+// states for an album link's reachability -- reachable/restricted/not-yet-
+// checked. property_media (see propertyMediaApi.ts's PropertyMedia type and
+// this repo's 20260727150000_property_media_external_links.sql migration)
+// has no reachability/last-checked column at all -- no backend job ever
+// probes external_url. Per this tracer bullet's explicit instructions, real
+// reachability *checking* (an HTTP request out to Google Photos/Drive) is
+// out of scope for a design-only tracer bullet, so every album renders as
+// "not checked yet" -- this is a genuine data-model gap, not a shortcut:
+// flagged here, and again in this tracer bullet's final report.
+type AlbumLinkStatus = 'reachable' | 'restricted' | 'not_checked';
+
+function AlbumLinkStatusCard({ status, photoCount }: { status: AlbumLinkStatus; photoCount: number }) {
+  if (status === 'reachable') {
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg border border-[#D3E5D6] bg-card px-3.5 py-2.5 text-sm dark:border-[#2E4434]">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[#2F6B3A] dark:bg-[#7FBE8C]" />
+        <span className="text-muted-foreground">
+          Link reachable · {photoCount} photo{photoCount === 1 ? '' : 's'} · anyone with the link can view
+        </span>
+      </div>
+    );
+  }
+  if (status === 'restricted') {
+    return (
+      <div className="flex items-center gap-2.5 rounded-lg border border-[#F2D8D4] bg-[#FBECEA] px-3.5 py-2.5 text-sm text-[#9B3227] dark:border-[#4a2320] dark:bg-[#2e1613] dark:text-[#e5877a]">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[#9B3227] dark:bg-[#e5877a]" />
+        <span>
+          Restricted link — clients would hit a sign-in wall. Set the album to "anyone with the link" before
+          sharing.
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border bg-card px-3.5 py-2.5 text-sm">
+      <span className="h-2 w-2 shrink-0 rounded-full bg-tertiary-foreground/40" />
+      <span className="text-muted-foreground">
+        Not checked yet — {photoCount} photo{photoCount === 1 ? '' : 's'} linked. Residoro doesn't verify link
+        reachability today.
+      </span>
+    </div>
+  );
+}
+
 const OWNER_TYPES: OwnerType[] = ['developer', 'individual', 'company'];
 
 type EditFormState = {
@@ -567,7 +612,15 @@ export function PropertyDetailPage({ session }: Props) {
             {media === null ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
-              <PropertyPhotoGallery session={session} propertyId={id} media={media} onChange={setMedia} />
+              <>
+                {media.some((item) => item.type === 'photo') && (
+                  <AlbumLinkStatusCard
+                    status="not_checked"
+                    photoCount={media.filter((item) => item.type === 'photo').length}
+                  />
+                )}
+                <PropertyPhotoGallery session={session} propertyId={id} media={media} onChange={setMedia} />
+              </>
             )}
           </div>
 
