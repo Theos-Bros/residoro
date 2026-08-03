@@ -5,6 +5,7 @@ import {
   fetchProperties,
   updatePropertyVerification,
   matchesKeyword,
+  PROPERTY_STATUS_VARIANT,
   VERIFICATION_STATUSES,
   type Property,
   type VerificationStatus,
@@ -12,13 +13,14 @@ import {
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { cn } from '@/lib/utils';
 
 const verificationSelectClass =
-  'h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm';
+  'h-7 rounded-md border border-input bg-card px-2 text-xs shadow-sm';
 
 type Props = {
   session: Session;
@@ -99,8 +101,14 @@ export function PropertiesListPage({ session }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
+      <div className="flex items-start justify-between gap-8">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Properties</h1>
+          <p className="max-w-xl text-sm text-muted-foreground">
+            Every unit and lot your brokerage holds inventory on. Keep status and price current here —
+            listings, dockets and client-facing shares all read from these records.
+          </p>
+        </div>
         <Button asChild size="sm">
           <Link to="/properties/new">Add a new listing</Link>
         </Button>
@@ -115,20 +123,18 @@ export function PropertiesListPage({ session }: Props) {
       {properties?.length === 0 && <p className="text-sm text-muted-foreground">No properties yet.</p>}
 
       {properties && properties.length > 0 && (
-        <div className="space-y-2 rounded-lg border p-3">
-          <div className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Search
-            </span>
-            <input
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Search by title or address…"
-              aria-label="Search properties by title or address"
-              className="h-8 w-full max-w-sm rounded-md border border-input bg-background px-2 text-sm shadow-sm"
-            />
-          </div>
+        <div className="flex items-center gap-2">
+          <Input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="Search by title or address…"
+            aria-label="Search properties by title or address"
+            className="h-9 max-w-sm text-sm"
+          />
+          <span className="ml-auto hidden font-mono text-xs text-tertiary-foreground sm:inline">
+            {filteredProperties?.length ?? 0} of {properties.length} records
+          </span>
         </div>
       )}
 
@@ -137,13 +143,13 @@ export function PropertiesListPage({ session }: Props) {
       )}
 
       {filteredProperties && filteredProperties.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto rounded-xl border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-16" />
                 <TableHead>Title</TableHead>
-                <TableHead>Price</TableHead>
+                <TableHead className="text-right">Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Verification</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -151,7 +157,7 @@ export function PropertiesListPage({ session }: Props) {
             </TableHeader>
             <TableBody>
               {filteredProperties.map((property) => (
-                <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-amber-100')}>
+                <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-accent/60')}>
                   <TableCell>
                     {property.cover_photo_url ? (
                       <a
@@ -159,12 +165,12 @@ export function PropertiesListPage({ session }: Props) {
                         target="_blank"
                         rel="noopener noreferrer"
                         title="View photos"
-                        className="flex h-10 w-10 items-center justify-center rounded bg-muted text-lg hover:bg-accent"
+                        className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-lg hover:bg-accent"
                       >
                         🖼️
                       </a>
                     ) : (
-                      <div className="h-10 w-10 rounded bg-muted" />
+                      <div className="h-10 w-10 rounded-lg bg-muted" />
                     )}
                   </TableCell>
                   <TableCell className="font-medium">
@@ -172,13 +178,15 @@ export function PropertiesListPage({ session }: Props) {
                       {property.title}
                     </Link>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right font-mono text-sm">
                     {property.price !== null
                       ? `${property.price_currency} ${property.price.toLocaleString()}`
                       : '—'}
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{property.status}</Badge>
+                    <Badge variant={PROPERTY_STATUS_VARIANT[property.status as keyof typeof PROPERTY_STATUS_VARIANT] ?? 'neutral'}>
+                      {property.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {isAdmin ? (
@@ -197,7 +205,7 @@ export function PropertiesListPage({ session }: Props) {
                         ))}
                       </select>
                     ) : (
-                      <Badge variant="secondary">{property.verification_status}</Badge>
+                      <Badge variant="neutral">{property.verification_status}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="flex flex-wrap justify-end gap-2">

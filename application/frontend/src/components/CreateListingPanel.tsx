@@ -165,12 +165,14 @@ export function CreateListingPanel({
           </>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex gap-2">
-          <Button type="submit" disabled={submitting}>
-            {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Create listing'}
-          </Button>
+        {/* Residoro Design Language (2026-08-03) modal-footer convention:
+            cancel + confirm, in that order, confirm rightmost. */}
+        <div className="flex justify-end gap-2 border-t pt-4">
           <Button type="button" variant="outline" disabled={submitting} onClick={onCancel ?? onClose}>
             Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? 'Saving…' : isEditing ? 'Save changes' : 'Create listing'}
           </Button>
         </div>
       </form>

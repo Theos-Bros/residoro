@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { createProperty, createListing, type PropertyType, type OwnerType } from '@/lib/listingsApi';
 import { fetchDevelopers, fetchProjects, type Developer, type Project } from '@/lib/projectsApi';
@@ -7,14 +7,13 @@ import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Card, CardContent } from '@/components/ui/card';
 
 type Props = {
   session: Session;
 };
 
-const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
+const selectClass = 'flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm';
 
 const PROPERTY_TYPES: PropertyType[] = [
   'condo_unit',
@@ -183,181 +182,235 @@ export function NewPropertyListingForm({ session }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Add a new listing</h1>
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="title">Property title</Label>
-              <Input id="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="type">Property type</Label>
-              <select
-                id="type"
-                value={type}
-                onChange={(e) => setType(e.target.value as PropertyType)}
-                className={selectClass}
-              >
-                {PROPERTY_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="owner_type">Owner type</Label>
-              <select
-                id="owner_type"
-                value={ownerType}
-                onChange={(e) => setOwnerType(e.target.value as OwnerType)}
-                className={selectClass}
-              >
-                {OWNER_TYPES.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="owner">
-                {ownerType === 'developer' ? 'Developer (optional)' : 'Owner contact (optional)'}
-              </Label>
-              <select
-                id="owner"
-                value={ownerId}
-                onChange={(e) => setOwnerId(e.target.value)}
-                className={selectClass}
-              >
-                <option value="">— Unspecified —</option>
-                {ownerType === 'developer'
-                  ? developers?.map((developer) => (
-                      <option key={developer.id} value={developer.id}>
-                        {developer.name}
-                      </option>
-                    ))
-                  : contacts?.map((contact) => (
-                      <option key={contact.id} value={contact.id}>
-                        {contact.name}
-                        {contact.company ? ` (${contact.company})` : ''}
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Add a new listing</h1>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          Creates a property and its first listing together in one step. Only the fields marked
+          required are needed to save — the rest can be filled in later.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardContent className="flex flex-col gap-4 pt-6">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold">Which property is this?</span>
+                <span className="text-xs text-tertiary-foreground">
+                  Basic inventory facts — who owns it and where it is.
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="title">
+                  Property title <span className="text-primary">*</span>
+                </Label>
+                <Input id="title" type="text" value={title} onChange={(e) => setTitle(e.target.value)} required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="type">Property type</Label>
+                  <select
+                    id="type"
+                    value={type}
+                    onChange={(e) => setType(e.target.value as PropertyType)}
+                    className={selectClass}
+                  >
+                    {PROPERTY_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t.replace(/_/g, ' ')}
                       </option>
                     ))}
-              </select>
-            </div>
-            {ownerType === 'developer' && (
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="owner_type">Owner type</Label>
+                  <select
+                    id="owner_type"
+                    value={ownerType}
+                    onChange={(e) => setOwnerType(e.target.value as OwnerType)}
+                    className={selectClass}
+                  >
+                    {OWNER_TYPES.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="owner">
+                    {ownerType === 'developer' ? 'Developer (optional)' : 'Owner contact (optional)'}
+                  </Label>
+                  <select
+                    id="owner"
+                    value={ownerId}
+                    onChange={(e) => setOwnerId(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">— Unspecified —</option>
+                    {ownerType === 'developer'
+                      ? developers?.map((developer) => (
+                          <option key={developer.id} value={developer.id}>
+                            {developer.name}
+                          </option>
+                        ))
+                      : contacts?.map((contact) => (
+                          <option key={contact.id} value={contact.id}>
+                            {contact.name}
+                            {contact.company ? ` (${contact.company})` : ''}
+                          </option>
+                        ))}
+                  </select>
+                </div>
+                {ownerType === 'developer' && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="project">Project (optional)</Label>
+                    <select
+                      id="project"
+                      value={projectId}
+                      onChange={(e) => setProjectId(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="">— None yet —</option>
+                      {projects?.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
               <div className="space-y-1.5">
-                <Label htmlFor="project">Project (optional)</Label>
+                <Label htmlFor="address">Address (optional)</Label>
+                <Input id="address" type="text" value={address} onChange={(e) => setAddress(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="city">City (optional)</Label>
+                  <Input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="province">Province (optional)</Label>
+                  <Input id="province" type="text" value={province} onChange={(e) => setProvince(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ask_price">Owner&apos;s ask price (optional, PHP)</Label>
+                <Input
+                  id="ask_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={askPrice}
+                  onChange={(e) => setAskPrice(e.target.value)}
+                  className="font-mono"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex flex-col gap-4 pt-6">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold">Listing details</span>
+                <span className="text-xs text-tertiary-foreground">
+                  What clients will see once you share this listing.
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="listing_type">Listing type</Label>
+                  <select
+                    id="listing_type"
+                    value={listingType}
+                    onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
+                    className={selectClass}
+                  >
+                    <option value="sale">Sale</option>
+                    <option value="rent">Rent</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="price">
+                    Price (PHP) <span className="text-primary">*</span>
+                  </Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    required
+                    className="font-mono"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="exclusivity">Exclusivity</Label>
                 <select
-                  id="project"
-                  value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
+                  id="exclusivity"
+                  value={exclusivity}
+                  onChange={(e) => setExclusivity(e.target.value as 'exclusive' | 'open')}
                   className={selectClass}
                 >
-                  <option value="">— None yet —</option>
-                  {projects?.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
+                  <option value="open">Open (non-exclusive)</option>
+                  <option value="exclusive">Exclusive</option>
                 </select>
               </div>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="address">Address (optional)</Label>
-              <Input id="address" type="text" value={address} onChange={(e) => setAddress(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="city">City (optional)</Label>
-                <Input id="city" type="text" value={city} onChange={(e) => setCity(e.target.value)} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
+                  <Input
+                    id="authority_starts_at"
+                    type="date"
+                    value={authorityStartsAt}
+                    onChange={(e) => setAuthorityStartsAt(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="authority_expires_at">Ends (optional)</Label>
+                  <Input
+                    id="authority_expires_at"
+                    type="date"
+                    value={authorityExpiresAt}
+                    onChange={(e) => setAuthorityExpiresAt(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="province">Province (optional)</Label>
-                <Input id="province" type="text" value={province} onChange={(e) => setProvince(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ask_price">Owner&apos;s ask price (optional, PHP)</Label>
-              <Input
-                id="ask_price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={askPrice}
-                onChange={(e) => setAskPrice(e.target.value)}
-              />
-            </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            <Separator className="my-2" />
-            <h2 className="text-lg font-semibold">Listing details</h2>
+        <div className="flex flex-col gap-4">
+          <Card>
+            <CardContent className="flex flex-col gap-3 pt-6">
+              <span className="font-mono text-[11px] font-medium uppercase tracking-widest text-tertiary-foreground">
+                Before you save
+              </span>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Creates a property and its first listing together, in one step. Nothing is visible
+                to clients until you share it from the Listings page.
+              </p>
+            </CardContent>
+          </Card>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="listing_type">Listing type</Label>
-              <select
-                id="listing_type"
-                value={listingType}
-                onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
-                className={selectClass}
-              >
-                <option value="sale">Sale</option>
-                <option value="rent">Rent</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="price">Price (PHP)</Label>
-              <Input
-                id="price"
-                type="number"
-                min="0"
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="exclusivity">Exclusivity</Label>
-              <select
-                id="exclusivity"
-                value={exclusivity}
-                onChange={(e) => setExclusivity(e.target.value as 'exclusive' | 'open')}
-                className={selectClass}
-              >
-                <option value="open">Open (non-exclusive)</option>
-                <option value="exclusive">Exclusive</option>
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
-                <Input
-                  id="authority_starts_at"
-                  type="date"
-                  value={authorityStartsAt}
-                  onChange={(e) => setAuthorityStartsAt(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="authority_expires_at">Ends (optional)</Label>
-                <Input
-                  id="authority_expires_at"
-                  type="date"
-                  value={authorityExpiresAt}
-                  onChange={(e) => setAuthorityExpiresAt(e.target.value)}
-                />
-              </div>
-            </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex flex-col gap-2">
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting ? 'Creating…' : 'Add listing'}
             </Button>
-          </form>
-        </CardContent>
-      </Card>
+            <Button type="button" variant="ghost" asChild className="w-full">
+              <Link to="/properties">Cancel</Link>
+            </Button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { fetchPropertyDocuments, type PropertyDocument } from '@/lib/propertyDoc
 import {
   updatePropertyVerification,
   updateProperty,
+  PROPERTY_STATUS_VARIANT,
   VERIFICATION_STATUSES,
   PROPERTY_STATUSES,
   type VerificationStatus,
@@ -28,9 +29,9 @@ type Props = {
 };
 
 const verificationSelectClass =
-  'h-7 rounded-md border border-input bg-background px-2 text-xs shadow-sm';
+  'h-7 rounded-md border border-input bg-card px-2 text-xs shadow-sm';
 
-const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
+const selectClass = 'flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-sm';
 
 const OWNER_TYPES: OwnerType[] = ['developer', 'individual', 'company'];
 
@@ -289,10 +290,12 @@ export function PropertyDetailPage({ session }: Props) {
 
       {property && (
         <>
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">{property.title}</h1>
-              <Badge variant="outline">{property.status}</Badge>
+              <Badge variant={PROPERTY_STATUS_VARIANT[property.status as keyof typeof PROPERTY_STATUS_VARIANT] ?? 'neutral'}>
+                {property.status}
+              </Badge>
               {!isEditing && (
                 <Button variant="outline" size="sm" onClick={startEditing}>
                   Edit
@@ -312,23 +315,27 @@ export function PropertyDetailPage({ session }: Props) {
                   ))}
                 </select>
               ) : (
-                <Badge variant="secondary">{property.verification_status}</Badge>
+                <Badge variant="neutral">{property.verification_status}</Badge>
               )}
             </div>
-            <p className="text-lg font-medium">{formatPrice(property.price, property.price_currency)}</p>
+            <p className="max-w-xl text-sm text-muted-foreground">
+              The master record for this unit. Price and status changes here propagate to every live
+              listing and shared docket within a minute.
+            </p>
+            <p className="font-mono text-lg font-medium">{formatPrice(property.price, property.price_currency)}</p>
             {property.status === 'leased' && (
-              <p className="text-sm text-muted-foreground">
-                Leased: {formatPrice(property.lease_monthly_rent, property.price_currency)}/mo for{' '}
+              <p className="text-sm text-tertiary-foreground">
+                Leased: <span className="font-mono">{formatPrice(property.lease_monthly_rent, property.price_currency)}</span>/mo for{' '}
                 {property.lease_term_months ?? '—'} months
               </p>
             )}
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-tertiary-foreground">
               {[property.address, property.city, property.province].filter(Boolean).join(', ') || '—'}
             </p>
             {property.project_name && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-tertiary-foreground">
                 Part of{' '}
-                <Link to={`/projects/${property.project_id}`} className="hover:underline">
+                <Link to={`/projects/${property.project_id}`} className="text-accent-foreground hover:underline">
                   {property.project_name}
                 </Link>
               </p>

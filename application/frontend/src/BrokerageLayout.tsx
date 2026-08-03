@@ -19,19 +19,53 @@ type Props = {
   operatorStatus: OperatorStatus;
 };
 
-const NAV_LINKS = [
-  { to: '/properties', label: 'Properties' },
-  { to: '/projects', label: 'Projects' },
-  { to: '/listings', label: 'Listings' },
-  { to: '/leads', label: 'Leads' },
-  { to: '/revisit', label: 'Revisit' },
-  { to: '/search', label: 'Search' },
-  { to: '/shared-with-me', label: 'Shared with me' },
-  { to: '/tasks', label: 'Tasks' },
-  { to: '/contacts', label: 'Contacts' },
-  { to: '/performance', label: 'Performance' },
-  { to: '/settings', label: 'Settings' },
+// Residoro Design Language (2026-08-03): the same 11 routes, regrouped into
+// the sidebar's four labeled sections (Inventory/Pipeline/CRM & Sharing/
+// Brokerage) instead of one flat list -- matches the design doc's shell
+// exactly in structure, though the doc's per-item record counts ("128",
+// "341", "12 unread") aren't wired up here since no hook fetches those
+// counts today; adding one would be new functionality, not a re-skin.
+const NAV_GROUPS: { label: string; links: { to: string; label: string }[] }[] = [
+  {
+    label: 'Inventory',
+    links: [
+      { to: '/properties', label: 'Properties' },
+      { to: '/projects', label: 'Projects' },
+      { to: '/listings', label: 'Listings' },
+    ],
+  },
+  {
+    label: 'Pipeline',
+    links: [
+      { to: '/leads', label: 'Leads' },
+      { to: '/revisit', label: 'Revisit' },
+      { to: '/tasks', label: 'Tasks' },
+    ],
+  },
+  {
+    label: 'CRM & Sharing',
+    links: [
+      { to: '/contacts', label: 'Contacts' },
+      { to: '/search', label: 'Search' },
+      { to: '/shared-with-me', label: 'Shared with me' },
+    ],
+  },
+  {
+    label: 'Brokerage',
+    links: [
+      { to: '/performance', label: 'Performance' },
+      { to: '/settings', label: 'Settings' },
+    ],
+  },
 ];
+const NAV_LINKS = NAV_GROUPS.flatMap((group) => group.links);
+
+function initialsOf(email: string): string {
+  const local = email.split('@')[0] ?? '';
+  const parts = local.split(/[._-]/).filter(Boolean);
+  const initials = parts.length >= 2 ? `${parts[0][0]}${parts[1][0]}` : local.slice(0, 2);
+  return initials.toUpperCase();
+}
 
 // tb-listings-create-001: factors BrokerageApp's session/operator gating and
 // header (previously the entire "/" route body) into a layout with <Outlet/>
@@ -71,13 +105,49 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-background">
-        <div className="mx-auto flex h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6">
-          <div className="flex items-center gap-2">
-            <Link to="/properties" className="text-sm font-semibold tracking-tight">
-              Residoro
-            </Link>
+    <div className="flex min-h-screen bg-background">
+      {/* Sidebar, per the Residoro Design Language (2026-08-03) shell: logo
+          header, four grouped nav sections, user footer. Hidden below sm: --
+          a fixed sidebar column ate half the viewport at phone width (tested
+          at 390px) -- where a floating trigger + bottom Sheet (below) takes
+          over instead (tb-brokerage-mobile-bottom-nav-001). */}
+      <aside className="hidden w-60 shrink-0 flex-col border-r bg-card sm:flex">
+        <div className="flex items-center gap-2.5 border-b px-4 py-4">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent-foreground/40 to-primary text-sm font-bold text-primary-foreground [background:linear-gradient(150deg,hsl(var(--accent)),hsl(var(--primary)))]">
+            R
+          </div>
+          <Link to="/properties" className="text-sm font-semibold tracking-tight text-foreground">
+            Residoro
+          </Link>
+        </div>
+        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-col gap-0.5">
+              <span className="px-2 pb-1.5 font-mono text-[10px] font-medium uppercase tracking-widest text-tertiary-foreground">
+                {group.label}
+              </span>
+              {group.links.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  aria-current={isActiveLink(link.to) ? 'page' : undefined}
+                  className={cn(
+                    'rounded-lg px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground',
+                    isActiveLink(link.to) && 'bg-accent font-semibold text-accent-foreground shadow-[inset_2px_0_0_hsl(var(--primary))] hover:bg-accent hover:text-accent-foreground',
+                  )}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="flex items-center gap-2.5 border-t px-3 py-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
+            {initialsOf(session.user.email ?? '')}
+          </div>
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-sm font-medium text-foreground">{session.user.email}</span>
             {workspaceStatus && (
               // tb-design-system-role-badge-001: workspaceStatus.role is already fetched via
               // useWorkspaceStatus above -- no new request. profiles.role's real value set
@@ -85,54 +155,36 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
               // profiles_role_check); 'operator' exists as a third DB value but requireAuth
               // (which /me/workspace-status runs behind) rejects operators outright since they
               // have no tenant_id, so this component never sees 'operator' in practice.
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-tertiary-foreground">
                 {workspaceStatus.role === 'admin' ? 'Admin' : 'Member'}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="hidden text-sm text-muted-foreground sm:inline">{session.user.email}</span>
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-              {exporting ? 'Exporting…' : 'Export My Data'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
-              Sign out
-            </Button>
-          </div>
         </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-14 items-center justify-end gap-2 border-b bg-card px-4 sm:px-6">
+          <span className="hidden text-sm text-tertiary-foreground sm:inline">{session.user.email}</span>
+          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Exporting…' : 'Export My Data'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
+            Sign out
+          </Button>
+        </header>
         {exportError && (
-          <p role="alert" className="mx-auto max-w-6xl px-4 pb-2 text-sm text-destructive sm:px-6">
+          <p role="alert" className="bg-card px-4 pb-2 text-sm text-destructive sm:px-6">
             {exportError}
           </p>
         )}
-      </header>
-      <ContractWarningBanner status={workspaceStatus} />
-      <ContractNotificationPanel
-        session={session}
-        notifications={workspaceStatus?.notifications ?? []}
-        onDismissed={refetchWorkspaceStatus}
-      />
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:gap-6 sm:px-6">
-        {/* Side panel nav, mirroring AdminLayout's sidebar shape. Hidden below
-            sm: -- a fixed sidebar column ate half the viewport at phone width
-            (tested at 390px) -- where a floating trigger + bottom Sheet
-            (below) takes over instead (tb-brokerage-mobile-bottom-nav-001). */}
-        <nav className="hidden gap-1 sm:flex sm:w-48 sm:shrink-0 sm:flex-col">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              aria-current={isActiveLink(link.to) ? 'page' : undefined}
-              className={cn(
-                'rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground',
-                isActiveLink(link.to) && 'bg-accent text-foreground',
-              )}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-        <main className="min-w-0 flex-1">
+        <ContractWarningBanner status={workspaceStatus} />
+        <ContractNotificationPanel
+          session={session}
+          notifications={workspaceStatus?.notifications ?? []}
+          onDismissed={refetchWorkspaceStatus}
+        />
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
           <Outlet />
         </main>
       </div>

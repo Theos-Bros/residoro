@@ -2,49 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-/* shadcn/ui's standard "slate" theme variables -- first CSS in this repo.
-   Kept in the standard shape so `npx shadcn add <component>` continues to
-   work normally for anything added after this tracer bullet. */
+/* Residoro Design Language (2026-08-03): warm gold-on-ink palette, Instrument
+   Sans + IBM Plex Mono. Values below are hand-converted from the design doc's
+   hex palette (docs/frontend-design-prompt.md's companion Claude Design
+   project, "Residoro Design Language.dc.html") into shadcn's HSL-variable
+   slots, so every component already built against bg-primary/text-muted-
+   foreground/etc. re-skins automatically -- no per-component color literals.
+   `--tertiary-foreground` is the one new slot: shadcn's stock theme only has
+   one secondary-text tier (muted-foreground); this design language uses two
+   (ink-600 for descriptions/helper text, ink-400 for meta/mono labels like
+   timestamps and reference codes), so muted-foreground = ink-600 and
+   tertiary-foreground = ink-400 in light mode (dark-text-secondary/tertiary
+   in dark). Status/stage chip colors (Available/Reserved/Draft/Withdrawn/
+   Sold, New/Qualifying/Site visit/Offer/Lost) are NOT modeled as CSS
+   variables -- they're soft-tint triples (bg+fg+border) that don't map onto
+   any single existing shadcn slot without colliding with the solid-fill
+   Button destructive variant, so they live directly in badge.tsx's variants
+   instead, with their own light/dark pairs. */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --background: 45 28.6% 97.3%; /* canvas #FAF9F6 */
+    --foreground: 37.5 14.8% 10.6%; /* ink-900 #1F1C17 */
+    --card: 0 0% 100%; /* white surface */
+    --card-foreground: 37.5 14.8% 10.6%;
+    --primary: 40 62.1% 44.5%; /* gold-600 #B8892B */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 33.3 27.3% 93.5%; /* #F3EFEA -- segmented-control track, ghost hover */
+    --secondary-foreground: 37.5 14.8% 10.6%;
+    --muted: 45 28.6% 97.3%; /* canvas -- table header rows, subtle panel bg */
+    --muted-foreground: 35 7.5% 31.4%; /* ink-600 #56514A -- mandatory description/helper text */
+    --tertiary-foreground: 33.7 6.4% 51%; /* ink-400 #8A837A -- meta text, mono labels */
+    --accent: 43.6 68.8% 93.7%; /* gold-50 #FAF4E4 -- active nav item, callout bg */
+    --accent-foreground: 43.2 70.4% 31.8%; /* gold-text #8A6A18 -- active nav text, links */
+    --destructive: 5.7 59.8% 38%; /* #9B3227 */
+    --destructive-foreground: 0 0% 100%;
+    --border: 38.6 21.9% 87.5%; /* #E6E1D8 */
+    --input: 38.6 21.9% 87.5%;
+    --ring: 40 62.1% 44.5%; /* gold-600, focus ring */
+    --radius: 0.625rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 42.9 16.3% 8.4%; /* dark-bg #191712 */
+    --foreground: 41.5 33.3% 92.4%; /* dark-text #F2EEE5 */
+    --card: 40 15.8% 11.2%; /* dark-sidebar #211E18 */
+    --card-foreground: 41.5 33.3% 92.4%;
+    --primary: 44 69.2% 60.6%; /* dark-gold #E0BB55 */
+    --primary-foreground: 42.9 16.3% 8.4%; /* dark text on gold, per design doc's dark button */
+    --secondary: 40 13.6% 17.3%; /* dark-border #322E26 */
+    --secondary-foreground: 41.5 33.3% 92.4%;
+    --muted: 40 18.4% 9.6%; /* dark-header-bg #1D1A14 */
+    --muted-foreground: 40 13.7% 70%; /* dark-text-secondary #BDB6A8 */
+    --tertiary-foreground: 37.9 8.4% 44.1%; /* dark-text-tertiary #7A7367 */
+    --accent: 41.4 39.7% 14.3%; /* #332A16 -- dark active-nav bg */
+    --accent-foreground: 44 69.2% 60.6%; /* dark-gold #E0BB55 -- dark active-nav text */
+    --destructive: 7 59.4% 63.3%; /* lightened for dark-bg contrast */
+    --destructive-foreground: 42.9 16.3% 8.4%;
+    --border: 40 13.6% 17.3%; /* dark-border #322E26 */
+    --input: 40 13.6% 17.3%;
+    --ring: 44 69.2% 60.6%;
   }
 
   * {
@@ -53,5 +69,6 @@
 
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: 'cv11', 'ss01';
   }
 }

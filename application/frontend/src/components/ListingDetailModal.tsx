@@ -4,6 +4,7 @@ import {
   updateListingStatus,
   authorityWarningLabel,
   LISTING_STATUS_TRANSITIONS,
+  LISTING_STATUS_VARIANT,
   STATUS_LABEL,
   type Listing,
   type ListingStatus,
@@ -109,6 +110,11 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   return (
     <FloatingPanel
       title={mode === 'edit' ? 'Edit listing' : 'Listing details'}
+      description={
+        mode === 'edit'
+          ? 'Editing here updates the listing immediately — it does not change the underlying property record.'
+          : `Review what clients see before you share it. ${listing.property_title}.`
+      }
       documentTitle={`${listing.property_title} · Residoro`}
       onClose={onClose}
     >
@@ -130,30 +136,30 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
         <div className="space-y-4">
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Property</dt>
+              <dt className="text-tertiary-foreground">Property</dt>
               <dd className="font-medium">{listing.property_title}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Type</dt>
+              <dt className="text-tertiary-foreground">Type</dt>
               <dd className="capitalize">{listing.listing_type}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Price</dt>
-              <dd>
+              <dt className="text-tertiary-foreground">Price</dt>
+              <dd className="font-mono">
                 {listing.price_currency} {listing.price.toLocaleString()}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Exclusivity</dt>
+              <dt className="text-tertiary-foreground">Exclusivity</dt>
               <dd>
-                <Badge variant={listing.exclusivity === 'exclusive' ? 'default' : 'secondary'}>
+                <Badge variant={listing.exclusivity === 'exclusive' ? 'warning' : 'neutral'}>
                   {listing.exclusivity === 'exclusive' ? 'Exclusive' : 'Open'}
                 </Badge>
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Authority to Sell/Lease</dt>
-              <dd className="whitespace-nowrap text-right">
+              <dt className="text-tertiary-foreground">Authority to Sell/Lease</dt>
+              <dd className="whitespace-nowrap text-right font-mono">
                 {new Date(listing.authority_starts_at).toLocaleDateString()}
                 {' – '}
                 {listing.authority_expires_at
@@ -162,11 +168,9 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Status</dt>
+              <dt className="text-tertiary-foreground">Status</dt>
               <dd>
-                <Badge variant={listing.status === 'expired' ? 'destructive' : 'secondary'}>
-                  {STATUS_LABEL[listing.status]}
-                </Badge>
+                <Badge variant={LISTING_STATUS_VARIANT[listing.status]}>{STATUS_LABEL[listing.status]}</Badge>
               </dd>
             </div>
             {listing.status === 'expired' && (
@@ -174,69 +178,76 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
             )}
             {listing.status === 'sold' && listing.buyer_name && (
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Buyer</dt>
+                <dt className="text-tertiary-foreground">Buyer</dt>
                 <dd>{listing.buyer_name}</dd>
               </div>
             )}
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Created</dt>
-              <dd>{new Date(listing.created_at).toLocaleDateString()}</dd>
+              <dt className="text-tertiary-foreground">Created</dt>
+              <dd className="font-mono">{new Date(listing.created_at).toLocaleDateString()}</dd>
             </div>
           </dl>
 
-          <Button size="sm" onClick={() => setMode('edit')}>
+          <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
             Edit
           </Button>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           {warning && (
-            <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p className="rounded-lg border border-[#EFE4C8] bg-accent px-3 py-2 text-sm text-accent-foreground">
               {warning}
             </p>
           )}
 
-          <div className="flex flex-wrap gap-2 border-t pt-4">
+          {/* Residoro Design Language (2026-08-03) modal-footer convention:
+              destructive/withdraw pinned left, the primary status-forward
+              action(s) grouped right. */}
+          <div className="flex flex-wrap items-center gap-2 border-t pt-4">
             {listing.status === 'expired' ? (
               <>
-                <input
-                  type="date"
-                  value={renewDate}
-                  onChange={(e) => setRenewDate(e.target.value)}
-                  className="h-8 rounded-md border border-input px-2 text-sm"
-                />
-                <Button size="sm" variant="outline" onClick={handleRenew}>
-                  Renew
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => handleStatus('withdrawn')}>
+                <Button size="sm" variant="outline" className="border-[#F2D8D4] text-destructive hover:bg-[#FBECEA]" onClick={() => handleStatus('withdrawn')}>
                   Mark Withdrawn
                 </Button>
+                <div className="ml-auto flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={renewDate}
+                    onChange={(e) => setRenewDate(e.target.value)}
+                    className="h-8 rounded-md border border-input bg-card px-2 text-sm"
+                  />
+                  <Button size="sm" onClick={handleRenew}>
+                    Renew
+                  </Button>
+                </div>
               </>
             ) : (
-              LISTING_STATUS_TRANSITIONS[listing.status].map((nextStatus) =>
-                nextStatus === 'sold' ? (
-                  <div key="sold" className="flex items-center gap-2">
-                    <select
-                      value={buyerContactId}
-                      onChange={(e) => setBuyerContactId(e.target.value)}
-                      className="h-8 rounded-md border border-input px-2 text-sm"
-                    >
-                      <option value="">Select buyer…</option>
-                      {contacts?.map((contact) => (
-                        <option key={contact.id} value={contact.id}>
-                          {contact.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button size="sm" variant="outline" disabled={!buyerContactId} onClick={handleMarkSold}>
-                      Mark Sold
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {LISTING_STATUS_TRANSITIONS[listing.status].map((nextStatus) =>
+                  nextStatus === 'sold' ? (
+                    <div key="sold" className="flex items-center gap-2">
+                      <select
+                        value={buyerContactId}
+                        onChange={(e) => setBuyerContactId(e.target.value)}
+                        className="h-8 rounded-md border border-input bg-card px-2 text-sm"
+                      >
+                        <option value="">Select buyer…</option>
+                        {contacts?.map((contact) => (
+                          <option key={contact.id} value={contact.id}>
+                            {contact.name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button size="sm" disabled={!buyerContactId} onClick={handleMarkSold}>
+                        Mark Sold
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button key={nextStatus} size="sm" variant="outline" onClick={() => handleStatus(nextStatus)}>
+                      Mark {STATUS_LABEL[nextStatus]}
                     </Button>
-                  </div>
-                ) : (
-                  <Button key={nextStatus} size="sm" variant="outline" onClick={() => handleStatus(nextStatus)}>
-                    Mark {STATUS_LABEL[nextStatus]}
-                  </Button>
-                ),
-              )
+                  ),
+                )}
+              </div>
             )}
           </div>
         </div>

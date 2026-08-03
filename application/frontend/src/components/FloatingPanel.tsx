@@ -4,6 +4,12 @@ import { cn } from '@/lib/utils';
 
 type Props = {
   title: string;
+  // Residoro Design Language (2026-08-03): every modal gets a one-line
+  // description under its title (docs/frontend-design-prompt.md's "every
+  // page and modal needs a description" rule) -- optional here rather than
+  // required so existing FloatingPanel consumers aren't forced to add one in
+  // the same pass that re-skins colors; new/edited panels should set it.
+  description?: string;
   documentTitle?: string;
   onClose: () => void;
   children: ReactNode;
@@ -34,7 +40,7 @@ type Props = {
 // closing (the X button) are now the only ways to change state; Escape still
 // closes, matching a conventional dialog-dismiss key even though outside-click
 // no longer does the equivalent pointer gesture.
-export function FloatingPanel({ title, documentTitle, onClose, children, className }: Props) {
+export function FloatingPanel({ title, description, documentTitle, onClose, children, className }: Props) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -68,7 +74,7 @@ export function FloatingPanel({ title, documentTitle, onClose, children, classNa
           type="button"
           onClick={() => setCollapsed(false)}
           aria-label={`Expand ${title}`}
-          className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full border bg-card text-lg font-semibold text-card-foreground shadow-xl hover:bg-accent"
+          className="fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold text-primary-foreground shadow-2xl [background:linear-gradient(150deg,hsl(var(--accent)),hsl(var(--primary)))]"
         >
           R
         </button>
@@ -77,17 +83,20 @@ export function FloatingPanel({ title, documentTitle, onClose, children, classNa
         role="dialog"
         aria-label={title}
         className={cn(
-          'fixed bottom-6 right-6 z-50 flex max-h-[32rem] w-[calc(100vw-3rem)] max-w-96 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-xl',
+          'fixed bottom-6 right-6 z-50 flex max-h-[32rem] w-[calc(100vw-3rem)] max-w-96 flex-col overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl',
           collapsed && 'hidden',
           className,
         )}
       >
         <div
-          className="flex items-center justify-between border-b px-4 py-3"
+          className="flex items-start justify-between gap-3 border-b px-4 py-3"
           onClick={() => setCollapsed(true)}
         >
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-sm font-semibold">{title}</h2>
+            {description && <p className="text-xs text-muted-foreground">{description}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={(e) => {

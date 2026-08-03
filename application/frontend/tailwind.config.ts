@@ -43,6 +43,16 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // Residoro Design Language (2026-08-03): the one new slot beyond
+        // shadcn's stock set -- see index.css's comment for why muted-
+        // foreground alone isn't enough (two secondary-text tiers, not one).
+        tertiary: {
+          foreground: 'hsl(var(--tertiary-foreground))',
+        },
+      },
+      fontFamily: {
+        sans: ['"Instrument Sans"', 'Helvetica', 'Arial', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',

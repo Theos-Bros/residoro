@@ -49,6 +49,21 @@ export const PROPERTY_STATUSES: readonly PropertyStatus[] = [
   'leased',
 ];
 
+// Residoro Design Language (2026-08-03): status -> Badge variant, so every
+// status chip across the app reads consistently instead of each page picking
+// its own Badge variant ad hoc. success=live/positive, warning=pending,
+// neutral=quiet/settled, danger=alarming.
+export const PROPERTY_STATUS_VARIANT: Record<
+  PropertyStatus,
+  'success' | 'warning' | 'neutral'
+> = {
+  available: 'success',
+  reserved: 'warning',
+  sold: 'neutral',
+  off_market: 'neutral',
+  leased: 'neutral',
+};
+
 export type Listing = {
   id: string;
   property_id: string;
@@ -89,6 +104,21 @@ export const STATUS_LABEL: Record<ListingStatus, string> = {
   expired: 'Expired',
   withdrawn: 'Withdrawn',
   inactive: 'Inactive',
+};
+
+// Residoro Design Language (2026-08-03): same status -> Badge variant
+// mapping as PROPERTY_STATUS_VARIANT above, for listing status chips.
+export const LISTING_STATUS_VARIANT: Record<
+  ListingStatus,
+  'success' | 'warning' | 'neutral' | 'danger'
+> = {
+  draft: 'neutral',
+  active: 'success',
+  under_offer: 'warning',
+  sold: 'neutral',
+  expired: 'danger',
+  withdrawn: 'danger',
+  inactive: 'neutral',
 };
 
 // tb-listings-lifecycle-001: mirrors the backend's STATUS_TRANSITIONS in
