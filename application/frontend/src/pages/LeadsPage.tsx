@@ -12,6 +12,7 @@ import {
 import { fetchListings, type Listing } from '@/lib/listingsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
+import { badgeVariants } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { InquiryDetailPanel } from '@/components/InquiryDetailPanel';
 import { QualifyInquiryModal } from '@/components/QualifyInquiryModal';
@@ -19,6 +20,7 @@ import { LeadDetailPanel } from '@/components/LeadDetailPanel';
 import { BroadcastModal } from '@/components/BroadcastModal';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import type { BroadcastEntityType } from '@/lib/broadcastApi';
+import { cn } from '@/lib/utils';
 
 type Props = {
   session: Session;
@@ -38,6 +40,73 @@ function budgetLabel(min?: number | null, max?: number | null, currency?: string
   const cur = currency ?? 'PHP';
   if (min && max) return `${cur} ${min.toLocaleString()}–${max.toLocaleString()}`;
   return `${cur} ${(min ?? max)!.toLocaleString()}`;
+}
+
+// tb-design-system-leads-001: design doc section 08's table has an "Age"
+// column (right-aligned mono) -- a pure display derivation from the
+// created_at every Inquiry/BuyerRequirement already has, not a new field.
+function ageLabel(createdAt: string): string {
+  const ms = Date.now() - new Date(createdAt).getTime();
+  const days = Math.floor(ms / 86_400_000);
+  if (days < 1) return `${Math.max(1, Math.floor(ms / 3_600_000))}h`;
+  return `${days}d`;
+}
+
+// Residoro Design Language (2026-08-03): stage -> Badge variant, same
+// precedent as listingsApi.ts's PROPERTY_STATUS_VARIANT/LISTING_STATUS_VARIANT.
+// Kept local to LeadsPage (this tracer bullet's file boundary is this page
+// only) rather than added to inquiriesApi.ts/buyerRequirementsApi.ts -- and
+// none of the 4 existing Badge variants needed extending to cover it.
+// InquiryStage/LeadStage don't match the design doc's illustrative stage
+// names (New/Qualifying/Site visit/Offer) 1:1 -- this maps this app's real
+// stages onto the same success/warning/neutral/danger temperature scale the
+// mock uses, not the mock's literal hex values.
+const INQUIRY_STAGE_VARIANT: Record<InquiryStage, 'success' | 'warning' | 'neutral' | 'danger'> = {
+  to_probe: 'neutral',
+  probing: 'warning',
+  not_qualified: 'danger',
+  qualified: 'success',
+};
+
+const LEAD_STAGE_VARIANT: Record<LeadStage, 'success' | 'warning' | 'neutral' | 'danger'> = {
+  registered: 'neutral',
+  searching: 'warning',
+  stalled: 'danger',
+  options_sent: 'warning',
+  viewing: 'warning',
+  negotiating: 'warning',
+  contract_closing: 'success',
+  won: 'success',
+  lost: 'danger',
+};
+
+// Reuses Badge's own class recipe on a live <select> rather than swapping in
+// a static <Badge> -- the Stage cell is a functioning inline-edit control
+// (existing handleInlineStageChange/handleInlineInquiryStageChange), not a
+// read-only chip like PropertiesListPage's Status column, so it has to stay
+// a real <select> to keep that interaction working unchanged.
+function stageSelectClass(variant: 'success' | 'warning' | 'neutral' | 'danger') {
+  return cn(
+    badgeVariants({ variant }),
+    'h-7 cursor-pointer border pr-1 text-xs disabled:cursor-not-allowed disabled:opacity-60',
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: number;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 border-r px-4 py-3 last:border-r-0">
+      <span className="font-mono text-[11px] uppercase tracking-wider text-tertiary-foreground">{label}</span>
+      <span className={cn('text-xl font-semibold', valueClassName)}>{value}</span>
+    </div>
+  );
 }
 
 // tb-buyer-leads-schema-001: one page, InquiriesSection on top (the
@@ -90,6 +159,16 @@ export function LeadsPage({ session }: Props) {
   const activeLeads = leads?.filter((lead) => lead.stage !== 'won') ?? [];
   const wonLeads = leads?.filter((lead) => lead.stage === 'won') ?? [];
 
+  // tb-design-system-leads-001: stat strip (design doc section 08) -- client-
+  // side counts off the same `inquiries`/`leads` arrays already fetched
+  // above, no new endpoint. "Stalled" (red) stands in for the mock's
+  // "No next step" urgency stat -- this app has no next-step/owner field to
+  // count against, but 'stalled' is the closest real state: a lead with no
+  // forward motion.
+  const newInquiriesCount = inquiries?.filter((i) => i.stage === 'to_probe').length ?? 0;
+  const probingCount = inquiries?.filter((i) => i.stage === 'probing').length ?? 0;
+  const stalledCount = leads?.filter((l) => l.stage === 'stalled').length ?? 0;
+
   const [savingStageId, setSavingStageId] = useState<string | null>(null);
 
   // Inline stage change: reuses the same PATCH LeadDetailPanel's own Stage
@@ -127,16 +206,16 @@ export function LeadsPage({ session }: Props) {
 
   function renderLeadsTable(rows: BuyerRequirement[]) {
     return (
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="overflow-x-auto rounded-xl border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Contact</TableHead>
               <TableHead>Stage</TableHead>
               <TableHead>Intent</TableHead>
-              <TableHead>Budget</TableHead>
+              <TableHead className="text-right">Budget</TableHead>
               <TableHead>Target City</TableHead>
-              <TableHead>Created</TableHead>
+              <TableHead className="text-right">Age</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -149,7 +228,7 @@ export function LeadsPage({ session }: Props) {
                 <TableCell className="font-medium">{lead.contacts?.name ?? '—'}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <select
-                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                    className={stageSelectClass(LEAD_STAGE_VARIANT[lead.stage])}
                     value={lead.stage}
                     disabled={savingStageId === lead.id}
                     onChange={(e) => handleInlineStageChange(lead.id, e.target.value as LeadStage)}
@@ -162,10 +241,15 @@ export function LeadsPage({ session }: Props) {
                   </select>
                 </TableCell>
                 <TableCell className="capitalize">{lead.intent}</TableCell>
-                <TableCell>{budgetLabel(lead.budget_min, lead.budget_max, lead.budget_currency)}</TableCell>
+                <TableCell className="text-right font-mono text-sm">
+                  {budgetLabel(lead.budget_min, lead.budget_max, lead.budget_currency)}
+                </TableCell>
                 <TableCell>{lead.target_city ?? '—'}</TableCell>
-                <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {new Date(lead.created_at).toLocaleDateString()}
+                <TableCell
+                  className="whitespace-nowrap text-right font-mono text-sm text-tertiary-foreground"
+                  title={new Date(lead.created_at).toLocaleString()}
+                >
+                  {ageLabel(lead.created_at)}
                 </TableCell>
               </TableRow>
             ))}
@@ -177,8 +261,24 @@ export function LeadsPage({ session }: Props) {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
+      <div className="flex flex-wrap items-start justify-between gap-6">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
+          <p className="max-w-xl text-sm text-muted-foreground">
+            Everyone who has enquired and hasn't closed yet. Pre-qualify new inquiries above, then work the
+            active pipeline below — stalled leads are the ones most likely to go cold, so they're called out
+            in red.
+          </p>
+        </div>
+        {(inquiries || leads) && (
+          <div className="flex divide-x overflow-hidden rounded-xl border bg-card">
+            <StatTile label="New" value={newInquiriesCount} valueClassName="text-accent-foreground" />
+            <StatTile label="Probing" value={probingCount} />
+            <StatTile label="Active leads" value={activeLeads.length} />
+            <StatTile label="Won" value={wonLeads.length} />
+            <StatTile label="Stalled" value={stalledCount} valueClassName="text-destructive" />
+          </div>
+        )}
       </div>
 
       {error && (
@@ -190,23 +290,23 @@ export function LeadsPage({ session }: Props) {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-medium">Inquiries</h2>
-          <Button size="sm" onClick={() => setOpenPanel({ type: 'inquiry', id: 'new' })}>
+          <Button size="sm" variant="outline" onClick={() => setOpenPanel({ type: 'inquiry', id: 'new' })}>
             New Inquiry
           </Button>
         </div>
         {inquiries === null && <p className="text-sm text-muted-foreground">Loading…</p>}
         {inquiries?.length === 0 && <p className="text-sm text-muted-foreground">No open inquiries.</p>}
         {inquiries && inquiries.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-xl border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Buyer</TableHead>
                   <TableHead>Stage</TableHead>
                   <TableHead>Intent</TableHead>
-                  <TableHead>Budget</TableHead>
+                  <TableHead className="text-right">Budget</TableHead>
                   <TableHead>Target City</TableHead>
-                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Age</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -220,7 +320,7 @@ export function LeadsPage({ session }: Props) {
                     <TableCell className="font-medium">{inquiry.buyer_name || '(no name)'}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <select
-                        className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                        className={stageSelectClass(INQUIRY_STAGE_VARIANT[inquiry.stage])}
                         value={inquiry.stage}
                         disabled={savingStageId === inquiry.id || inquiry.stage === 'qualified'}
                         onChange={(e) => handleInlineInquiryStageChange(inquiry.id, e.target.value as InquiryStage)}
@@ -236,10 +336,15 @@ export function LeadsPage({ session }: Props) {
                       </select>
                     </TableCell>
                     <TableCell className="capitalize">{inquiry.intent ?? '—'}</TableCell>
-                    <TableCell>{budgetLabel(inquiry.budget_min, inquiry.budget_max, inquiry.budget_currency)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {budgetLabel(inquiry.budget_min, inquiry.budget_max, inquiry.budget_currency)}
+                    </TableCell>
                     <TableCell>{inquiry.target_city ?? '—'}</TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {new Date(inquiry.created_at).toLocaleDateString()}
+                    <TableCell
+                      className="whitespace-nowrap text-right font-mono text-sm text-tertiary-foreground"
+                      title={new Date(inquiry.created_at).toLocaleString()}
+                    >
+                      {ageLabel(inquiry.created_at)}
                     </TableCell>
                     <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       {/* Button's own disabled state already grays it out
