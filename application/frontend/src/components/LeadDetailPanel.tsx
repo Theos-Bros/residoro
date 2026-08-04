@@ -18,6 +18,7 @@ import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
 import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
 import { fetchLeadContract, createContract, updateContract, type Contract, type SigningStatus } from '@/lib/contractsApi';
+import { fetchLeadClosing, createClosing, updateClosing, type Closing } from '@/lib/closingsApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
@@ -144,6 +145,31 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadContract, [isNew, leadId, session.access_token]);
+
+  // tb-transactions-closing-001: the lead's current closing (most recent
+  // row, if any), plus an editable final_price/currency form and a
+  // lease_end_date input (only asked for when the closing listing is a
+  // rental, mirroring mark-won's own rule) kept in sync with the loaded
+  // closing.
+  const [closing, setClosing] = useState<Closing | null>(null);
+  const [closingFinalPrice, setClosingFinalPrice] = useState('');
+  const [closingCurrency, setClosingCurrency] = useState('PHP');
+  const [closingLeaseEndDate, setClosingLeaseEndDate] = useState('');
+
+  function reloadClosing() {
+    if (isNew) return;
+    fetchLeadClosing(session.access_token, leadId)
+      .then(({ closing }) => {
+        setClosing(closing);
+        if (closing) {
+          setClosingFinalPrice(String(closing.final_price));
+          setClosingCurrency(closing.currency);
+        }
+      })
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadClosing, [isNew, leadId, session.access_token]);
 
   function startCounter(offer: Offer) {
     setCounterOfferId(offer.id);
@@ -417,6 +443,72 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
       }
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  async function handleOpenClosing(contractId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createClosing(session.access_token, contractId);
+      setClosing(created);
+      setClosingFinalPrice(String(created.final_price));
+      setClosingCurrency(created.currency);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveClosingPrice() {
+    if (!closing) return;
+    const finalPrice = Number(closingFinalPrice);
+    if (!closingFinalPrice || !Number.isFinite(finalPrice) || finalPrice <= 0) {
+      setError('Final price must be a positive number');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateClosing(session.access_token, closing.id, {
+        final_price: finalPrice,
+        currency: closingCurrency,
+      });
+      setClosing(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCompleteClosing() {
+    if (!closing) return;
+    const closingListingIsRental = listings.find((l) => l.id === closing.listing_id)?.listing_type === 'rent';
+    if (closingListingIsRental && !closingLeaseEndDate) {
+      setError('Lease end date is required for a rental closing');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateClosing(session.access_token, closing.id, {
+        completed: true,
+        lease_end_date: closingListingIsRental ? closingLeaseEndDate : undefined,
+      });
+      setClosing(updated);
+      // Completion may have advanced the lead's stage to won (with
+      // won_listing_id/lease_end_date set) and flipped the listing to sold
+      // server-side -- refetch so both reflect it without a manual reopen
+      // (same reasoning as handleAdvanceSigning's refetch).
+      const refreshed = await fetchBuyerRequirement(session.access_token, leadId);
+      setLead(refreshed);
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -843,6 +935,68 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                     </span>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {!isNew && lead && contract?.signing_status === 'signed' && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Closing</p>
+              {!closing && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Signed contract: {contract.currency} {contract.agreed_price.toLocaleString()}
+                  </span>
+                  <Button size="sm" variant="outline" onClick={() => handleOpenClosing(contract.id)} disabled={saving}>
+                    Open Closing
+                  </Button>
+                </div>
+              )}
+              {closing && !closing.completed_at && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-32"
+                      value={closingFinalPrice}
+                      onChange={(e) => setClosingFinalPrice(e.target.value)}
+                    />
+                    <Input
+                      type="text"
+                      className="w-20"
+                      value={closingCurrency}
+                      onChange={(e) => setClosingCurrency(e.target.value)}
+                    />
+                    <Button size="sm" variant="outline" onClick={handleSaveClosingPrice} disabled={saving}>
+                      Save
+                    </Button>
+                  </div>
+                  {listings.find((l) => l.id === closing.listing_id)?.listing_type === 'rent' && (
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="closing_lease_end_date" className="text-xs">
+                        Lease end date
+                      </Label>
+                      <Input
+                        id="closing_lease_end_date"
+                        type="date"
+                        className="w-40"
+                        value={closingLeaseEndDate}
+                        onChange={(e) => setClosingLeaseEndDate(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <Button size="sm" onClick={handleCompleteClosing} disabled={saving}>
+                    Mark Complete
+                  </Button>
+                </div>
+              )}
+              {closing?.completed_at && (
+                <p className="text-sm text-muted-foreground">
+                  Closed: {closing.currency} {closing.final_price.toLocaleString()} on{' '}
+                  {new Date(closing.completed_at).toLocaleDateString()}
+                </p>
               )}
             </div>
           )}

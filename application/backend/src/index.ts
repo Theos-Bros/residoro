@@ -25,6 +25,7 @@ import { registerTasksRoutes } from './routes/tasks.js';
 import { registerViewingsRoutes } from './routes/viewings.js';
 import { registerOffersRoutes } from './routes/offers.js';
 import { registerContractsRoutes } from './routes/contracts.js';
+import { registerClosingsRoutes } from './routes/closings.js';
 
 const app = Fastify({ logger: true });
 
@@ -53,6 +54,7 @@ await registerTasksRoutes(app);
 await registerViewingsRoutes(app);
 await registerOffersRoutes(app);
 await registerContractsRoutes(app);
+await registerClosingsRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

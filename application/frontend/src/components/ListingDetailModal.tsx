@@ -13,6 +13,7 @@ import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { fetchListingViewings, type Viewing } from '@/lib/viewingsApi';
 import { fetchListingOffers, type Offer } from '@/lib/offersApi';
 import { fetchListingContract, type Contract } from '@/lib/contractsApi';
+import { fetchListingClosing, type Closing } from '@/lib/closingsApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FloatingPanel } from '@/components/FloatingPanel';
@@ -56,6 +57,9 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   // tb-transactions-contract-001: read-only contract for this listing --
   // creating/editing/advancing only happens from the Lead side (LeadDetailPanel).
   const [contract, setContract] = useState<Contract | null>(null);
+  // tb-transactions-closing-001: read-only closing for this listing --
+  // opening/editing/completing only happens from the Lead side.
+  const [closing, setClosing] = useState<Closing | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +94,20 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
     fetchListingContract(session.access_token, listing.id)
       .then(({ contract }) => {
         if (!cancelled) setContract(contract);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing.id, session.access_token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchListingClosing(session.access_token, listing.id)
+      .then(({ closing }) => {
+        if (!cancelled) setClosing(closing);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -279,6 +297,18 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
               <p className="text-sm text-muted-foreground">
                 {contract.currency} {contract.agreed_price.toLocaleString()} —{' '}
                 <span className="capitalize">{contract.signing_status}</span>
+              </p>
+            </div>
+          )}
+
+          {closing && (
+            <div className="space-y-1 rounded-md border p-3">
+              <p className="text-sm font-medium">Closing</p>
+              <p className="text-sm text-muted-foreground">
+                {closing.currency} {closing.final_price.toLocaleString()} —{' '}
+                {closing.completed_at
+                  ? `closed ${new Date(closing.completed_at).toLocaleDateString()}`
+                  : 'in progress'}
               </p>
             </div>
           )}
