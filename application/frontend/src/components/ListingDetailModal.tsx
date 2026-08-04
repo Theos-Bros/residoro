@@ -12,6 +12,7 @@ import {
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { fetchListingViewings, type Viewing } from '@/lib/viewingsApi';
 import { fetchListingOffers, type Offer } from '@/lib/offersApi';
+import { fetchListingContract, type Contract } from '@/lib/contractsApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FloatingPanel } from '@/components/FloatingPanel';
@@ -52,6 +53,9 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   // listing -- recording/resolving offers only happens from the Lead side
   // (LeadDetailPanel), same split as viewings above.
   const [offers, setOffers] = useState<Offer[]>([]);
+  // tb-transactions-contract-001: read-only contract for this listing --
+  // creating/editing/advancing only happens from the Lead side (LeadDetailPanel).
+  const [contract, setContract] = useState<Contract | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +76,20 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
     fetchListingOffers(session.access_token, listing.id)
       .then(({ offers }) => {
         if (!cancelled) setOffers(offers);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing.id, session.access_token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchListingContract(session.access_token, listing.id)
+      .then(({ contract }) => {
+        if (!cancelled) setContract(contract);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -252,6 +270,16 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {contract && (
+            <div className="space-y-1 rounded-md border p-3">
+              <p className="text-sm font-medium">Contract</p>
+              <p className="text-sm text-muted-foreground">
+                {contract.currency} {contract.agreed_price.toLocaleString()} —{' '}
+                <span className="capitalize">{contract.signing_status}</span>
+              </p>
             </div>
           )}
 

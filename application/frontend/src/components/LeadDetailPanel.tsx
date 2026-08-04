@@ -17,6 +17,7 @@ import type { Listing } from '@/lib/listingsApi';
 import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
 import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
+import { fetchLeadContract, createContract, updateContract, type Contract, type SigningStatus } from '@/lib/contractsApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
@@ -119,6 +120,30 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadOffers, [isNew, leadId, session.access_token]);
+
+  // tb-transactions-contract-001: the lead's current contract (most recent
+  // row, if any), plus an editable price/currency/terms form kept in sync
+  // with whatever contract is loaded.
+  const [contract, setContract] = useState<Contract | null>(null);
+  const [contractPrice, setContractPrice] = useState('');
+  const [contractCurrency, setContractCurrency] = useState('PHP');
+  const [contractTerms, setContractTerms] = useState('');
+
+  function reloadContract() {
+    if (isNew) return;
+    fetchLeadContract(session.access_token, leadId)
+      .then(({ contract }) => {
+        setContract(contract);
+        if (contract) {
+          setContractPrice(String(contract.agreed_price));
+          setContractCurrency(contract.currency);
+          setContractTerms(contract.terms ?? '');
+        }
+      })
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadContract, [isNew, leadId, session.access_token]);
 
   function startCounter(offer: Offer) {
     setCounterOfferId(offer.id);
@@ -337,6 +362,64 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
     }
   }
 
+  async function handleCreateContract(offerId: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createContract(session.access_token, { offer_id: offerId });
+      setContract(created);
+      setContractPrice(String(created.agreed_price));
+      setContractCurrency(created.currency);
+      setContractTerms(created.terms ?? '');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveContractTerms() {
+    if (!contract) return;
+    const agreedPrice = Number(contractPrice);
+    if (!contractPrice || !Number.isFinite(agreedPrice) || agreedPrice <= 0) {
+      setError('Agreed price must be a positive number');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateContract(session.access_token, contract.id, {
+        agreed_price: agreedPrice,
+        currency: contractCurrency,
+        terms: contractTerms || undefined,
+      });
+      setContract(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAdvanceSigning(signing_status: SigningStatus) {
+    if (!contract) return;
+    setError(null);
+    try {
+      const updated = await updateContract(session.access_token, contract.id, { signing_status });
+      setContract(updated);
+      if (signing_status === 'signed') {
+        // Signing may have advanced the lead's stage to contract_closing
+        // server-side -- refetch so the Stage dropdown reflects it without a
+        // manual reopen (same reasoning as handleResolveOffer's refetch).
+        const refreshed = await fetchBuyerRequirement(session.access_token, leadId);
+        setLead(refreshed);
+        onSaved();
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   async function handleMarkWon() {
     if (isNew || !wonListingId) return;
     if (wonListingIsRental && !leaseEndDate) {
@@ -362,6 +445,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
 
   const title = isNew ? 'New Lead' : `Lead — ${lead?.contacts?.name ?? '…'}`;
   const matches = lead?.buyer_requirement_matches ?? [];
+  const latestAcceptedOffer = offers.find((o) => o.status === 'accepted');
   const wonListingIsRental = listings.find((l) => l.id === wonListingId)?.listing_type === 'rent';
 
   return (
@@ -683,6 +767,82 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                     );
                   })}
                 </ul>
+              )}
+            </div>
+          )}
+
+          {!isNew && lead && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Contract</p>
+              {!contract &&
+                (latestAcceptedOffer ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Accepted offer: {latestAcceptedOffer.currency} {latestAcceptedOffer.amount.toLocaleString()}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleCreateContract(latestAcceptedOffer.id)}
+                      disabled={saving}
+                    >
+                      Create Contract
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No accepted offer yet.</p>
+                ))}
+              {contract && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-32"
+                      value={contractPrice}
+                      onChange={(e) => setContractPrice(e.target.value)}
+                    />
+                    <Input
+                      type="text"
+                      className="w-20"
+                      value={contractCurrency}
+                      onChange={(e) => setContractCurrency(e.target.value)}
+                    />
+                    <Input
+                      type="text"
+                      placeholder="Terms (optional)"
+                      className="min-w-40 flex-1"
+                      value={contractTerms}
+                      onChange={(e) => setContractTerms(e.target.value)}
+                    />
+                    <Button size="sm" variant="outline" onClick={handleSaveContractTerms} disabled={saving}>
+                      Save
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs capitalize text-muted-foreground">
+                      Signing status: {contract.signing_status}
+                    </span>
+                    <span className="flex shrink-0 gap-1">
+                      {contract.signing_status === 'drafted' && (
+                        <Button size="sm" variant="outline" onClick={() => handleAdvanceSigning('sent')}>
+                          Mark Sent
+                        </Button>
+                      )}
+                      {contract.signing_status === 'sent' && (
+                        <Button size="sm" variant="outline" onClick={() => handleAdvanceSigning('signed')}>
+                          Mark Signed
+                        </Button>
+                      )}
+                      {(contract.signing_status === 'drafted' || contract.signing_status === 'sent') && (
+                        <Button size="sm" variant="outline" onClick={() => handleAdvanceSigning('void')}>
+                          Void
+                        </Button>
+                      )}
+                    </span>
+                  </div>
+                </div>
               )}
             </div>
           )}

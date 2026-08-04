@@ -20,8 +20,8 @@ Written at implementation time, per RFC-004's documentation cadence requirement.
 
 Covers `public.offers` only. Does not cover `buyer_requirements` (DD not yet written — see
 `cap-buyer-leads-001`'s own noted DS/DD coverage gap) or `listings` (DD-006). Does not cover
-Contracts or Closing — separate, not-yet-built tracer bullets under the same parent capability
-(`cap-transactions-001`), each expected to get its own DD entry when built.
+Contract (now built — see DD-012) or Closing — a separate, not-yet-built tracer bullet under the
+same parent capability (`cap-transactions-001`), expected to get its own DD entry when built.
 
 ---
 
