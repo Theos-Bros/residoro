@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type SettingKey = 'sharing_templates' | 'performance' | 'matching' | 'tasks';
+export type SettingKey = 'sharing_templates' | 'performance' | 'matching' | 'tasks' | 'commission';
 
 // Shared by every Settings sub-section's GET (to compute can_edit) and PATCH
 // (to gate the write) -- tb-brokerage-permissions-delegation-001. An admin's

@@ -14,6 +14,7 @@ import { fetchListingViewings, type Viewing } from '@/lib/viewingsApi';
 import { fetchListingOffers, type Offer } from '@/lib/offersApi';
 import { fetchListingContract, type Contract } from '@/lib/contractsApi';
 import { fetchListingClosing, type Closing } from '@/lib/closingsApi';
+import { fetchClosingCommissionEarnings, type CommissionEarnings } from '@/lib/commissionApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FloatingPanel } from '@/components/FloatingPanel';
@@ -60,6 +61,9 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   // tb-transactions-closing-001: read-only closing for this listing --
   // opening/editing/completing only happens from the Lead side.
   const [closing, setClosing] = useState<Closing | null>(null);
+  // tb-commission-structure-001: read-only earnings for this listing's
+  // closing, once one exists -- recording only happens from the Lead side.
+  const [commissionEarnings, setCommissionEarnings] = useState<CommissionEarnings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +120,21 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
       cancelled = true;
     };
   }, [listing.id, session.access_token]);
+
+  useEffect(() => {
+    if (!closing) return;
+    let cancelled = false;
+    fetchClosingCommissionEarnings(session.access_token, closing.id)
+      .then(({ commission_earnings }) => {
+        if (!cancelled) setCommissionEarnings(commission_earnings);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [closing, session.access_token]);
 
   useEffect(() => {
     if (listing.status !== 'under_offer' || contacts !== null) return;
@@ -309,6 +328,19 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
                 {closing.completed_at
                   ? `closed ${new Date(closing.completed_at).toLocaleDateString()}`
                   : 'in progress'}
+              </p>
+            </div>
+          )}
+
+          {commissionEarnings && (
+            <div className="space-y-1 rounded-md border p-3">
+              <p className="text-sm font-medium">Commission</p>
+              <p className="text-sm text-muted-foreground">
+                Total: {commissionEarnings.currency} {commissionEarnings.total_commission.toLocaleString()}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Brokerage {commissionEarnings.brokerage_pct}% / Agent {commissionEarnings.agent_pct}%
+                {commissionEarnings.co_broker_pct > 0 && ` / Co-broker ${commissionEarnings.co_broker_pct}%`}
               </p>
             </div>
           )}

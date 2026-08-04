@@ -4,6 +4,7 @@ import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { SharingTemplatesPanel } from '@/components/SharingTemplatesPanel';
 import { PerformanceSettingsPanel } from '@/components/PerformanceSettingsPanel';
 import { MatchingSettingsPanel } from '@/components/MatchingSettingsPanel';
+import { CommissionSettingsPanel } from '@/components/CommissionSettingsPanel';
 import { TaskRoutingSettingsPanel } from '@/components/TaskRoutingSettingsPanel';
 import { PermissionsSettingsPanel } from '@/components/PermissionsSettingsPanel';
 import { TeamSettingsPanel } from '@/components/TeamSettingsPanel';
@@ -34,11 +35,16 @@ type Props = {
 // tb-client-lifecycle-member-invite-001: fifth sub-section, and the second
 // (after Permissions) that's admin-only to view at all -- who's-on-the-team
 // is the same admin-management concern as who-can-edit-what.
+//
+// tb-commission-structure-001: sixth sub-section, reusing the same
+// view-all/edit-gated shape as Matching -- everyone can see the current
+// default split, only admin (or a 'commission' delegation grant) can edit it.
 const BASE_SECTIONS = [
   { id: 'sharing-templates', label: 'Sharing Templates' },
   { id: 'performance', label: 'Performance' },
   { id: 'matching', label: 'Matching' },
   { id: 'tasks', label: 'Tasks' },
+  { id: 'commission', label: 'Commission' },
 ] as const;
 const PERMISSIONS_SECTION = { id: 'permissions', label: 'Permissions' } as const;
 const TEAM_SECTION = { id: 'team', label: 'Team' } as const;
@@ -74,6 +80,7 @@ export function SettingsPage({ session }: Props) {
           {activeSection === 'performance' && <PerformanceSettingsPanel session={session} />}
           {activeSection === 'matching' && <MatchingSettingsPanel session={session} />}
           {activeSection === 'tasks' && <TaskRoutingSettingsPanel session={session} />}
+          {activeSection === 'commission' && <CommissionSettingsPanel session={session} />}
           {activeSection === 'permissions' && isAdmin && <PermissionsSettingsPanel session={session} />}
           {activeSection === 'team' && isAdmin && <TeamSettingsPanel session={session} />}
         </div>

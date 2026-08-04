@@ -19,6 +19,7 @@ import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, ty
 import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
 import { fetchLeadContract, createContract, updateContract, type Contract, type SigningStatus } from '@/lib/contractsApi';
 import { fetchLeadClosing, createClosing, updateClosing, type Closing } from '@/lib/closingsApi';
+import { fetchClosingCommissionEarnings, recordCommissionEarnings, type CommissionEarnings } from '@/lib/commissionApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
@@ -170,6 +171,19 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadClosing, [isNew, leadId, session.access_token]);
+
+  // tb-commission-structure-001: earnings for the lead's closing, once one
+  // exists -- keyed on closing.id rather than leadId/isNew like the other
+  // reload* effects, since a closing only exists once the deal is complete.
+  const [commissionEarnings, setCommissionEarnings] = useState<CommissionEarnings | null>(null);
+  const [commissionTotalInput, setCommissionTotalInput] = useState('');
+
+  useEffect(() => {
+    if (!closing) return;
+    fetchClosingCommissionEarnings(session.access_token, closing.id)
+      .then(({ commission_earnings }) => setCommissionEarnings(commission_earnings))
+      .catch((err: Error) => setError(err.message));
+  }, [closing, session.access_token]);
 
   function startCounter(offer: Offer) {
     setCounterOfferId(offer.id);
@@ -505,6 +519,28 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
       const refreshed = await fetchBuyerRequirement(session.access_token, leadId);
       setLead(refreshed);
       onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRecordCommission() {
+    if (!closing) return;
+    const totalCommission = Number(commissionTotalInput);
+    if (!commissionTotalInput || !Number.isFinite(totalCommission) || totalCommission <= 0) {
+      setError('Total commission must be a positive number');
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await recordCommissionEarnings(session.access_token, {
+        closing_id: closing.id,
+        total_commission: totalCommission,
+      });
+      setCommissionEarnings(created);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -997,6 +1033,49 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                   Closed: {closing.currency} {closing.final_price.toLocaleString()} on{' '}
                   {new Date(closing.completed_at).toLocaleDateString()}
                 </p>
+              )}
+            </div>
+          )}
+
+          {!isNew && closing?.completed_at && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Commission</p>
+              {!commissionEarnings && (
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Total commission"
+                    className="w-40"
+                    value={commissionTotalInput}
+                    onChange={(e) => setCommissionTotalInput(e.target.value)}
+                  />
+                  <Button size="sm" onClick={handleRecordCommission} disabled={saving}>
+                    Record Commission
+                  </Button>
+                </div>
+              )}
+              {commissionEarnings && (
+                <div className="space-y-1 text-sm text-muted-foreground">
+                  <p>
+                    Total: {commissionEarnings.currency} {commissionEarnings.total_commission.toLocaleString()}
+                  </p>
+                  <p>
+                    Brokerage ({commissionEarnings.brokerage_pct}%): {commissionEarnings.currency}{' '}
+                    {commissionEarnings.brokerage_amount.toLocaleString()}
+                  </p>
+                  <p>
+                    Agent ({commissionEarnings.agent_pct}%): {commissionEarnings.currency}{' '}
+                    {commissionEarnings.agent_amount.toLocaleString()}
+                  </p>
+                  {commissionEarnings.co_broker_pct > 0 && (
+                    <p>
+                      Co-broker ({commissionEarnings.co_broker_pct}%): {commissionEarnings.currency}{' '}
+                      {commissionEarnings.co_broker_amount.toLocaleString()}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
