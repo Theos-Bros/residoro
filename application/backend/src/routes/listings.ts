@@ -35,7 +35,10 @@ const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
 // from 'active' (active <-> inactive), additive alongside 'draft' -- not a
 // replacement for it. 'sold' was already terminal before this change; no
 // change to its transitions.
-const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+// Exported for tb-transactions-offers-001: offer acceptance reuses this same
+// table to decide whether it's legal to auto-flip a listing to 'under_offer'
+// rather than duplicating the transition graph in offers.ts.
+export const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
   draft: ['active', 'withdrawn'],
   active: ['under_offer', 'inactive', 'withdrawn'],
   inactive: ['active', 'withdrawn'],

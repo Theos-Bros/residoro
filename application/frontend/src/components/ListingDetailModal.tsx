@@ -11,6 +11,7 @@ import {
 } from '@/lib/listingsApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { fetchListingViewings, type Viewing } from '@/lib/viewingsApi';
+import { fetchListingOffers, type Offer } from '@/lib/offersApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FloatingPanel } from '@/components/FloatingPanel';
@@ -47,12 +48,30 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   // tb-transactions-viewings-001: read-only viewing history for this listing --
   // scheduling/outcome editing only happens from the Lead side (LeadDetailPanel).
   const [viewings, setViewings] = useState<Viewing[]>([]);
+  // tb-transactions-offers-001: read-only offer/negotiation history for this
+  // listing -- recording/resolving offers only happens from the Lead side
+  // (LeadDetailPanel), same split as viewings above.
+  const [offers, setOffers] = useState<Offer[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     fetchListingViewings(session.access_token, listing.id)
       .then(({ viewings }) => {
         if (!cancelled) setViewings(viewings);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing.id, session.access_token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchListingOffers(session.access_token, listing.id)
+      .then(({ offers }) => {
+        if (!cancelled) setOffers(offers);
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -214,6 +233,22 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
                   <li key={v.id} className="flex items-center justify-between gap-2">
                     <span>{new Date(v.scheduled_at).toLocaleString()}</span>
                     <span className="capitalize">{v.outcome.replace(/_/g, ' ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {offers.length > 0 && (
+            <div className="space-y-1 rounded-md border p-3">
+              <p className="text-sm font-medium">Offers</p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {offers.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-2">
+                    <span>
+                      {o.offered_by === 'buyer' ? 'Buyer' : 'Seller'} {o.currency} {o.amount.toLocaleString()}
+                    </span>
+                    <span className="capitalize">{o.status.replace(/_/g, ' ')}</span>
                   </li>
                 ))}
               </ul>

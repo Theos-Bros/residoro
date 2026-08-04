@@ -16,6 +16,7 @@ import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import type { Listing } from '@/lib/listingsApi';
 import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
+import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
@@ -97,6 +98,45 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadViewings, [isNew, leadId, session.access_token]);
+
+  // tb-transactions-offers-001: offers/counters scheduled against this Lead,
+  // plus the record-offer form (listing + amount, defaulting to a fresh
+  // initial offer; "Counter" on a pending row switches the same form into
+  // counter mode via counterOfferId).
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offerListingId, setOfferListingId] = useState('');
+  const [offerOfferedBy, setOfferOfferedBy] = useState<'buyer' | 'seller'>('buyer');
+  const [offerAmount, setOfferAmount] = useState('');
+  const [offerCurrency, setOfferCurrency] = useState('PHP');
+  const [offerTerms, setOfferTerms] = useState('');
+  const [counterOfferId, setCounterOfferId] = useState<string | null>(null);
+
+  function reloadOffers() {
+    if (isNew) return;
+    fetchLeadOffers(session.access_token, leadId)
+      .then(({ offers }) => setOffers(offers))
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadOffers, [isNew, leadId, session.access_token]);
+
+  function startCounter(offer: Offer) {
+    setCounterOfferId(offer.id);
+    setOfferListingId(offer.listing_id);
+    setOfferOfferedBy(offer.offered_by === 'buyer' ? 'seller' : 'buyer');
+    setOfferAmount(String(offer.amount));
+    setOfferCurrency(offer.currency);
+    setOfferTerms('');
+  }
+
+  function resetOfferForm() {
+    setCounterOfferId(null);
+    setOfferListingId('');
+    setOfferOfferedBy('buyer');
+    setOfferAmount('');
+    setOfferCurrency('PHP');
+    setOfferTerms('');
+  }
 
   useEffect(() => {
     if (isNew) {
@@ -250,6 +290,48 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
     try {
       const updated = await updateViewing(session.access_token, viewingId, { outcome });
       setViewings((prev) => prev.map((v) => (v.id === viewingId ? updated : v)));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function handleRecordOffer() {
+    const amount = Number(offerAmount);
+    if (isNew || !offerListingId || !offerAmount || !Number.isFinite(amount) || amount <= 0) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await recordOffer(session.access_token, {
+        buyer_requirement_id: leadId,
+        listing_id: offerListingId,
+        offered_by: offerOfferedBy,
+        amount,
+        currency: offerCurrency,
+        terms: offerTerms || undefined,
+        supersedes_offer_id: counterOfferId ?? undefined,
+      });
+      resetOfferForm();
+      reloadOffers();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleResolveOffer(offerId: string, status: 'accepted' | 'rejected' | 'withdrawn') {
+    setError(null);
+    try {
+      const updated = await resolveOffer(session.access_token, offerId, status);
+      setOffers((prev) => prev.map((o) => (o.id === offerId ? updated : o)));
+      if (status === 'accepted') {
+        // Acceptance may have flipped the listing to under_offer and advanced
+        // the lead's stage server-side -- refetch so both reflect it without
+        // a manual reopen (same reasoning as handleScheduleViewing's refetch).
+        const refreshed = await fetchBuyerRequirement(session.access_token, leadId);
+        setLead(refreshed);
+        onSaved();
+      }
     } catch (err) {
       setError((err as Error).message);
     }
@@ -489,6 +571,114 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                             </option>
                           ))}
                         </select>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {!isNew && lead && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Offers</p>
+              {counterOfferId && (
+                <p className="text-xs text-muted-foreground">
+                  Countering an existing offer.{' '}
+                  <button type="button" className="underline" onClick={resetOfferForm}>
+                    Cancel
+                  </button>
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className={selectClass}
+                  value={offerListingId}
+                  onChange={(e) => setOfferListingId(e.target.value)}
+                  disabled={!!counterOfferId}
+                >
+                  <option value="">Select listing…</option>
+                  {activeListings.map((listing) => (
+                    <option key={listing.id} value={listing.id}>
+                      {listing.property_title}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className={selectClass}
+                  value={offerOfferedBy}
+                  onChange={(e) => setOfferOfferedBy(e.target.value as 'buyer' | 'seller')}
+                >
+                  {OFFERED_BY_VALUES.map((v) => (
+                    <option key={v} value={v}>
+                      {v === 'buyer' ? 'Buyer offered' : 'Seller countered'}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Amount"
+                  className="w-32"
+                  value={offerAmount}
+                  onChange={(e) => setOfferAmount(e.target.value)}
+                />
+                <Input
+                  type="text"
+                  placeholder="Currency"
+                  className="w-20"
+                  value={offerCurrency}
+                  onChange={(e) => setOfferCurrency(e.target.value)}
+                />
+                <Input
+                  type="text"
+                  placeholder="Terms (optional)"
+                  className="min-w-40 flex-1"
+                  value={offerTerms}
+                  onChange={(e) => setOfferTerms(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleRecordOffer}
+                  disabled={saving || !offerListingId || !offerAmount}
+                >
+                  {counterOfferId ? 'Submit Counter' : 'Record Offer'}
+                </Button>
+              </div>
+              {offers.length === 0 && <p className="text-xs text-muted-foreground">No offers recorded yet.</p>}
+              {offers.length > 0 && (
+                <ul className="space-y-1 text-sm">
+                  {offers.map((offer) => {
+                    const listing = listings.find((l) => l.id === offer.listing_id);
+                    return (
+                      <li key={offer.id} className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {listing?.property_title ?? offer.listing_id} —{' '}
+                          {offer.offered_by === 'buyer' ? 'Buyer' : 'Seller'} {offer.currency}{' '}
+                          {offer.amount.toLocaleString()} ({offer.status.replace(/_/g, ' ')})
+                        </span>
+                        {offer.status === 'pending' && (
+                          <span className="flex shrink-0 gap-1">
+                            <Button size="sm" variant="outline" onClick={() => startCounter(offer)}>
+                              Counter
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleResolveOffer(offer.id, 'accepted')}>
+                              Accept
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleResolveOffer(offer.id, 'rejected')}>
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleResolveOffer(offer.id, 'withdrawn')}
+                            >
+                              Withdraw
+                            </Button>
+                          </span>
+                        )}
                       </li>
                     );
                   })}
