@@ -40,6 +40,7 @@ const NAV_GROUPS: { label: string; links: { to: string; label: string }[] }[] = 
       { to: '/leads', label: 'Leads' },
       { to: '/revisit', label: 'Revisit' },
       { to: '/tasks', label: 'Tasks' },
+      { to: '/calendar', label: 'Calendar' },
     ],
   },
   {

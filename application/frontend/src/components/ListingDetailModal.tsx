@@ -10,6 +10,7 @@ import {
   type ListingStatus,
 } from '@/lib/listingsApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
+import { fetchListingViewings, type Viewing } from '@/lib/viewingsApi';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { FloatingPanel } from '@/components/FloatingPanel';
@@ -43,6 +44,23 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [buyerContactId, setBuyerContactId] = useState(initialBuyerContactId ?? '');
   const [renewDate, setRenewDate] = useState('');
+  // tb-transactions-viewings-001: read-only viewing history for this listing --
+  // scheduling/outcome editing only happens from the Lead side (LeadDetailPanel).
+  const [viewings, setViewings] = useState<Viewing[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchListingViewings(session.access_token, listing.id)
+      .then(({ viewings }) => {
+        if (!cancelled) setViewings(viewings);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listing.id, session.access_token]);
 
   useEffect(() => {
     if (listing.status !== 'under_offer' || contacts !== null) return;
@@ -187,6 +205,20 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
               <dd className="font-mono">{new Date(listing.created_at).toLocaleDateString()}</dd>
             </div>
           </dl>
+
+          {viewings.length > 0 && (
+            <div className="space-y-1 rounded-md border p-3">
+              <p className="text-sm font-medium">Viewings</p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {viewings.map((v) => (
+                  <li key={v.id} className="flex items-center justify-between gap-2">
+                    <span>{new Date(v.scheduled_at).toLocaleString()}</span>
+                    <span className="capitalize">{v.outcome.replace(/_/g, ' ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
             Edit

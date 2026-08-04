@@ -15,6 +15,7 @@ import type { RequirementFields } from '@/lib/inquiriesApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import type { Listing } from '@/lib/listingsApi';
 import { fetchTasks, type Task } from '@/lib/tasksApi';
+import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
 import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
@@ -80,6 +81,22 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadTasks, [isNew, leadId, session.access_token]);
+
+  // tb-transactions-viewings-001: viewings scheduled against this Lead, plus
+  // the schedule-a-new-one form (listing + datetime, defaulting to the first
+  // sent option if any exist).
+  const [viewings, setViewings] = useState<Viewing[]>([]);
+  const [viewingListingId, setViewingListingId] = useState('');
+  const [viewingScheduledAt, setViewingScheduledAt] = useState('');
+
+  function reloadViewings() {
+    if (isNew) return;
+    fetchLeadViewings(session.access_token, leadId)
+      .then(({ viewings }) => setViewings(viewings))
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadViewings, [isNew, leadId, session.access_token]);
 
   useEffect(() => {
     if (isNew) {
@@ -200,6 +217,41 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
       setError((err as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleScheduleViewing() {
+    if (isNew || !viewingListingId || !viewingScheduledAt) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await scheduleViewing(session.access_token, {
+        buyer_requirement_id: leadId,
+        listing_id: viewingListingId,
+        scheduled_at: new Date(viewingScheduledAt).toISOString(),
+      });
+      setViewingListingId('');
+      setViewingScheduledAt('');
+      reloadViewings();
+      // Scheduling a viewing may have advanced the lead's stage server-side --
+      // refetch so the Stage dropdown reflects it without a manual reopen.
+      const refreshed = await fetchBuyerRequirement(session.access_token, leadId);
+      setLead(refreshed);
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleViewingOutcome(viewingId: string, outcome: Viewing['outcome']) {
+    setError(null);
+    try {
+      const updated = await updateViewing(session.access_token, viewingId, { outcome });
+      setViewings((prev) => prev.map((v) => (v.id === viewingId ? updated : v)));
+    } catch (err) {
+      setError((err as Error).message);
     }
   }
 
@@ -381,6 +433,66 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                     </div>
                   )}
                 </div>
+              )}
+            </div>
+          )}
+
+          {!isNew && lead && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Viewings</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className={selectClass}
+                  value={viewingListingId}
+                  onChange={(e) => setViewingListingId(e.target.value)}
+                >
+                  <option value="">Select listing…</option>
+                  {activeListings.map((listing) => (
+                    <option key={listing.id} value={listing.id}>
+                      {listing.property_title}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  type="datetime-local"
+                  value={viewingScheduledAt}
+                  onChange={(e) => setViewingScheduledAt(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleScheduleViewing}
+                  disabled={saving || !viewingListingId || !viewingScheduledAt}
+                >
+                  Schedule Viewing
+                </Button>
+              </div>
+              {viewings.length === 0 && <p className="text-xs text-muted-foreground">No viewings scheduled yet.</p>}
+              {viewings.length > 0 && (
+                <ul className="space-y-1 text-sm">
+                  {viewings.map((viewing) => {
+                    const listing = listings.find((l) => l.id === viewing.listing_id);
+                    return (
+                      <li key={viewing.id} className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {listing?.property_title ?? viewing.listing_id} —{' '}
+                          {new Date(viewing.scheduled_at).toLocaleString()}
+                        </span>
+                        <select
+                          className="h-8 rounded-md border border-input bg-card px-2 text-xs"
+                          value={viewing.outcome}
+                          onChange={(e) => handleViewingOutcome(viewing.id, e.target.value as Viewing['outcome'])}
+                        >
+                          {VIEWING_OUTCOMES.map((o) => (
+                            <option key={o} value={o}>
+                              {o.replace(/_/g, ' ')}
+                            </option>
+                          ))}
+                        </select>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           )}

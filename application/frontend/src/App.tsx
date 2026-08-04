@@ -15,6 +15,7 @@ import { SearchPage } from './pages/SearchPage';
 import { ShareDocketForm } from './pages/ShareDocketForm';
 import { SharedWithMePage } from './pages/SharedWithMePage';
 import { TasksPage } from './pages/TasksPage';
+import { CalendarPage } from './pages/CalendarPage';
 import { ContactsPage } from './pages/ContactsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PerformancePage } from './pages/PerformancePage';
@@ -64,6 +65,7 @@ export function App() {
         <Route path="/search" element={session && <SearchPage session={session} />} />
         <Route path="/shared-with-me" element={session && <SharedWithMePage session={session} />} />
         <Route path="/tasks" element={session && <TasksPage session={session} />} />
+        <Route path="/calendar" element={session && <CalendarPage session={session} />} />
         <Route path="/contacts" element={session && <ContactsPage session={session} />} />
         <Route path="/settings" element={session && <SettingsPage session={session} />} />
         <Route path="/performance" element={session && <PerformancePage session={session} />} />

@@ -22,6 +22,7 @@ import { registerBuyerRequirementsRoutes } from './routes/buyerRequirements.js';
 import { registerMatchingRoutes } from './routes/matching.js';
 import { registerBuyerBroadcastRoutes } from './routes/buyerBroadcast.js';
 import { registerTasksRoutes } from './routes/tasks.js';
+import { registerViewingsRoutes } from './routes/viewings.js';
 
 const app = Fastify({ logger: true });
 
@@ -47,6 +48,7 @@ await registerBuyerRequirementsRoutes(app);
 await registerMatchingRoutes(app);
 await registerBuyerBroadcastRoutes(app);
 await registerTasksRoutes(app);
+await registerViewingsRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchInquiries, updateInquiry, INQUIRY_STAGES, type Inquiry, type InquiryStage } from '@/lib/inquiriesApi';
 import {
@@ -119,12 +119,17 @@ export function LeadsPage({ session }: Props) {
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
   const navigate = useNavigate();
+  const location = useLocation();
+  // tb-calendar-schedule-001: same location.state prefill pattern as
+  // ListingsPage's prefillListingId -- lets the Calendar page deep-link a
+  // viewing event straight to its Lead's detail panel.
+  const openLeadId = (location.state as { openLeadId?: string } | null)?.openLeadId;
 
   const [inquiries, setInquiries] = useState<Inquiry[] | null>(null);
   const [leads, setLeads] = useState<BuyerRequirement[] | null>(null);
   const [listings, setListings] = useState<Listing[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
+  const [openPanel, setOpenPanel] = useState<OpenPanel>(openLeadId ? { type: 'lead', id: openLeadId } : null);
   const [qualifyingInquiry, setQualifyingInquiry] = useState<Inquiry | null>(null);
 
   function reloadInquiries() {
