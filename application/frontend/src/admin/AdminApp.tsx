@@ -9,6 +9,7 @@ import { ClientMigration } from './clients/ClientMigration';
 import { TrainingScheduleForm } from './training/TrainingScheduleForm';
 import { TrainingOverview } from './training/TrainingOverview';
 import { ClientBilling } from './billing/ClientBilling';
+import { ProfileSettingsPage } from '@/pages/ProfileSettingsPage';
 
 type AdminAppProps = {
   session: Session | null;
@@ -44,6 +45,7 @@ export function AdminApp({ session, loading, operatorStatus }: AdminAppProps) {
         <Route path="clients/:tenantId/training" element={<TrainingScheduleForm session={session} />} />
         <Route path="clients/:tenantId/billing" element={<ClientBilling session={session} />} />
         <Route path="training" element={<TrainingOverview session={session} />} />
+        <Route path="profile" element={<ProfileSettingsPage session={session} />} />
       </Route>
     </Routes>
   );

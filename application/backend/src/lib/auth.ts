@@ -19,10 +19,16 @@ export type AuthedOperator = {
   role: 'operator';
 };
 
+export type AuthedIdentity = {
+  id: string;
+  role: string;
+};
+
 declare module 'fastify' {
   interface FastifyRequest {
     user?: AuthedUser;
     operator?: AuthedOperator;
+    identity?: AuthedIdentity;
   }
 }
 
@@ -130,6 +136,21 @@ export async function requireOperator(request: FastifyRequest, reply: FastifyRep
   }
 
   request.operator = { id: profile.userId, role: 'operator' };
+}
+
+// tb-user-profile-display-name-001: the shared-identity guard neither
+// requireAuth nor requireOperator provides -- requireAuth rejects operators
+// outright (tenant_id is null), requireOperator rejects tenant users. A
+// profile is scoped to id = auth.uid() regardless of tenant/operator status,
+// so this guard authenticates the caller and nothing more: no tenant or
+// access_state branching, since profile-editing needs neither. Additive --
+// requireAuth/requireOperator are unchanged, used exactly as today by every
+// existing route.
+export async function requireAnyIdentity(request: FastifyRequest, reply: FastifyReply) {
+  const profile = await verifyBearerAndFetchProfile(request, reply);
+  if (!profile) return;
+
+  request.identity = { id: profile.userId, role: profile.role };
 }
 
 // tb-client-lifecycle-migration-execution-001: migration is the one flow both

@@ -19,6 +19,7 @@ import { CalendarPage } from './pages/CalendarPage';
 import { ContactsPage } from './pages/ContactsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PerformancePage } from './pages/PerformancePage';
+import { ProfileSettingsPage } from './pages/ProfileSettingsPage';
 import { AdminApp } from './admin/AdminApp';
 import { BrokerageLayout } from './BrokerageLayout';
 
@@ -69,6 +70,7 @@ export function App() {
         <Route path="/contacts" element={session && <ContactsPage session={session} />} />
         <Route path="/settings" element={session && <SettingsPage session={session} />} />
         <Route path="/performance" element={session && <PerformancePage session={session} />} />
+        <Route path="/profile" element={session && <ProfileSettingsPage session={session} />} />
       </Route>
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route

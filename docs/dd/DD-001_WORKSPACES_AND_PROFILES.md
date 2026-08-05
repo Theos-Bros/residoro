@@ -1,10 +1,10 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.1.0
+**Version:** 2.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-06
 
 ---
 
@@ -149,7 +149,18 @@ ADR-002 for why they must be `SECURITY DEFINER` with `search_path = ''`).
 | `workspaces` | `workspaces_select_own` | `select` where `id = current_tenant_id()` |
 | `workspaces` | `workspaces_update_admin` | `update` where `id = current_tenant_id()` and `current_role() = 'admin'` |
 | `profiles` | `profiles_select_same_tenant` | `select` where `tenant_id = current_tenant_id()` (teammates visible to each other) |
+| `profiles` | `profiles_select_own` | `select` where `id = auth.uid()` (added 2026-08-06, see note below) |
 | `profiles` | `profiles_update_own` | `update` where `id = auth.uid()` |
+
+**2026-08-06 addition — `profiles_select_own`:** `tb-user-profile-display-name-001` needed a
+scoped-client `GET /me/profile` (ADR-003) to work for an operator, not just a tenant user.
+`profiles_select_same_tenant` alone couldn't serve that: an operator's `tenant_id` is null, and
+`current_tenant_id()` (which looks up the caller's own row) is also null for them, and Postgres
+treats `null = null` as not-true — so an operator was blocked from reading even their own row
+under RLS. `profiles_select_own` mirrors `profiles_update_own`'s existing shape exactly (`id =
+(select auth.uid())`, no tenant_id involved) and is additive — `profiles_select_same_tenant`
+still governs teammate-to-teammate visibility unchanged. Migration:
+`supabase/migrations/20260806110000_profiles_self_select.sql`.
 
 **Column-level grant, not a blanket one, on `profiles`:** `authenticated` is granted
 `update (full_name)` only — not a blanket `update`. A blanket grant combined with
@@ -201,6 +212,8 @@ reachable this way. See ADR-002's Consequences section.
 - `docs/security-review-2026-07-29.md` — the CRITICAL finding `20260729090000_fix_signup_privilege_escalation.sql` fixes
 - `supabase/migrations/20260729090000_fix_signup_privilege_escalation.sql`,
   `20260729110000_fix_handle_new_user_handle_column.sql` — current `handle_new_user()`
+- `supabase/migrations/20260806110000_profiles_self_select.sql` — `profiles_select_own`
+  (`tb-user-profile-display-name-001`, theos-registry)
 
 ---
 
@@ -211,3 +224,4 @@ reachable this way. See ADR-002's Consequences section.
 | 1.0.0 | 2026-07-21 | Initial version, matching the first platform foundation migration. |
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: added `operator` role, `handle`, `workspaces` contract/access-state/warning columns, `exclusivity_hard_block`, `rollback_window_hours`, and the `contract_notifications` table. Documented all four `handle_new_user()` branches. Structural revision (new table added), hence major version bump per STD-002. |
 | 2.1.0 | 2026-08-03 | Rewrote the Signup Provisioning section from a 2026-08-03 birds-eye review — the previous revision described the four-branch `handle_new_user()` that `20260729090000_fix_signup_privilege_escalation.sql` replaced to fix a CRITICAL finding in `docs/security-review-2026-07-29.md`. That section had gone eight days describing a patched vulnerability as current behavior; now describes the single-branch inert-profile trigger and the two trusted invite-then-assign call sites that actually grant privilege. |
+| 2.2.0 | 2026-08-06 | Added `profiles_select_own` RLS policy (`tb-user-profile-display-name-001`) — closes a gap where an operator could not read even their own `profiles` row through an RLS-scoped client, since `profiles_select_same_tenant` compares two nulls for a tenant-less operator. Additive, non-structural (no table/column change), hence a minor version bump per STD-002. |

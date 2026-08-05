@@ -1,0 +1,54 @@
+import type { FastifyInstance } from 'fastify';
+import { requireAnyIdentity, getScopedClient } from '../lib/auth.js';
+
+type ProfileRow = { full_name: string | null };
+
+// tb-user-profile-display-name-001: the smallest slice of cap-user-profile-001
+// -- full_name only, self-scoped, shared by both tenant users and operators
+// via requireAnyIdentity. getScopedClient (not supabaseAdmin) for both reads
+// and writes, per ADR-003's preference for RLS-scoped over service-role
+// access on user-facing routes -- profiles_select_own and profiles_update_own
+// (20260806110000_profiles_self_select.sql) both key on `id = auth.uid()`
+// alone, with no tenant_id involved, so they already work identically for a
+// tenant user and a tenant-less operator.
+export async function registerProfileRoutes(app: FastifyInstance) {
+  app.get('/me/profile', { preHandler: requireAnyIdentity }, async (request, reply) => {
+    const { data, error } = await getScopedClient(request)
+      .from('profiles')
+      .select('full_name')
+      .eq('id', request.identity!.id)
+      .single<ProfileRow>();
+
+    if (error || !data) {
+      request.log.error(error);
+      return reply.status(500).send({ error: 'Could not load your profile' });
+    }
+
+    return { full_name: data.full_name };
+  });
+
+  app.patch<{ Body: { full_name?: string } }>(
+    '/me/profile',
+    { preHandler: requireAnyIdentity },
+    async (request, reply) => {
+      const fullName = request.body?.full_name;
+      if (typeof fullName !== 'string' || fullName.trim() === '') {
+        return reply.status(400).send({ error: 'full_name is required' });
+      }
+
+      const { data, error } = await getScopedClient(request)
+        .from('profiles')
+        .update({ full_name: fullName.trim() })
+        .eq('id', request.identity!.id)
+        .select('full_name')
+        .single<ProfileRow>();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not update your profile' });
+      }
+
+      return { full_name: data.full_name };
+    },
+  );
+}

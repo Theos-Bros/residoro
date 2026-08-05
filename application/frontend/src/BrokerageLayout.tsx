@@ -56,6 +56,7 @@ const NAV_GROUPS: { label: string; links: { to: string; label: string }[] }[] = 
     links: [
       { to: '/performance', label: 'Performance' },
       { to: '/settings', label: 'Settings' },
+      { to: '/profile', label: 'Profile' },
     ],
   },
 ];

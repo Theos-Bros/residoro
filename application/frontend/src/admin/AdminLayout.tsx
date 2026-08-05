@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 const NAV_LINKS = [
   { to: '/admin', label: 'Clients' },
   { to: '/admin/training', label: 'Training' },
+  { to: '/admin/profile', label: 'Profile' },
 ];
 
 // The dashboard shell every other cap-client-lifecycle-001 tracer bullet's
