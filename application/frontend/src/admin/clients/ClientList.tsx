@@ -173,6 +173,9 @@ export function ClientList({ session }: Props) {
                     <Button asChild size="sm" variant="outline">
                       <Link to={`/admin/clients/${client.workspace_id}/training`}>Training</Link>
                     </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={`/admin/clients/${client.workspace_id}/billing`}>Billing</Link>
+                    </Button>
                     {renewingId === client.workspace_id ? (
                       <div className="flex items-center gap-2">
                         <Input

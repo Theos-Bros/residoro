@@ -20,6 +20,24 @@ type TrainingStatusBody = {
   status?: string;
 };
 
+type BillingUpsertBody = {
+  contract_value?: number;
+  currency?: string;
+};
+
+type InstallmentCreateBody = {
+  amount?: number;
+  currency?: string;
+  due_date?: string;
+};
+
+type InstallmentUpdateBody = {
+  amount?: number;
+  due_date?: string;
+  status?: string;
+  paid_date?: string;
+};
+
 export async function registerAdminRoutes(app: FastifyInstance) {
   // Smallest end-to-end proof of the operator auth path: token -> profile
   // lookup -> operator check -> response. The frontend calls this right
@@ -375,4 +393,195 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 
     return { sessions: filtered };
   });
+
+  // tb-billing-installments-001: fetch a tenant's contract value + every
+  // installment for the admin dashboard's Billing section. contract_billing
+  // is null until the operator sets it for the first time via PUT below.
+  app.get<{ Params: { id: string } }>('/admin/clients/:id/billing', { preHandler: requireOperator }, async (request, reply) => {
+    const { data: billing, error: billingError } = await supabaseAdmin
+      .from('contract_billing')
+      .select('tenant_id, contract_value, currency, created_at, updated_at')
+      .eq('tenant_id', request.params.id)
+      .maybeSingle();
+
+    if (billingError) {
+      request.log.error(billingError);
+      return reply.status(500).send({ error: 'Could not load contract billing' });
+    }
+
+    const { data: installments, error: installmentsError } = await supabaseAdmin
+      .from('billing_installments')
+      .select('id, amount, currency, due_date, status, paid_date, created_at, updated_at')
+      .eq('tenant_id', request.params.id)
+      .order('due_date', { ascending: true });
+
+    if (installmentsError || !installments) {
+      request.log.error(installmentsError);
+      return reply.status(500).send({ error: 'Could not load billing installments' });
+    }
+
+    return { contract_billing: billing ?? null, installments };
+  });
+
+  // tb-billing-installments-001: set/update a tenant's contract value. Upsert
+  // on tenant_id (contract_billing's primary key), same one-row-per-tenant
+  // shape as workspaces itself.
+  app.put<{ Params: { id: string }; Body: BillingUpsertBody }>(
+    '/admin/clients/:id/billing',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { contract_value, currency } = request.body ?? {};
+
+      if (typeof contract_value !== 'number' || !Number.isFinite(contract_value) || contract_value <= 0) {
+        return reply.status(400).send({ error: 'contract_value must be a positive number' });
+      }
+      if (typeof currency !== 'string' || currency.trim() === '') {
+        return reply.status(400).send({ error: 'currency is required' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('contract_billing')
+        .upsert(
+          { tenant_id: request.params.id, contract_value, currency, created_by: request.operator!.id },
+          { onConflict: 'tenant_id' },
+        )
+        .select('tenant_id, contract_value, currency, created_at, updated_at')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not save contract billing' });
+      }
+
+      return data;
+    },
+  );
+
+  // tb-billing-installments-001: create one installment against a tenant's
+  // contract. No DB-level check that installment amounts sum to
+  // contract_value -- confirmed with the user 2026-08-06 as app-level warning
+  // only, since contracts can legitimately change mid-term.
+  app.post<{ Params: { id: string }; Body: InstallmentCreateBody }>(
+    '/admin/clients/:id/billing/installments',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { amount, currency, due_date } = request.body ?? {};
+
+      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+        return reply.status(400).send({ error: 'amount must be a positive number' });
+      }
+      if (!due_date || Number.isNaN(new Date(due_date).getTime())) {
+        return reply.status(400).send({ error: 'due_date is required and must be a valid date' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('billing_installments')
+        .insert({
+          tenant_id: request.params.id,
+          amount,
+          currency: typeof currency === 'string' && currency.trim() !== '' ? currency : 'PHP',
+          due_date,
+          created_by: request.operator!.id,
+        })
+        .select('id, amount, currency, due_date, status, paid_date, created_at, updated_at')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not create the installment' });
+      }
+
+      return data;
+    },
+  );
+
+  // tb-billing-installments-001: edit an installment's amount/due_date, or
+  // change its paid/unpaid status. paid_date is only ever accepted alongside
+  // status: 'paid' (defaults to today if omitted); marking an installment
+  // 'unpaid' always clears paid_date -- billing_installments_paid_date_matches_status
+  // enforces that same (status='paid') = (paid_date is not null) invariant at
+  // the DB layer, so this validation exists to give the operator a clear 400
+  // rather than a raw constraint-violation error.
+  app.patch<{ Params: { id: string; installmentId: string }; Body: InstallmentUpdateBody }>(
+    '/admin/clients/:id/billing/installments/:installmentId',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { amount, due_date, status, paid_date } = request.body ?? {};
+      const updates: Record<string, unknown> = {};
+
+      if (amount !== undefined) {
+        if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+          return reply.status(400).send({ error: 'amount must be a positive number' });
+        }
+        updates.amount = amount;
+      }
+
+      if (due_date !== undefined) {
+        if (Number.isNaN(new Date(due_date).getTime())) {
+          return reply.status(400).send({ error: 'due_date must be a valid date' });
+        }
+        updates.due_date = due_date;
+      }
+
+      if (status !== undefined) {
+        if (status !== 'unpaid' && status !== 'paid') {
+          return reply.status(400).send({ error: "status must be 'unpaid' or 'paid'" });
+        }
+        if (status === 'paid') {
+          const resolvedPaidDate = paid_date ?? new Date().toISOString().slice(0, 10);
+          if (Number.isNaN(new Date(resolvedPaidDate).getTime())) {
+            return reply.status(400).send({ error: 'paid_date must be a valid date' });
+          }
+          updates.status = 'paid';
+          updates.paid_date = resolvedPaidDate;
+        } else {
+          updates.status = 'unpaid';
+          updates.paid_date = null;
+        }
+      } else if (paid_date !== undefined) {
+        return reply.status(400).send({ error: "paid_date can only be set together with status: 'paid'" });
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return reply.status(400).send({ error: 'At least one field to update is required' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('billing_installments')
+        .update(updates)
+        .eq('tenant_id', request.params.id)
+        .eq('id', request.params.installmentId)
+        .select('id, amount, currency, due_date, status, paid_date, created_at, updated_at')
+        .single();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not update the installment' });
+      }
+
+      return data;
+    },
+  );
+
+  // tb-billing-installments-001: delete an installment. No soft-delete --
+  // matches this route file's existing precedent (no other admin.ts route
+  // soft-deletes either).
+  app.delete<{ Params: { id: string; installmentId: string } }>(
+    '/admin/clients/:id/billing/installments/:installmentId',
+    { preHandler: requireOperator },
+    async (request, reply) => {
+      const { error } = await supabaseAdmin
+        .from('billing_installments')
+        .delete()
+        .eq('tenant_id', request.params.id)
+        .eq('id', request.params.installmentId);
+
+      if (error) {
+        request.log.error(error);
+        return reply.status(500).send({ error: 'Could not delete the installment' });
+      }
+
+      return reply.status(204).send();
+    },
+  );
 }

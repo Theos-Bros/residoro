@@ -172,3 +172,96 @@ export async function fetchTrainingOverview(accessToken: string): Promise<{ sess
   });
   return parseJsonOrThrow(response);
 }
+
+// tb-billing-installments-001
+export type ContractBilling = {
+  tenant_id: string;
+  contract_value: number;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type BillingInstallment = {
+  id: string;
+  amount: number;
+  currency: string;
+  due_date: string;
+  status: 'unpaid' | 'paid';
+  paid_date: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchBilling(
+  accessToken: string,
+  workspaceId: string,
+): Promise<{ contract_billing: ContractBilling | null; installments: BillingInstallment[] }> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/billing`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function setContractBilling(
+  accessToken: string,
+  workspaceId: string,
+  contractValue: number,
+  currency: string,
+): Promise<ContractBilling> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/billing`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ contract_value: contractValue, currency }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function createInstallment(
+  accessToken: string,
+  workspaceId: string,
+  amount: number,
+  currency: string,
+  dueDate: string,
+): Promise<BillingInstallment> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/billing/installments`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ amount, currency, due_date: dueDate }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function updateInstallment(
+  accessToken: string,
+  workspaceId: string,
+  installmentId: string,
+  updates: { amount?: number; due_date?: string; status?: 'unpaid' | 'paid'; paid_date?: string },
+): Promise<BillingInstallment> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/billing/installments/${installmentId}`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export async function deleteInstallment(accessToken: string, workspaceId: string, installmentId: string): Promise<void> {
+  const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/billing/installments/${installmentId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error ?? `Request failed with status ${response.status}`);
+  }
+}
