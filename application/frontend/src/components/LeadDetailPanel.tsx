@@ -17,6 +17,7 @@ import type { Listing } from '@/lib/listingsApi';
 import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
 import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
+import { fetchMatchLogs, type MatchLog } from '@/lib/matchLogsApi';
 import { fetchLeadContract, createContract, updateContract, type Contract, type SigningStatus } from '@/lib/contractsApi';
 import { fetchLeadClosing, createClosing, updateClosing, type Closing } from '@/lib/closingsApi';
 import { fetchClosingCommissionEarnings, recordCommissionEarnings, type CommissionEarnings } from '@/lib/commissionApi';
@@ -122,6 +123,23 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadOffers, [isNew, leadId, session.access_token]);
+
+  // tb-buyer-leads-match-itinerary-001: read-only running history of "Log
+  // Match" actions taken from the Search page (see SearchPage.tsx) --
+  // logging/copy-text/itinerary generation themselves happen there, against
+  // the ranked candidates; this panel only displays the persisted record,
+  // same division of labor as viewings/offers being scheduled/recorded
+  // elsewhere but shown here.
+  const [matchLogs, setMatchLogs] = useState<MatchLog[]>([]);
+
+  function reloadMatchLogs() {
+    if (isNew) return;
+    fetchMatchLogs(session.access_token, leadId)
+      .then(({ match_logs }) => setMatchLogs(match_logs))
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadMatchLogs, [isNew, leadId, session.access_token]);
 
   // tb-transactions-contract-001: the lead's current contract (most recent
   // row, if any), plus an editable price/currency/terms form kept in sync
@@ -728,6 +746,30 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* tb-buyer-leads-match-itinerary-001: read-only running history of
+              logged matches -- DoD item "visible in a running history on
+              that lead's detail view". Logging itself happens on the Search
+              page (navigate there via the Search button above), which has
+              the ranked candidates this panel doesn't. Distinct from
+              "Options Sent" above -- many-per-lead, purely informational,
+              never a stage-transition side effect. */}
+          {!isNew && matchLogs.length > 0 && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Matched Property History</p>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {matchLogs.map((log) => (
+                  <li key={log.id} className="space-y-0.5">
+                    <p className="text-xs">
+                      {new Date(log.created_at).toLocaleString()}
+                      {log.logged_by_handle ? ` — @${log.logged_by_handle}` : ''}
+                    </p>
+                    <p>{log.items.map((item) => item.title).join(', ')}</p>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

@@ -20,6 +20,7 @@ import { registerSettingsPermissionsRoutes } from './routes/settingsPermissions.
 import { registerInquiriesRoutes } from './routes/inquiries.js';
 import { registerBuyerRequirementsRoutes } from './routes/buyerRequirements.js';
 import { registerMatchingRoutes } from './routes/matching.js';
+import { registerMatchLogRoutes } from './routes/matchLogs.js';
 import { registerBuyerBroadcastRoutes } from './routes/buyerBroadcast.js';
 import { registerTasksRoutes } from './routes/tasks.js';
 import { registerViewingsRoutes } from './routes/viewings.js';
@@ -51,6 +52,7 @@ await registerSettingsPermissionsRoutes(app);
 await registerInquiriesRoutes(app);
 await registerBuyerRequirementsRoutes(app);
 await registerMatchingRoutes(app);
+await registerMatchLogRoutes(app);
 await registerBuyerBroadcastRoutes(app);
 await registerTasksRoutes(app);
 await registerViewingsRoutes(app);
