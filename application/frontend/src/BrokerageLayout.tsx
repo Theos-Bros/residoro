@@ -25,41 +25,49 @@ type Props = {
 // exactly in structure, though the doc's per-item record counts ("128",
 // "341", "12 unread") aren't wired up here since no hook fetches those
 // counts today; adding one would be new functionality, not a re-skin.
-const NAV_GROUPS: { label: string; links: { to: string; label: string }[] }[] = [
-  {
-    label: 'Inventory',
-    links: [
-      { to: '/properties', label: 'Properties' },
-      { to: '/projects', label: 'Projects' },
-      { to: '/listings', label: 'Listings' },
-    ],
-  },
-  {
-    label: 'Pipeline',
-    links: [
-      { to: '/leads', label: 'Leads' },
-      { to: '/revisit', label: 'Revisit' },
-      { to: '/tasks', label: 'Tasks' },
-      { to: '/calendar', label: 'Calendar' },
-    ],
-  },
-  {
-    label: 'CRM & Sharing',
-    links: [
-      { to: '/contacts', label: 'Contacts' },
-      { to: '/search', label: 'Search' },
-      { to: '/shared-with-me', label: 'Shared with me' },
-    ],
-  },
-  {
-    label: 'Brokerage',
-    links: [
-      { to: '/performance', label: 'Performance' },
-      { to: '/settings', label: 'Settings' },
-      { to: '/profile', label: 'Profile' },
-    ],
-  },
-];
+//
+// tb-billing-brokerage-view-001: Billing is a function of isAdmin rather
+// than a static entry -- a non-admin member gets no Billing link at all
+// (confirmed with the user: hide entirely, not show-then-403), matching
+// how the "Brokerage" group is the natural home for admin-facing settings.
+function getNavGroups(isAdmin: boolean): { label: string; links: { to: string; label: string }[] }[] {
+  return [
+    {
+      label: 'Inventory',
+      links: [
+        { to: '/properties', label: 'Properties' },
+        { to: '/projects', label: 'Projects' },
+        { to: '/listings', label: 'Listings' },
+      ],
+    },
+    {
+      label: 'Pipeline',
+      links: [
+        { to: '/leads', label: 'Leads' },
+        { to: '/revisit', label: 'Revisit' },
+        { to: '/tasks', label: 'Tasks' },
+        { to: '/calendar', label: 'Calendar' },
+      ],
+    },
+    {
+      label: 'CRM & Sharing',
+      links: [
+        { to: '/contacts', label: 'Contacts' },
+        { to: '/search', label: 'Search' },
+        { to: '/shared-with-me', label: 'Shared with me' },
+      ],
+    },
+    {
+      label: 'Brokerage',
+      links: [
+        { to: '/performance', label: 'Performance' },
+        ...(isAdmin ? [{ to: '/billing', label: 'Billing' }] : []),
+        { to: '/settings', label: 'Settings' },
+        { to: '/profile', label: 'Profile' },
+      ],
+    },
+  ];
+}
 
 // tb-design-system-states-mobile-001: the bottom nav's 3 direct-tap icons,
 // per design doc section 07's mock (Inventory/Leads/Tasks/More -- Inventory
@@ -94,10 +102,12 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const isActiveLink = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+  const isAdmin = workspaceStatus?.role === 'admin';
+  const navGroups = getNavGroups(isAdmin);
   // Inventory's bottom-nav icon lights up for its whole NAV_GROUPS section
   // (Properties/Projects/Listings), not just an exact "/properties" match --
   // Leads/Tasks are single links, so they use isActiveLink directly instead.
-  const inventoryGroup = NAV_GROUPS.find((group) => group.label === 'Inventory')!;
+  const inventoryGroup = navGroups.find((group) => group.label === 'Inventory')!;
   const isBottomNavItemActive = (item: (typeof BOTTOM_NAV_ITEMS)[number]) =>
     item.groupLabel === 'Inventory'
       ? inventoryGroup.links.some((link) => isActiveLink(link.to))
@@ -144,7 +154,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
           </Link>
         </div>
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
-          {NAV_GROUPS.map((group) => (
+          {navGroups.map((group) => (
             <div key={group.label} className="flex flex-col gap-0.5">
               <span className="px-2 pb-1.5 font-mono text-[10px] font-medium uppercase tracking-widest text-tertiary-foreground">
                 {group.label}
@@ -263,7 +273,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
           >
             <SheetTitle className="sr-only">Navigation</SheetTitle>
             <nav className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto">
-              {NAV_GROUPS.map((group) => (
+              {navGroups.map((group) => (
                 <div key={group.label} className="flex flex-col gap-0.5">
                   <span className="px-3 pb-1 font-mono text-[10px] font-medium uppercase tracking-widest text-tertiary-foreground">
                     {group.label}
