@@ -49,7 +49,7 @@ async function main() {
   const adminRes = await fetch(`${BACKEND_URL}/workspace/billing`, {
     headers: { Authorization: `Bearer ${adminSession.access_token}` },
   });
-  const adminBody = await adminRes.json();
+  const adminBody: any = await adminRes.json();
   check(
     'admin GET /workspace/billing succeeds and returns contract_billing + installments shape',
     adminRes.ok && 'contract_billing' in adminBody && Array.isArray(adminBody.installments),
