@@ -3,7 +3,6 @@ import { useSupabaseSession } from './hooks/useSupabaseSession';
 import { useOperatorStatus } from './hooks/useOperatorStatus';
 import { AcceptInvitePage } from './pages/AcceptInvitePage';
 import { PropertiesListPage } from './pages/PropertiesListPage';
-import { PropertyDetailPage } from './pages/PropertyDetailPage';
 import { NewPropertyListingForm } from './pages/NewPropertyListingForm';
 import { ProjectsListPage } from './pages/ProjectsListPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
@@ -46,6 +45,12 @@ import { BrokerageLayout } from './BrokerageLayout';
 // listing" and "Listing history" now open as floating panels from within
 // PropertiesListPage/ListingsPage instead of navigating away (see
 // CreateListingPanel / ListingHistoryPanel).
+//
+// tb-properties-detail-modal-001: /properties/:id itself is gone too --
+// row click / "View" now opens PropertyDetailModal (ported from the former
+// PropertyDetailPage) as a FloatingPanel from PropertiesListPage, matching
+// how ListingsPage/ListingDetailModal already worked (which never had a
+// standalone /listings/:id route to begin with).
 export function App() {
   const { session, loading } = useSupabaseSession();
   const operatorStatus = useOperatorStatus(session);
@@ -56,7 +61,6 @@ export function App() {
         <Route path="/" element={<Navigate to="/properties" replace />} />
         <Route path="/properties" element={session && <PropertiesListPage session={session} />} />
         <Route path="/properties/new" element={session && <NewPropertyListingForm session={session} />} />
-        <Route path="/properties/:id" element={session && <PropertyDetailPage session={session} />} />
         <Route path="/projects" element={session && <ProjectsListPage session={session} />} />
         <Route path="/projects/new" element={session && <NewProjectForm session={session} />} />
         <Route path="/projects/:id" element={session && <ProjectDetailPage session={session} />} />
