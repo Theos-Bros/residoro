@@ -260,7 +260,7 @@ export async function registerMatchLogRoutes(app: FastifyInstance) {
       if (!isGoogleDocsConfigured()) {
         return reply.status(501).send({
           error:
-            'Itinerary generation is not configured yet. GOOGLE_SERVICE_ACCOUNT_CREDENTIALS is not set on the backend (see lib/googleDocs.ts).',
+            'Itinerary generation is not configured yet. GOOGLE_APPLICATION_CREDENTIALS is not set on the backend (see lib/googleDocs.ts).',
         });
       }
 
