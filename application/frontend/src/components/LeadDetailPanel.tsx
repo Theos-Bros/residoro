@@ -13,11 +13,19 @@ import {
 } from '@/lib/buyerRequirementsApi';
 import type { RequirementFields } from '@/lib/inquiriesApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
-import type { Listing } from '@/lib/listingsApi';
+import { matchesKeyword, type Listing } from '@/lib/listingsApi';
 import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
 import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
 import { fetchMatchLogs, type MatchLog } from '@/lib/matchLogsApi';
+import {
+  fetchActivityLog,
+  logActivity,
+  ACTIVITY_TYPES,
+  ACTIVITY_TYPE_LABEL,
+  type ActivityType,
+  type ActivityLogEntry,
+} from '@/lib/activityLogApi';
 import { fetchLeadContract, createContract, updateContract, type Contract, type SigningStatus } from '@/lib/contractsApi';
 import { fetchLeadClosing, createClosing, updateClosing, type Closing } from '@/lib/closingsApi';
 import { fetchClosingCommissionEarnings, recordCommissionEarnings, type CommissionEarnings } from '@/lib/commissionApi';
@@ -40,7 +48,10 @@ type Props = {
   // for a standalone TaskDetailPanel at the LeadsPage level (same pattern
   // onBroadcast already uses), rather than nesting a second fixed-position
   // panel on top of this one.
-  onOpenTask: (taskId: string | 'new') => void;
+  onOpenTask: (
+    taskId: string | 'new',
+    prefillFields?: { title?: string; task_type?: string; due_date?: string },
+  ) => void;
 };
 
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
@@ -67,6 +78,12 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   const [useNewContact, setUseNewContact] = useState(true);
 
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
+  // tb-buyer-leads-matches-search-001: filters activeListings below, never
+  // mutates selectedOptionIds -- a search only hides/shows rows.
+  const [matchSearch, setMatchSearch] = useState('');
+  const filteredActiveListings = activeListings.filter((l) =>
+    matchesKeyword(l.property_title, l.property_address, matchSearch),
+  );
   const [wonListingId, setWonListingId] = useState('');
   // tb-buyer-leads-revisit-page-001: only asked for -- and only required --
   // when the selected won listing is rent-type; a sale-type win never sends
@@ -140,6 +157,42 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   }
 
   useEffect(reloadMatchLogs, [isNew, leadId, session.access_token]);
+
+  // tb-buyer-leads-activity-log-001: manually-logged running history,
+  // distinct from matchLogs above (which is scoped to matched-listing
+  // events only). "Last contact" is derived from activityLog[0].occurred_at
+  // -- entries are already ordered newest-first by the backend.
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const [newActivityType, setNewActivityType] = useState<ActivityType>('call');
+  const [newActivityNotes, setNewActivityNotes] = useState('');
+  const [loggingActivity, setLoggingActivity] = useState(false);
+
+  function reloadActivityLog() {
+    if (isNew) return;
+    fetchActivityLog(session.access_token, leadId)
+      .then(({ activity_log }) => setActivityLog(activity_log))
+      .catch((err: Error) => setError(err.message));
+  }
+
+  useEffect(reloadActivityLog, [isNew, leadId, session.access_token]);
+
+  async function handleLogActivity() {
+    if (isNew) return;
+    setLoggingActivity(true);
+    setError(null);
+    try {
+      await logActivity(session.access_token, leadId, {
+        activity_type: newActivityType,
+        notes: newActivityNotes.trim() || undefined,
+      });
+      setNewActivityNotes('');
+      reloadActivityLog();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoggingActivity(false);
+    }
+  }
 
   // tb-transactions-contract-001: the lead's current contract (most recent
   // row, if any), plus an editable price/currency/terms form kept in sync
@@ -674,8 +727,16 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
           {!isNew && lead && (
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Send Options (active listings)</p>
+              {activeListings.length > 5 && (
+                <Input
+                  placeholder="Search by name or address..."
+                  value={matchSearch}
+                  onChange={(e) => setMatchSearch(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              )}
               <div className="max-h-32 space-y-1 overflow-y-auto">
-                {activeListings.map((listing) => (
+                {filteredActiveListings.map((listing) => (
                   <label key={listing.id} className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
@@ -689,7 +750,11 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                     {listing.property_title} — {listing.price_currency} {listing.price.toLocaleString()}
                   </label>
                 ))}
-                {activeListings.length === 0 && <p className="text-xs text-muted-foreground">No active listings.</p>}
+                {filteredActiveListings.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {activeListings.length === 0 ? 'No active listings.' : 'No listings match your search.'}
+                  </p>
+                )}
               </div>
               <Button size="sm" variant="outline" onClick={handleSendOptions} disabled={saving || selectedOptionIds.length === 0}>
                 Send Selected as Options
@@ -770,6 +835,73 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* tb-buyer-leads-activity-log-001: general-purpose, manually-
+              logged running history -- distinct from matchLogs above, which
+              stays scoped to matched-listing events only. "Last contact" is
+              derived from the newest entry, not a separate column. */}
+          {!isNew && lead && (
+            <div className="space-y-2 rounded-md border p-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Activity Log</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const due = new Date();
+                    due.setDate(due.getDate() + 2);
+                    onOpenTask('new', {
+                      title: `Follow up with ${lead.contacts?.name ?? 'buyer'}`,
+                      task_type: 'follow_up',
+                      due_date: due.toISOString().slice(0, 10),
+                    });
+                  }}
+                >
+                  Follow up
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {activityLog.length > 0
+                  ? `Last contact: ${new Date(activityLog[0].occurred_at).toLocaleString()} (${ACTIVITY_TYPE_LABEL[activityLog[0].activity_type]})`
+                  : 'No contact logged yet.'}
+              </p>
+              {activityLog.length > 0 && (
+                <ul className="max-h-40 space-y-2 overflow-y-auto text-sm text-muted-foreground">
+                  {activityLog.map((entry) => (
+                    <li key={entry.id} className="space-y-0.5">
+                      <p className="text-xs">
+                        {new Date(entry.occurred_at).toLocaleString()} — {ACTIVITY_TYPE_LABEL[entry.activity_type]}
+                        {entry.logged_by_handle ? ` — @${entry.logged_by_handle}` : ''}
+                      </p>
+                      {entry.notes && <p>{entry.notes}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="flex h-9 rounded-md border border-input bg-background px-2 text-sm shadow-sm"
+                  value={newActivityType}
+                  onChange={(e) => setNewActivityType(e.target.value as ActivityType)}
+                >
+                  {ACTIVITY_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {ACTIVITY_TYPE_LABEL[t]}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  placeholder="Notes (optional)"
+                  value={newActivityNotes}
+                  onChange={(e) => setNewActivityNotes(e.target.value)}
+                  className="h-9 min-w-[10rem] flex-1"
+                />
+                <Button size="sm" variant="outline" onClick={handleLogActivity} disabled={loggingActivity}>
+                  Log Activity
+                </Button>
+              </div>
             </div>
           )}
 

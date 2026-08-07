@@ -32,7 +32,14 @@ type OpenPanel =
   // tb-tasks-crud-001: swaps out the Lead panel (FloatingPanel is "one at a
   // time") -- returnToLeadId lets closing this panel go back to the Lead it
   // was opened from, rather than closing everything.
-  | { type: 'task'; taskId: string | 'new'; returnToLeadId: string }
+  | {
+      type: 'task';
+      taskId: string | 'new';
+      returnToLeadId: string;
+      // tb-buyer-leads-activity-log-001: initial field values for the
+      // "Follow up" shortcut -- undefined for the plain "New Task" button.
+      prefillFields?: { title?: string; task_type?: string; due_date?: string };
+    }
   | null;
 
 function budgetLabel(min?: number | null, max?: number | null, currency?: string | null): string {
@@ -451,8 +458,9 @@ export function LeadsPage({ session }: Props) {
             openPanel.id !== 'new' &&
             setOpenPanel({ type: 'broadcast', entityType: 'buyer_requirement', id: openPanel.id })
           }
-          onOpenTask={(taskId) =>
-            openPanel.id !== 'new' && setOpenPanel({ type: 'task', taskId, returnToLeadId: openPanel.id })
+          onOpenTask={(taskId, prefillFields) =>
+            openPanel.id !== 'new' &&
+            setOpenPanel({ type: 'task', taskId, returnToLeadId: openPanel.id, prefillFields })
           }
         />
       )}
@@ -470,6 +478,7 @@ export function LeadsPage({ session }: Props) {
           taskId={openPanel.taskId}
           isAdmin={isAdmin}
           prefillEntity={{ entityType: 'buyer_requirement', entityId: openPanel.returnToLeadId }}
+          prefillFields={openPanel.prefillFields}
           onClose={() => setOpenPanel({ type: 'lead', id: openPanel.returnToLeadId })}
           onSaved={() => {}}
         />

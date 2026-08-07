@@ -23,6 +23,10 @@ type Props = {
   // Pre-filled, non-editable link when opened from a linked record's own
   // detail view (e.g. LeadDetailPanel) -- tb-tasks-crud-001's "linked" flow.
   prefillEntity?: { entityType: string; entityId: string };
+  // tb-buyer-leads-activity-log-001: initial field values for a new task
+  // (e.g. the "Follow up" shortcut) -- editable, just pre-populated. Ignored
+  // when taskId !== 'new'.
+  prefillFields?: { title?: string; task_type?: string; due_date?: string };
   onClose: () => void;
   onSaved: () => void;
 };
@@ -32,7 +36,7 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // tb-tasks-crud-001: create + edit a task, standalone or linked. Any tenant
 // member can create/reassign/change status; delete is admin-only (matches
 // this codebase's admin-only-delete convention, enforced again server-side).
-export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, onClose, onSaved }: Props) {
+export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, prefillFields, onClose, onSaved }: Props) {
   const isNew = taskId === 'new';
   const [task, setTask] = useState<Task | null>(null);
   const [assignees, setAssignees] = useState<TaskAssignee[]>([]);
@@ -40,10 +44,10 @@ export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, onClo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(prefillFields?.title ?? '');
   const [description, setDescription] = useState('');
-  const [dueDate, setDueDate] = useState('');
-  const [taskType, setTaskType] = useState('manual');
+  const [dueDate, setDueDate] = useState(prefillFields?.due_date ?? '');
+  const [taskType, setTaskType] = useState(prefillFields?.task_type ?? 'manual');
   const [assigneeId, setAssigneeId] = useState('');
   const [status, setStatus] = useState<TaskStatus>('open');
 
