@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   createDocket,
@@ -7,13 +6,22 @@ import {
   DOCKET_PROPERTY_FIELDS,
   type DocketField,
 } from '@/lib/listingsApi';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 
 type Props = {
   session: Session;
+  listingId: string;
+  onClose: () => void;
 };
 
 const ALL_FIELDS: DocketField[] = [...DOCKET_LISTING_FIELDS, ...DOCKET_PROPERTY_FIELDS];
@@ -38,17 +46,17 @@ const PUBLIC_PRESET: DocketField[] = [
   'bathrooms',
 ];
 
-// tb-listings-co-broker-share-001: shares a curated view of one listing with
-// another individual account's @handle. included_fields is validated
-// server-side against the same fixed allow-list this form renders.
-export function ShareDocketForm({ session }: Props) {
-  const { listingId } = useParams<{ listingId: string }>();
+// tb-listings-share-docket-modal-001: centered/dimmed-modal re-skin of the
+// former ShareDocketForm route page -- field-selection logic, presets, and
+// the createDocket() call are unchanged, just moved into ui/dialog.tsx (the
+// primitive tb-buyer-leads-inquiry-qualify-001 built), matching
+// QualifyInquiryModal's usage.
+export function ShareDocketModal({ session, listingId, onClose }: Props) {
   const [handle, setHandle] = useState('');
   const [selectedFields, setSelectedFields] = useState<Set<DocketField>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const navigate = useNavigate();
 
   function toggleField(field: DocketField) {
     setSelectedFields((prev) => {
@@ -76,7 +84,7 @@ export function ShareDocketForm({ session }: Props) {
     setSubmitting(true);
     try {
       await createDocket(session.access_token, {
-        listing_id: listingId!,
+        listing_id: listingId,
         handle: normalizedHandle,
         included_fields: [...selectedFields],
       });
@@ -88,23 +96,24 @@ export function ShareDocketForm({ session }: Props) {
     }
   }
 
-  if (success) {
-    return (
-      <div className="mx-auto max-w-lg space-y-4">
-        <h1 className="text-2xl font-semibold tracking-tight">Docket shared</h1>
-        <p className="text-sm text-muted-foreground">
-          @{handle.trim()} can now see this listing in their "Shared with me" view.
-        </p>
-        <Button onClick={() => navigate('/listings', { replace: true })}>Back to listings</Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-lg space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Share as docket</h1>
-      <Card>
-        <CardContent className="pt-6">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Share as docket</DialogTitle>
+          <DialogDescription>Choose which fields the recipient can see.</DialogDescription>
+        </DialogHeader>
+
+        {success ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              @{handle.trim()} can now see this listing in their "Shared with me" view.
+            </p>
+            <DialogFooter>
+              <Button onClick={onClose}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="handle">Recipient&apos;s @handle</Label>
@@ -162,13 +171,23 @@ export function ShareDocketForm({ session }: Props) {
               </div>
             </fieldset>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={submitting} className="w-full">
-              {submitting ? 'Sharing…' : 'Share docket'}
-            </Button>
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            <DialogFooter>
+              <Button type="button" size="sm" variant="outline" onClick={onClose} disabled={submitting}>
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={submitting}>
+                {submitting ? 'Sharing…' : 'Share docket'}
+              </Button>
+            </DialogFooter>
           </form>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

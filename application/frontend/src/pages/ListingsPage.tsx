@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchListings,
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { ShareDetailsModal } from '@/components/ShareDetailsModal';
+import { ShareDocketModal } from '@/components/ShareDocketModal';
 import { ListingDetailModal } from '@/components/ListingDetailModal';
 import { ListingFilterTabs, type FilterTabOption } from '@/components/ListingFilterTabs';
 import { cn } from '@/lib/utils';
@@ -103,6 +104,7 @@ export function ListingsPage({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [openHistory, setOpenHistory] = useState<OpenHistory>(null);
   const [openShare, setOpenShare] = useState<OpenShare>(null);
+  const [shareDocketListingId, setShareDocketListingId] = useState<string | null>(null);
   // tb-buyer-leads-schema-001: LeadDetailPanel's "Mark Sold on Listings Page"
   // convenience action navigates here with this state, opening that
   // listing's detail modal with the buyer already pre-selected -- purely a
@@ -264,8 +266,12 @@ export function ListingsPage({ session }: Props) {
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap justify-end gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link to={`/listings/${listing.id}/share`}>Share as docket</Link>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShareDocketListingId(listing.id)}
+                      >
+                        Share as docket
                       </Button>
                       <Button
                         size="sm"
@@ -306,6 +312,13 @@ export function ListingsPage({ session }: Props) {
           listingId={openShare.listingId}
           propertyTitle={openShare.propertyTitle}
           onClose={() => setOpenShare(null)}
+        />
+      )}
+      {shareDocketListingId && (
+        <ShareDocketModal
+          session={session}
+          listingId={shareDocketListingId}
+          onClose={() => setShareDocketListingId(null)}
         />
       )}
       {openDetailListing && (

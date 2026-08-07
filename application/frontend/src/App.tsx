@@ -11,7 +11,6 @@ import { ListingsPage } from './pages/ListingsPage';
 import { LeadsPage } from './pages/LeadsPage';
 import { RevisitPage } from './pages/RevisitPage';
 import { SearchPage } from './pages/SearchPage';
-import { ShareDocketForm } from './pages/ShareDocketForm';
 import { SharedWithMePage } from './pages/SharedWithMePage';
 import { TasksPage } from './pages/TasksPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -65,7 +64,6 @@ export function App() {
         <Route path="/projects/new" element={session && <NewProjectForm session={session} />} />
         <Route path="/projects/:id" element={session && <ProjectDetailPage session={session} />} />
         <Route path="/listings" element={session && <ListingsPage session={session} />} />
-        <Route path="/listings/:listingId/share" element={session && <ShareDocketForm session={session} />} />
         <Route path="/leads" element={session && <LeadsPage session={session} />} />
         <Route path="/revisit" element={session && <RevisitPage session={session} />} />
         <Route path="/search" element={session && <SearchPage session={session} />} />
