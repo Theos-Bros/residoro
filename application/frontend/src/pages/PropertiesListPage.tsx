@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
+import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { cn } from '@/lib/utils';
 
 const verificationSelectClass =
@@ -138,6 +139,16 @@ export function PropertiesListPage({ session }: Props) {
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
+  // tb-properties-detail-modal-001: mirrors ListingsPage.tsx's own
+  // openDetailId/openDetailToken pattern exactly -- openDetailToken is
+  // bumped on every row click (even re-clicking the currently-open property)
+  // and passed as PropertyDetailModal's `key`, forcing a fresh mount (and so
+  // a fresh, expanded FloatingPanel) every time. Separate from `openPanel`
+  // above, which still exclusively drives the "Create listing"/"Listing
+  // history" panels and is untouched by this change.
+  const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  const [openDetailToken, setOpenDetailToken] = useState(0);
+  const openDetailProperty = properties?.find((p) => p.id === openDetailId) ?? null;
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
 
@@ -156,6 +167,11 @@ export function PropertiesListPage({ session }: Props) {
     fetchProperties(session.access_token)
       .then(({ properties }) => setProperties(properties))
       .catch((err: Error) => setError(err.message));
+  }
+
+  function openDetail(propertyId: string) {
+    setOpenDetailId(propertyId);
+    setOpenDetailToken((t) => t + 1);
   }
 
   useEffect(() => {
@@ -279,16 +295,15 @@ export function PropertiesListPage({ session }: Props) {
           {filteredProperties.map((property) => (
             <div
               key={property.id}
+              onClick={() => openDetail(property.id)}
               className={cn(
-                'flex flex-col gap-2.5 rounded-xl border bg-card p-3.5',
+                'flex cursor-pointer flex-col gap-2.5 rounded-xl border bg-card p-3.5 hover:bg-muted/50',
                 openPanel?.propertyId === property.id && 'bg-accent/60',
               )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <Link to={`/properties/${property.id}`} className="truncate text-sm font-semibold hover:underline">
-                    {property.title}
-                  </Link>
+                  <span className="truncate text-sm font-semibold">{property.title}</span>
                   <span className="truncate text-sm text-muted-foreground">{property.address ?? '—'}</span>
                   <span className="truncate text-xs text-tertiary-foreground">{formatSpecsSummary(property)}</span>
                 </div>
@@ -298,6 +313,7 @@ export function PropertiesListPage({ session }: Props) {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="View photos"
+                    onClick={(e) => e.stopPropagation()}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-lg hover:bg-accent"
                   >
                     🖼️
@@ -323,6 +339,7 @@ export function PropertiesListPage({ session }: Props) {
                   href={property.cover_photo_url}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
                   className="text-sm font-medium text-accent-foreground hover:underline"
                 >
                   View photos ↗
@@ -331,9 +348,9 @@ export function PropertiesListPage({ session }: Props) {
                 <span className="text-sm text-tertiary-foreground">No photos yet</span>
               )}
 
-              <div className="flex flex-wrap gap-2 border-t pt-2.5">
-                <Button size="sm" variant="outline" asChild>
-                  <Link to={`/properties/${property.id}`}>View</Link>
+              <div className="flex flex-wrap gap-2 border-t pt-2.5" onClick={(e) => e.stopPropagation()}>
+                <Button size="sm" variant="outline" onClick={() => openDetail(property.id)}>
+                  View
                 </Button>
                 <Button
                   size="sm"
@@ -381,8 +398,15 @@ export function PropertiesListPage({ session }: Props) {
             </TableHeader>
             <TableBody>
               {filteredProperties.map((property) => (
-                <TableRow key={property.id} className={cn(openPanel?.propertyId === property.id && 'bg-accent/60')}>
-                  <TableCell>
+                <TableRow
+                  key={property.id}
+                  onClick={() => openDetail(property.id)}
+                  className={cn(
+                    'cursor-pointer hover:bg-muted/50',
+                    openPanel?.propertyId === property.id && 'bg-accent/60',
+                  )}
+                >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     {property.cover_photo_url ? (
                       <a
                         href={property.cover_photo_url}
@@ -397,11 +421,7 @@ export function PropertiesListPage({ session }: Props) {
                       <div className="h-10 w-10 rounded-lg bg-muted" />
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">
-                    <Link to={`/properties/${property.id}`} className="hover:underline">
-                      {property.title}
-                    </Link>
-                  </TableCell>
+                  <TableCell className="font-medium">{property.title}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{formatSpecsSummary(property)}</TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {property.price !== null
@@ -413,7 +433,7 @@ export function PropertiesListPage({ session }: Props) {
                       {property.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     {isAdmin ? (
                       <select
                         aria-label={`Verification status for ${property.title}`}
@@ -433,9 +453,9 @@ export function PropertiesListPage({ session }: Props) {
                       <Badge variant="neutral">{property.verification_status}</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="flex flex-wrap justify-end gap-2">
-                    <Button size="sm" variant="outline" asChild>
-                      <Link to={`/properties/${property.id}`}>View</Link>
+                  <TableCell className="flex flex-wrap justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="outline" onClick={() => openDetail(property.id)}>
+                      View
                     </Button>
                     <Button
                       size="sm"
@@ -486,6 +506,15 @@ export function PropertiesListPage({ session }: Props) {
           propertyId={openPanel.propertyId}
           propertyTitle={openPanel.propertyTitle}
           onClose={() => setOpenPanel(null)}
+        />
+      )}
+      {openDetailProperty && (
+        <PropertyDetailModal
+          key={openDetailToken}
+          session={session}
+          property={openDetailProperty}
+          onClose={() => setOpenDetailId(null)}
+          onUpdated={reload}
         />
       )}
     </div>

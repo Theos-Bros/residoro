@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchProperty, fetchPropertyMedia, type PropertyDetail, type PropertyMedia } from '@/lib/propertyMediaApi';
 import { fetchPropertyDocuments, type PropertyDocument } from '@/lib/propertyDocumentsApi';
@@ -9,6 +9,7 @@ import {
   PROPERTY_STATUS_VARIANT,
   VERIFICATION_STATUSES,
   PROPERTY_STATUSES,
+  type Property,
   type VerificationStatus,
   type PropertyStatus,
   type OwnerType,
@@ -18,6 +19,7 @@ import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { PropertyPhotoGallery } from '@/components/PropertyPhotoGallery';
 import { PropertyDocumentsSection } from '@/components/PropertyDocumentsSection';
+import { FloatingPanel } from '@/components/FloatingPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -27,6 +29,17 @@ import { FeatureTagInput } from '@/components/ui/feature-tag-input';
 
 type Props = {
   session: Session;
+  // tb-properties-detail-modal-001: the row/card the agent clicked from
+  // PropertiesListPage's already-fetched `properties` array -- gives the
+  // modal an id to fetch full detail with, and a title to show in
+  // FloatingPanel's header/browser-tab title before that fetch resolves.
+  // `Property` (listingsApi.ts) is missing several fields `PropertyDetail`
+  // (propertyMediaApi.ts) has -- city/province/type/owner_type/owner_id/
+  // project_id/project_name/lease_* -- so this alone can't replace the
+  // fetch-by-id below; confirmed no overlap large enough to skip it.
+  property: Property;
+  onClose: () => void;
+  onUpdated: () => void;
 };
 
 const verificationSelectClass =
@@ -39,11 +52,11 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-card px-3
 // checked. property_media (see propertyMediaApi.ts's PropertyMedia type and
 // this repo's 20260727150000_property_media_external_links.sql migration)
 // has no reachability/last-checked column at all -- no backend job ever
-// probes external_url. Per this tracer bullet's explicit instructions, real
+// probes external_url. Per that tracer bullet's explicit instructions, real
 // reachability *checking* (an HTTP request out to Google Photos/Drive) is
 // out of scope for a design-only tracer bullet, so every album renders as
 // "not checked yet" -- this is a genuine data-model gap, not a shortcut:
-// flagged here, and again in this tracer bullet's final report.
+// flagged here, unchanged from PropertyDetailPage.
 type AlbumLinkStatus = 'reachable' | 'restricted' | 'not_checked';
 
 function AlbumLinkStatusCard({ status, photoCount }: { status: AlbumLinkStatus; photoCount: number }) {
@@ -141,18 +154,22 @@ function formatSpecsSummary(property: PropertyDetail): string {
   return parts.join(' · ');
 }
 
-// tb-properties-photos-001: no single-property view existed before this --
-// only PropertiesListPage (a list) and PropertyCard (unrelated, migration-
-// preview only).
-//
-// tb-properties-edit-001: the general edit form below closes the gap the
-// original comment here used to flag ("not a full edit experience") --
-// general fields (title/location/specs/price/status) are open to any tenant
-// user, matching PATCH /properties/:id's own lack of a role check; ownership
-// (owner_type/owner_id) is only rendered for admins, mirroring the
-// verification-status control's existing isAdmin gate on this same page.
-export function PropertyDetailPage({ session }: Props) {
-  const { id } = useParams<{ id: string }>();
+// tb-properties-detail-modal-001: ports PropertyDetailPage's content
+// (previously a standalone /properties/:id route) into a FloatingPanel
+// modal, opened from PropertiesListPage's row click / "View" button via the
+// same openDetailId/openDetailToken state-and-key pattern
+// tb-listings-detail-edit-modal-001 established for ListingDetailModal. No
+// functional change from PropertyDetailPage: same editable fields,
+// verification-status control, owner/developer lookups, photo gallery,
+// album-link status card, documents section -- only the container changed
+// from a page (useParams()-driven) to a modal (property passed in directly
+// by the parent, which already has it from its own fetch). This component
+// still does its own fetchProperty/fetchPropertyMedia/fetchPropertyDocuments
+// for the full PropertyDetail shape, since the list page's own `Property`
+// type is missing several fields (city/province/owner_type/owner_id/
+// project_id/project_name/lease_*) this view needs.
+export function PropertyDetailModal({ session, property: propertyListItem, onClose, onUpdated }: Props) {
+  const propertyId = propertyListItem.id;
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [media, setMedia] = useState<PropertyMedia[] | null>(null);
   const [documents, setDocuments] = useState<PropertyDocument[] | null>(null);
@@ -168,12 +185,12 @@ export function PropertyDetailPage({ session }: Props) {
   const [contacts, setContacts] = useState<Contact[] | null>(null);
 
   async function handleVerificationChange(verificationStatus: VerificationStatus) {
-    if (!id) return;
     setError(null);
     try {
-      await updatePropertyVerification(session.access_token, id, verificationStatus);
-      const refreshed = await fetchProperty(session.access_token, id);
+      await updatePropertyVerification(session.access_token, propertyId, verificationStatus);
+      const refreshed = await fetchProperty(session.access_token, propertyId);
       setProperty(refreshed);
+      onUpdated();
     } catch (err) {
       setError((err as Error).message);
     }
@@ -232,7 +249,7 @@ export function PropertyDetailPage({ session }: Props) {
 
   async function handleEditSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!id || !form) return;
+    if (!form) return;
     setSaveError(null);
 
     if (!form.title.trim()) {
@@ -288,7 +305,7 @@ export function PropertyDetailPage({ session }: Props) {
     try {
       const ownershipChanged = isAdmin && property && form.owner_type !== property.owner_type;
       const ownerIdChanged = isAdmin && property && form.owner_id !== (property.owner_id ?? '');
-      await updateProperty(session.access_token, id, {
+      await updateProperty(session.access_token, propertyId, {
         title: form.title.trim(),
         address: form.address,
         city: form.city,
@@ -302,10 +319,11 @@ export function PropertyDetailPage({ session }: Props) {
           ? { owner_type: form.owner_type, owner_id: form.owner_id || null }
           : {}),
       });
-      const refreshed = await fetchProperty(session.access_token, id);
+      const refreshed = await fetchProperty(session.access_token, propertyId);
       setProperty(refreshed);
       setIsEditing(false);
       setForm(null);
+      onUpdated();
     } catch (err) {
       setSaveError((err as Error).message);
     } finally {
@@ -314,13 +332,12 @@ export function PropertyDetailPage({ session }: Props) {
   }
 
   useEffect(() => {
-    if (!id) return;
     let cancelled = false;
 
     Promise.all([
-      fetchProperty(session.access_token, id),
-      fetchPropertyMedia(session.access_token, id),
-      fetchPropertyDocuments(session.access_token, id),
+      fetchProperty(session.access_token, propertyId),
+      fetchPropertyMedia(session.access_token, propertyId),
+      fetchPropertyDocuments(session.access_token, propertyId),
     ])
       .then(([propertyResult, mediaResult, documentsResult]) => {
         if (cancelled) return;
@@ -335,18 +352,15 @@ export function PropertyDetailPage({ session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [id, session.access_token]);
-
-  if (!id) return null;
+  }, [propertyId, session.access_token]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Button asChild variant="secondary" size="sm">
-          <Link to="/properties">← Back to properties</Link>
-        </Button>
-      </div>
-
+    <FloatingPanel
+      title={property?.title ?? propertyListItem.title}
+      description="The master record for this unit. Price and status changes here propagate to every live listing and shared docket within a minute."
+      documentTitle={`${propertyListItem.title} · Residoro`}
+      onClose={onClose}
+    >
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -355,13 +369,15 @@ export function PropertyDetailPage({ session }: Props) {
       {!error && property === null && <p className="text-sm text-muted-foreground">Loading…</p>}
 
       {property && (
-        <>
+        <div className="space-y-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{property.title}</h1>
+              <h2 className="text-lg font-semibold tracking-tight">{property.title}</h2>
               <Badge variant={PROPERTY_STATUS_VARIANT[property.status as keyof typeof PROPERTY_STATUS_VARIANT] ?? 'neutral'}>
                 {property.status}
               </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               {!isEditing && (
                 <Button variant="outline" size="sm" onClick={startEditing}>
                   Edit
@@ -384,10 +400,6 @@ export function PropertyDetailPage({ session }: Props) {
                 <Badge variant="neutral">{property.verification_status}</Badge>
               )}
             </div>
-            <p className="max-w-xl text-sm text-muted-foreground">
-              The master record for this unit. Price and status changes here propagate to every live
-              listing and shared docket within a minute.
-            </p>
             <p className="font-mono text-lg font-medium">{formatPrice(property.price, property.price_currency)}</p>
             {property.status === 'leased' && (
               <p className="text-sm text-tertiary-foreground">
@@ -671,7 +683,7 @@ export function PropertyDetailPage({ session }: Props) {
                     photoCount={media.filter((item) => item.type === 'photo').length}
                   />
                 )}
-                <PropertyPhotoGallery session={session} propertyId={id} media={media} onChange={setMedia} />
+                <PropertyPhotoGallery session={session} propertyId={propertyId} media={media} onChange={setMedia} />
               </>
             )}
           </div>
@@ -683,14 +695,14 @@ export function PropertyDetailPage({ session }: Props) {
             ) : (
               <PropertyDocumentsSection
                 session={session}
-                propertyId={id}
+                propertyId={propertyId}
                 documents={documents}
                 onChange={setDocuments}
               />
             )}
           </div>
-        </>
+        </div>
       )}
-    </div>
+    </FloatingPanel>
   );
 }
