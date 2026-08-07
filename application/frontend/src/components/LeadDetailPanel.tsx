@@ -14,6 +14,7 @@ import {
 import type { RequirementFields } from '@/lib/inquiriesApi';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { matchesKeyword, type Listing } from '@/lib/listingsApi';
+import { searchBuyerRequirement, fetchMatchingSettings, type MatchResult } from '@/lib/matchingApi';
 import { fetchTasks, type Task } from '@/lib/tasksApi';
 import { fetchLeadViewings, scheduleViewing, updateViewing, VIEWING_OUTCOMES, type Viewing } from '@/lib/viewingsApi';
 import { fetchLeadOffers, recordOffer, resolveOffer, OFFERED_BY_VALUES, type Offer } from '@/lib/offersApi';
@@ -81,7 +82,41 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   // tb-buyer-leads-matches-search-001: filters activeListings below, never
   // mutates selectedOptionIds -- a search only hides/shows rows.
   const [matchSearch, setMatchSearch] = useState('');
-  const filteredActiveListings = activeListings.filter((l) =>
+
+  // tb-buyer-leads-send-options-match-filter-001: reuses SearchPage.tsx's
+  // exact scoring engine/default (no hard filters) so "a match" means the
+  // same thing everywhere. requirementMatches === null (still loading) falls
+  // back to the full list rather than an empty flash.
+  const [requirementMatches, setRequirementMatches] = useState<MatchResult[] | null>(null);
+  const [matchThreshold, setMatchThreshold] = useState(0);
+  const [showAllActiveListings, setShowAllActiveListings] = useState(false);
+
+  useEffect(() => {
+    if (isNew) return;
+    Promise.all([
+      searchBuyerRequirement(session.access_token, leadId, []),
+      fetchMatchingSettings(session.access_token),
+    ])
+      .then(([{ results }, settings]) => {
+        setRequirementMatches(results);
+        setMatchThreshold(settings.match_score_threshold);
+      })
+      .catch((err: Error) => setError(err.message));
+  }, [isNew, leadId, session.access_token]);
+
+  const qualifyingListingIds = new Set(
+    (requirementMatches ?? [])
+      .filter((r) => r.source !== 'project_unit' && r.score >= matchThreshold)
+      .map((r) => r.listing_id),
+  );
+  const scoreByListingId = new Map((requirementMatches ?? []).map((r) => [r.listing_id, r.score]));
+
+  const baseActiveListings =
+    showAllActiveListings || requirementMatches === null
+      ? activeListings
+      : activeListings.filter((l) => qualifyingListingIds.has(l.id));
+
+  const filteredActiveListings = baseActiveListings.filter((l) =>
     matchesKeyword(l.property_title, l.property_address, matchSearch),
   );
   const [wonListingId, setWonListingId] = useState('');
@@ -735,6 +770,14 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                   className="h-8 text-sm"
                 />
               )}
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={showAllActiveListings}
+                  onChange={(e) => setShowAllActiveListings(e.target.checked)}
+                />
+                Show all active listings (ignore requirement match)
+              </label>
               <div className="max-h-32 space-y-1 overflow-y-auto">
                 {filteredActiveListings.map((listing) => (
                   <label key={listing.id} className="flex items-center gap-2 text-sm">
@@ -748,11 +791,18 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                       }
                     />
                     {listing.property_title} — {listing.price_currency} {listing.price.toLocaleString()}
+                    {!showAllActiveListings && scoreByListingId.has(listing.id) && (
+                      <span className="text-muted-foreground"> — score: {scoreByListingId.get(listing.id)}</span>
+                    )}
                   </label>
                 ))}
                 {filteredActiveListings.length === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {activeListings.length === 0 ? 'No active listings.' : 'No listings match your search.'}
+                    {activeListings.length === 0
+                      ? 'No active listings.'
+                      : baseActiveListings.length === 0
+                        ? "No active listings currently match this lead's requirement. Check \"Show all active listings\" to see everything."
+                        : 'No listings match your search.'}
                   </p>
                 )}
               </div>
