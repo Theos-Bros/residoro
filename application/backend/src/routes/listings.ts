@@ -88,6 +88,8 @@ type CreatePropertyBody = {
   bedrooms?: number;
   bathrooms?: number;
   parking_slots?: number;
+  storeys?: number;
+  features?: string[];
   price?: number;
   price_currency?: string;
   project_id?: string;
@@ -136,6 +138,8 @@ type UpdatePropertyBody = {
   bedrooms?: number;
   bathrooms?: number;
   parking_slots?: number;
+  storeys?: number;
+  features?: string[];
   price?: number;
   price_currency?: string;
   status?: string;
@@ -227,7 +231,9 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     const supabase = getScopedClient(request);
     const { data, error } = await supabase
       .from('properties')
-      .select('id, title, address, price, price_currency, status, verification_status')
+      .select(
+        'id, title, address, price, price_currency, status, verification_status, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features',
+      )
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
 
@@ -278,6 +284,8 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       bedrooms,
       bathrooms,
       parking_slots,
+      storeys,
+      features,
       price,
       price_currency,
       project_id,
@@ -297,11 +305,14 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'project_id can only be set when owner_type is developer' });
     }
 
-    const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price };
+    const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, price };
     for (const [field, value] of Object.entries(numericFields)) {
       if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
         return reply.status(400).send({ error: `${field} must be a non-negative number` });
       }
+    }
+    if (features !== undefined && (!Array.isArray(features) || features.some((f) => typeof f !== 'string'))) {
+      return reply.status(400).send({ error: 'features must be an array of strings' });
     }
 
     if (project_id) {
@@ -358,6 +369,8 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         bedrooms,
         bathrooms,
         parking_slots,
+        storeys,
+        features: features ?? null,
         price,
         price_currency: price_currency ?? 'PHP',
       })
@@ -454,6 +467,8 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         bedrooms,
         bathrooms,
         parking_slots,
+        storeys,
+        features,
         price,
         price_currency,
         status,
@@ -477,7 +492,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       if (province !== undefined) updateFields.province = province;
       if (price_currency !== undefined) updateFields.price_currency = price_currency;
 
-      const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price };
+      const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, price };
       for (const [field, value] of Object.entries(numericFields)) {
         if (value !== undefined) {
           if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
@@ -485,6 +500,13 @@ export async function registerListingsRoutes(app: FastifyInstance) {
           }
           updateFields[field] = value;
         }
+      }
+
+      if (features !== undefined) {
+        if (!Array.isArray(features) || features.some((f) => typeof f !== 'string')) {
+          return reply.status(400).send({ error: 'features must be an array of strings' });
+        }
+        updateFields.features = features;
       }
 
       if (status !== undefined) {
@@ -643,7 +665,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
         .select(
-          'id, title, price, price_currency, status, lease_monthly_rent, lease_term_months, owner_type, owner_id, project_id',
+          'id, title, price, price_currency, status, lease_monthly_rent, lease_term_months, owner_type, owner_id, project_id, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features',
         )
         .single();
 
@@ -717,7 +739,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     const { data, error } = await supabase
       .from('listings')
       .select(
-        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title, address), contacts(name)',
+        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title, address, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features), contacts(name)',
       )
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
@@ -740,7 +762,17 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       status: string;
       created_at: string;
       buyer_contact_id: string | null;
-      properties: { title: string; address: string | null } | null;
+      properties: {
+        title: string;
+        address: string | null;
+        floor_area_sqm: number | null;
+        lot_area_sqm: number | null;
+        bedrooms: number | null;
+        bathrooms: number | null;
+        parking_slots: number | null;
+        storeys: number | null;
+        features: string[] | null;
+      } | null;
       contacts: { name: string } | null;
     }>).map((l) => ({
       id: l.id,
@@ -749,6 +781,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       // tb-listings-properties-keyword-search-001: mirrors how property_title
       // is derived from the same properties(...) embed above.
       property_address: l.properties?.address ?? null,
+      // tb-listings-property-specs-001: same embed, so a listing row can show
+      // its property's specs without a second round-trip.
+      property_floor_area_sqm: l.properties?.floor_area_sqm ?? null,
+      property_lot_area_sqm: l.properties?.lot_area_sqm ?? null,
+      property_bedrooms: l.properties?.bedrooms ?? null,
+      property_bathrooms: l.properties?.bathrooms ?? null,
+      property_parking_slots: l.properties?.parking_slots ?? null,
+      property_storeys: l.properties?.storeys ?? null,
+      property_features: l.properties?.features ?? null,
       agent_id: l.agent_id,
       listing_type: l.listing_type,
       price: l.price,
@@ -765,8 +806,13 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     return { listings };
   });
 
-  // Creates with status: 'draft' always -- moving to active/withdrawn is a
-  // separate PATCH, matching the capability doc's own "starts as draft" line.
+  // tb-listings-property-specs-001: creates with status: 'active' always --
+  // superseding the prior "always draft" behavior. A brand-new listing can
+  // never conflict with anything on activation (nothing else is active yet
+  // on a property that's only just getting its first/next listing here), so
+  // the draft step gated nothing real; it just meant every new listing
+  // needed a manual second click before it was actually marketable. Moving
+  // to any other status is still a separate PATCH, unchanged.
   // property_id is re-checked against the caller's own tenant (not just
   // trusted from the request body) even though the FK alone would let a
   // cross-tenant property_id reference succeed at the DB layer -- same
@@ -818,6 +864,43 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Property not found in your workspace' });
     }
 
+    // tb-listings-property-specs-001: since this now inserts directly as
+    // 'active' (see below), it needs the same exclusivity conflict-check
+    // PATCH /listings/:id already runs on activation -- otherwise a second
+    // listing created on a property that already has an active exclusive
+    // listing would silently bypass the hard-block/soft-warning logic
+    // entirely. Mirrors PATCH's pre-check-before-write pattern exactly.
+    let conflictWarning: string | undefined;
+    const { data: conflicting, error: conflictError } = await supabase
+      .from('listings')
+      .select('id')
+      .eq('tenant_id', request.user!.tenantId)
+      .eq('property_id', property_id)
+      .eq('status', 'active')
+      .eq('exclusivity', 'exclusive')
+      .limit(1)
+      .maybeSingle();
+
+    if (conflictError) {
+      request.log.error(conflictError);
+    } else if (conflicting) {
+      const { data: workspace, error: workspaceError } = await supabase
+        .from('workspaces')
+        .select('exclusivity_hard_block')
+        .eq('id', request.user!.tenantId)
+        .single();
+
+      if (workspaceError) {
+        request.log.error(workspaceError);
+      } else if (workspace.exclusivity_hard_block) {
+        return reply
+          .status(409)
+          .send({ error: 'This property already has an active exclusive listing.' });
+      } else {
+        conflictWarning = 'This property already has an active exclusive listing.';
+      }
+    }
+
     const { data: listing, error: listingError } = await supabase
       .from('listings')
       .insert({
@@ -828,6 +911,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         price,
         price_currency: price_currency ?? 'PHP',
         exclusivity: exclusivity ?? 'open',
+        status: 'active',
         ...(startsAt ? { authority_starts_at: startsAt.toISOString() } : {}),
         ...(expiresAt !== undefined ? { authority_expires_at: expiresAt?.toISOString() ?? null } : {}),
       })
@@ -841,7 +925,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not create the listing' });
     }
 
-    return reply.status(201).send(listing);
+    return reply.status(201).send(conflictWarning ? { ...listing, warning: conflictWarning } : listing);
   });
 
   app.patch<{ Params: { id: string }; Body: UpdateListingStatusBody }>(

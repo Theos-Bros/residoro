@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { FeatureTagInput } from '@/components/ui/feature-tag-input';
 
 type Props = {
   session: Session;
@@ -90,6 +91,8 @@ type EditFormState = {
   bedrooms: string;
   bathrooms: string;
   parking_slots: string;
+  storeys: string;
+  features: string[];
   price: string;
   status: PropertyStatus;
   lease_monthly_rent: string;
@@ -109,6 +112,8 @@ function toFormState(property: PropertyDetail): EditFormState {
     bedrooms: property.bedrooms?.toString() ?? '',
     bathrooms: property.bathrooms?.toString() ?? '',
     parking_slots: property.parking_slots?.toString() ?? '',
+    storeys: property.storeys?.toString() ?? '',
+    features: property.features ?? [],
     price: property.price?.toString() ?? '',
     status: property.status as PropertyStatus,
     lease_monthly_rent: property.lease_monthly_rent?.toString() ?? '',
@@ -120,6 +125,20 @@ function toFormState(property: PropertyDetail): EditFormState {
 
 function formatPrice(value: number | null, currency: string): string {
   return value === null ? '—' : `${currency} ${value.toLocaleString()}`;
+}
+
+// tb-listings-property-specs-001: a compact one-line summary, omitting any
+// field that's null -- returns '' (falsy) when nothing is set, so callers
+// can skip rendering the line entirely.
+function formatSpecsSummary(property: PropertyDetail): string {
+  const parts: string[] = [];
+  if (property.bedrooms !== null) parts.push(`${property.bedrooms} BD`);
+  if (property.bathrooms !== null) parts.push(`${property.bathrooms} BA`);
+  if (property.parking_slots !== null) parts.push(`${property.parking_slots} parking`);
+  if (property.storeys !== null) parts.push(`${property.storeys} storey${property.storeys === 1 ? '' : 's'}`);
+  if (property.floor_area_sqm !== null) parts.push(`${property.floor_area_sqm} sqm floor`);
+  if (property.lot_area_sqm !== null) parts.push(`${property.lot_area_sqm} sqm lot`);
+  return parts.join(' · ');
 }
 
 // tb-properties-photos-001: no single-property view existed before this --
@@ -228,6 +247,7 @@ export function PropertyDetailPage({ session }: Props) {
       bedrooms: form.bedrooms,
       bathrooms: form.bathrooms,
       parking_slots: form.parking_slots,
+      storeys: form.storeys,
       price: form.price,
     })) {
       if (raw.trim() === '') continue;
@@ -275,6 +295,7 @@ export function PropertyDetailPage({ session }: Props) {
         province: form.province,
         status: form.status,
         price_currency: property?.price_currency,
+        features: form.features,
         ...numericPatch,
         ...leasePatch,
         ...(isAdmin && (ownershipChanged || ownerIdChanged)
@@ -377,6 +398,19 @@ export function PropertyDetailPage({ session }: Props) {
             <p className="text-sm text-tertiary-foreground">
               {[property.address, property.city, property.province].filter(Boolean).join(', ') || '—'}
             </p>
+            {/* tb-listings-property-specs-001: was collected (editable) but never shown read-only. */}
+            {formatSpecsSummary(property) && (
+              <p className="text-sm text-tertiary-foreground">{formatSpecsSummary(property)}</p>
+            )}
+            {property.features && property.features.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {property.features.map((feature) => (
+                  <Badge key={feature} variant="secondary">
+                    {feature}
+                  </Badge>
+                ))}
+              </div>
+            )}
             {property.project_name && (
               <p className="text-sm text-tertiary-foreground">
                 Part of{' '}
@@ -454,7 +488,7 @@ export function PropertyDetailPage({ session }: Props) {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="edit_bedrooms">Bedrooms</Label>
                       <Input
@@ -476,7 +510,7 @@ export function PropertyDetailPage({ session }: Props) {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="edit_parking">Parking slots</Label>
+                      <Label htmlFor="edit_parking">Parking / garage slots</Label>
                       <Input
                         id="edit_parking"
                         type="number"
@@ -485,6 +519,24 @@ export function PropertyDetailPage({ session }: Props) {
                         onChange={(e) => updateForm({ parking_slots: e.target.value })}
                       />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="edit_storeys">Storeys</Label>
+                      <Input
+                        id="edit_storeys"
+                        type="number"
+                        min="0"
+                        value={form.storeys}
+                        onChange={(e) => updateForm({ storeys: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="edit_features">Features</Label>
+                    <FeatureTagInput
+                      id="edit_features"
+                      value={form.features}
+                      onChange={(next) => updateForm({ features: next })}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="edit_price">

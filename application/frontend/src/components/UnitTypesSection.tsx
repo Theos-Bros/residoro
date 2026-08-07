@@ -13,6 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { FeatureTagInput } from '@/components/ui/feature-tag-input';
+import { Badge } from '@/components/ui/badge';
 
 type Props = {
   session: Session;
@@ -28,10 +30,13 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 
 function formatSpecs(unitType: ProjectUnitType): string {
   const parts = [
-    unitType.floor_area_sqm !== null ? `${unitType.floor_area_sqm} sqm` : null,
+    unitType.floor_area_sqm !== null ? `${unitType.floor_area_sqm} sqm floor` : null,
+    unitType.lot_area_sqm !== null ? `${unitType.lot_area_sqm} sqm lot` : null,
     unitType.bedrooms !== null ? `${unitType.bedrooms} BR` : null,
     unitType.bathrooms !== null ? `${unitType.bathrooms} BA` : null,
     unitType.parking_slots !== null ? `${unitType.parking_slots} parking` : null,
+    unitType.storeys !== null ? `${unitType.storeys} storey${unitType.storeys === 1 ? '' : 's'}` : null,
+    `${unitType.listing_type} · ${unitType.exclusivity}`,
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : '—';
 }
@@ -79,8 +84,10 @@ function GenerateUnitsRow({
 
     setBusy(true);
     try {
-      const { created } = await generateUnits(session.access_token, projectId, unitType.id, unitNumbers);
-      setResult(`Created ${created} unit${created === 1 ? '' : 's'}.`);
+      const { created, listings_created } = await generateUnits(session.access_token, projectId, unitType.id, unitNumbers);
+      setResult(
+        `Created ${created} unit${created === 1 ? '' : 's'}, ${listings_created} listing${listings_created === 1 ? '' : 's'} (active).`,
+      );
       setUnitNumbersInput('');
       onGenerated();
     } catch (err) {
@@ -125,10 +132,15 @@ export function UnitTypesSection({
   const [name, setName] = useState('');
   const [propertyType, setPropertyType] = useState<PropertyType>('condo_unit');
   const [floorAreaSqm, setFloorAreaSqm] = useState('');
+  const [lotAreaSqm, setLotAreaSqm] = useState('');
   const [bedrooms, setBedrooms] = useState('');
   const [bathrooms, setBathrooms] = useState('');
   const [parkingSlots, setParkingSlots] = useState('');
+  const [storeys, setStoreys] = useState('');
+  const [features, setFeatures] = useState<string[]>([]);
   const [price, setPrice] = useState('');
+  const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
+  const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [removingUnitTypeId, setRemovingUnitTypeId] = useState<string | null>(null);
@@ -148,18 +160,28 @@ export function UnitTypesSection({
         name: name.trim(),
         property_type: propertyType,
         floor_area_sqm: floorAreaSqm ? Number(floorAreaSqm) : undefined,
+        lot_area_sqm: lotAreaSqm ? Number(lotAreaSqm) : undefined,
         bedrooms: bedrooms ? Number(bedrooms) : undefined,
         bathrooms: bathrooms ? Number(bathrooms) : undefined,
         parking_slots: parkingSlots ? Number(parkingSlots) : undefined,
+        storeys: storeys ? Number(storeys) : undefined,
+        features: features.length > 0 ? features : undefined,
         price: price ? Number(price) : undefined,
+        listing_type: listingType,
+        exclusivity,
       });
       onChange([...unitTypes, unitType]);
       setName('');
       setFloorAreaSqm('');
+      setLotAreaSqm('');
       setBedrooms('');
       setBathrooms('');
       setParkingSlots('');
+      setStoreys('');
+      setFeatures([]);
       setPrice('');
+      setListingType('sale');
+      setExclusivity('open');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -177,6 +199,15 @@ export function UnitTypesSection({
                 <span className="font-medium">{unitType.name}</span>
                 <span className="text-xs text-muted-foreground">{formatSpecs(unitType)}</span>
               </div>
+              {unitType.features && unitType.features.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {unitType.features.map((feature) => (
+                    <Badge key={feature} variant="secondary">
+                      {feature}
+                    </Badge>
+                  ))}
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <GenerateUnitsRow
                   session={session}
@@ -246,18 +277,18 @@ export function UnitTypesSection({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unit_type_price">Price (PHP)</Label>
+                <Label htmlFor="unit_type_lot_area">Lot area (sqm)</Label>
                 <Input
-                  id="unit_type_price"
+                  id="unit_type_lot_area"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  value={lotAreaSqm}
+                  onChange={(e) => setLotAreaSqm(e.target.value)}
                 />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="unit_type_bedrooms">Bedrooms</Label>
                 <Input
@@ -281,7 +312,7 @@ export function UnitTypesSection({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unit_type_parking">Parking</Label>
+                <Label htmlFor="unit_type_parking">Parking / garage</Label>
                 <Input
                   id="unit_type_parking"
                   type="number"
@@ -291,7 +322,63 @@ export function UnitTypesSection({
                   onChange={(e) => setParkingSlots(e.target.value)}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="unit_type_storeys">Storeys</Label>
+                <Input
+                  id="unit_type_storeys"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={storeys}
+                  onChange={(e) => setStoreys(e.target.value)}
+                />
+              </div>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="unit_type_features">Features (optional)</Label>
+              <FeatureTagInput id="unit_type_features" value={features} onChange={setFeatures} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="unit_type_price">Price (PHP)</Label>
+                <Input
+                  id="unit_type_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="unit_type_listing_type">Listing type</Label>
+                <select
+                  id="unit_type_listing_type"
+                  value={listingType}
+                  onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
+                  className={selectClass}
+                >
+                  <option value="sale">Sale</option>
+                  <option value="rent">Rent</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="unit_type_exclusivity">Exclusivity</Label>
+                <select
+                  id="unit_type_exclusivity"
+                  value={exclusivity}
+                  onChange={(e) => setExclusivity(e.target.value as 'exclusive' | 'open')}
+                  className={selectClass}
+                >
+                  <option value="open">Open (non-exclusive)</option>
+                  <option value="exclusive">Exclusive</option>
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-tertiary-foreground">
+              Price/listing type/exclusivity are what each generated unit's listing uses — every
+              generated unit is created with an active listing immediately.
+            </p>
 
             {error && (
               <p role="alert" className="text-sm text-destructive">

@@ -32,9 +32,10 @@ type Props = {
 const selectClass = 'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm';
 
 // tb-listings-create-001: creates a listing (type, price) against a property.
-// Always creates as 'draft' and always assigns agent_id = the caller
-// (request.user!.id server-side) -- there's no cross-agent assignment in
-// this tracer bullet's scope.
+// Always assigns agent_id = the caller (request.user!.id server-side) --
+// there's no cross-agent assignment in this tracer bullet's scope.
+// tb-listings-property-specs-001: creates as 'active' now, not 'draft' -- see
+// POST /listings' own comment in listings.ts for why.
 //
 // tb-listings-lifecycle-001 (UX follow-up): renders inside a FloatingPanel
 // (bottom-right, Messenger/Gmail-compose style) instead of a full-page route

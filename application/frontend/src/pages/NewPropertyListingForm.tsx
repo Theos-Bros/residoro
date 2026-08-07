@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { FeatureTagInput } from '@/components/ui/feature-tag-input';
 
 type Props = {
   session: Session;
@@ -46,6 +47,18 @@ export function NewPropertyListingForm({ session }: Props) {
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [askPrice, setAskPrice] = useState('');
+
+  // tb-listings-property-specs-001: previously entirely absent from this
+  // form even though POST /properties has accepted them since
+  // tb-listings-new-property-001 -- all optional, all number-input strings
+  // like askPrice above.
+  const [bedrooms, setBedrooms] = useState('');
+  const [bathrooms, setBathrooms] = useState('');
+  const [parkingSlots, setParkingSlots] = useState('');
+  const [floorAreaSqm, setFloorAreaSqm] = useState('');
+  const [lotAreaSqm, setLotAreaSqm] = useState('');
+  const [storeys, setStoreys] = useState('');
+  const [features, setFeatures] = useState<string[]>([]);
 
   // tb-properties-project-001: a Project picker only makes sense for
   // developer-owned properties -- resale properties (individual/company)
@@ -150,6 +163,27 @@ export function NewPropertyListingForm({ session }: Props) {
       return;
     }
 
+    // tb-listings-property-specs-001: every spec field is optional, so an
+    // empty string means "not provided" (undefined), not zero.
+    const specFields: Record<string, [string, string]> = {
+      bedrooms: [bedrooms, 'Bedrooms'],
+      bathrooms: [bathrooms, 'Bathrooms'],
+      parking_slots: [parkingSlots, 'Parking/garage slots'],
+      floor_area_sqm: [floorAreaSqm, 'Floor area'],
+      lot_area_sqm: [lotAreaSqm, 'Lot area'],
+      storeys: [storeys, 'Storeys'],
+    };
+    const numericSpecs: Record<string, number> = {};
+    for (const [field, [raw, label]] of Object.entries(specFields)) {
+      if (!raw) continue;
+      const numeric = Number(raw);
+      if (!Number.isFinite(numeric) || numeric < 0) {
+        setError(`${label} must be a non-negative number.`);
+        return;
+      }
+      numericSpecs[field] = numeric;
+    }
+
     setSubmitting(true);
     try {
       const property = await createProperty(session.access_token, {
@@ -162,6 +196,13 @@ export function NewPropertyListingForm({ session }: Props) {
         price: numericAskPrice,
         project_id: ownerType === 'developer' && projectId ? projectId : undefined,
         owner_id: ownerId || undefined,
+        bedrooms: numericSpecs.bedrooms,
+        bathrooms: numericSpecs.bathrooms,
+        parking_slots: numericSpecs.parking_slots,
+        floor_area_sqm: numericSpecs.floor_area_sqm,
+        lot_area_sqm: numericSpecs.lot_area_sqm,
+        storeys: numericSpecs.storeys,
+        features: features.length > 0 ? features : undefined,
       });
 
       await createListing(session.access_token, {
@@ -308,6 +349,96 @@ export function NewPropertyListingForm({ session }: Props) {
                   value={askPrice}
                   onChange={(e) => setAskPrice(e.target.value)}
                   className="font-mono"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex flex-col gap-4 pt-6">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold">Specs</span>
+                <span className="text-xs text-tertiary-foreground">
+                  What the property actually offers — all optional, fill in what you know.
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="bedrooms">Bedrooms</Label>
+                  <Input
+                    id="bedrooms"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={bedrooms}
+                    onChange={(e) => setBedrooms(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="bathrooms">Bathrooms</Label>
+                  <Input
+                    id="bathrooms"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={bathrooms}
+                    onChange={(e) => setBathrooms(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="parking_slots">Parking / garage slots</Label>
+                  <Input
+                    id="parking_slots"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={parkingSlots}
+                    onChange={(e) => setParkingSlots(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="floor_area_sqm">Floor area (sqm)</Label>
+                  <Input
+                    id="floor_area_sqm"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={floorAreaSqm}
+                    onChange={(e) => setFloorAreaSqm(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="lot_area_sqm">Lot area (sqm)</Label>
+                  <Input
+                    id="lot_area_sqm"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={lotAreaSqm}
+                    onChange={(e) => setLotAreaSqm(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="storeys">Storeys</Label>
+                  <Input
+                    id="storeys"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={storeys}
+                    onChange={(e) => setStoreys(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="features">Features (optional)</Label>
+                <FeatureTagInput
+                  id="features"
+                  value={features}
+                  onChange={setFeatures}
+                  placeholder="e.g. Swimming Pool, Balcony — press Enter to add"
                 />
               </div>
             </CardContent>

@@ -59,8 +59,12 @@ export type ProjectUnitType = {
   bedrooms: number | null;
   bathrooms: number | null;
   parking_slots: number | null;
+  storeys: number | null;
+  features: string[] | null;
   price: number | null;
   price_currency: string;
+  listing_type: 'sale' | 'rent';
+  exclusivity: 'exclusive' | 'open';
 };
 
 // tb-properties-unit-leasing-001: a third, independent copy of this same
@@ -172,8 +176,12 @@ export async function createUnitType(
     bedrooms?: number;
     bathrooms?: number;
     parking_slots?: number;
+    storeys?: number;
+    features?: string[];
     price?: number;
     price_currency?: string;
+    listing_type?: 'sale' | 'rent';
+    exclusivity?: 'exclusive' | 'open';
   },
 ): Promise<ProjectUnitType> {
   const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types`, {
@@ -235,7 +243,7 @@ export async function generateUnits(
   projectId: string,
   unitTypeId: string,
   unitNumbers: string[],
-): Promise<{ created: number; property_ids: string[] }> {
+): Promise<{ created: number; property_ids: string[]; listings_created: number }> {
   const response = await fetch(`${BACKEND_URL}/projects/${projectId}/unit-types/${unitTypeId}/generate-units`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },

@@ -23,6 +23,19 @@ import { cn } from '@/lib/utils';
 const verificationSelectClass =
   'h-7 rounded-md border border-input bg-card px-2 text-xs shadow-sm';
 
+// tb-listings-property-specs-001: compact one-line summary, omitting any
+// field that's null. Returns '—' rather than '' so it reads clearly as "no
+// specs recorded" instead of a blank table cell.
+function formatSpecsSummary(property: Property): string {
+  const parts: string[] = [];
+  if (property.bedrooms !== null) parts.push(`${property.bedrooms} BD`);
+  if (property.bathrooms !== null) parts.push(`${property.bathrooms} BA`);
+  if (property.parking_slots !== null) parts.push(`${property.parking_slots} parking`);
+  if (property.storeys !== null) parts.push(`${property.storeys} storey${property.storeys === 1 ? '' : 's'}`);
+  if (property.floor_area_sqm !== null) parts.push(`${property.floor_area_sqm} sqm`);
+  return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
 // tb-design-system-states-mobile-001: same 6-column shape as the real table
 // below (photo / title / price / status / verification / actions) so the
 // skeleton never causes a layout shift when the real rows swap in. Content
@@ -42,6 +55,9 @@ function PropertiesTableSkeleton() {
             </TableCell>
             <TableCell>
               <div className="h-3 w-3/4 rounded-full bg-muted" />
+            </TableCell>
+            <TableCell>
+              <div className="h-3 w-24 rounded-full bg-muted" />
             </TableCell>
             <TableCell className="text-right">
               <div className="ml-auto h-3 w-16 rounded-full bg-muted" />
@@ -274,6 +290,7 @@ export function PropertiesListPage({ session }: Props) {
                     {property.title}
                   </Link>
                   <span className="truncate text-sm text-muted-foreground">{property.address ?? '—'}</span>
+                  <span className="truncate text-xs text-tertiary-foreground">{formatSpecsSummary(property)}</span>
                 </div>
                 {property.cover_photo_url ? (
                   <a
@@ -355,6 +372,7 @@ export function PropertiesListPage({ session }: Props) {
               <TableRow>
                 <TableHead className="w-16" />
                 <TableHead>Title</TableHead>
+                <TableHead>Specs</TableHead>
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Verification</TableHead>
@@ -384,6 +402,7 @@ export function PropertiesListPage({ session }: Props) {
                       {property.title}
                     </Link>
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{formatSpecsSummary(property)}</TableCell>
                   <TableCell className="text-right font-mono text-sm">
                     {property.price !== null
                       ? `${property.price_currency} ${property.price.toLocaleString()}`

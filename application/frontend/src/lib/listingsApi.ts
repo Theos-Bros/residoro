@@ -20,6 +20,15 @@ export type Property = {
   status: string;
   verification_status: VerificationStatus;
   cover_photo_url?: string;
+  // tb-listings-property-specs-001: previously fetched by nobody -- GET
+  // /properties now selects these too, so rows can show a specs summary.
+  floor_area_sqm: number | null;
+  lot_area_sqm: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  parking_slots: number | null;
+  storeys: number | null;
+  features: string[] | null;
 };
 
 export type PropertyType =
@@ -71,6 +80,15 @@ export type Listing = {
   // tb-listings-properties-keyword-search-001: added so ListingsPage's
   // keyword filter can match against address alongside property_title.
   property_address: string | null;
+  // tb-listings-property-specs-001: embedded from the same properties(...)
+  // sub-select as property_title/property_address above.
+  property_floor_area_sqm: number | null;
+  property_lot_area_sqm: number | null;
+  property_bedrooms: number | null;
+  property_bathrooms: number | null;
+  property_parking_slots: number | null;
+  property_storeys: number | null;
+  property_features: string[] | null;
   agent_id: string;
   listing_type: 'sale' | 'rent';
   price: number;
@@ -219,6 +237,8 @@ export async function createProperty(
     bedrooms?: number;
     bathrooms?: number;
     parking_slots?: number;
+    storeys?: number;
+    features?: string[];
     price?: number;
     price_currency?: string;
     project_id?: string;
@@ -254,6 +274,8 @@ export async function updateProperty(
     bedrooms?: number;
     bathrooms?: number;
     parking_slots?: number;
+    storeys?: number;
+    features?: string[];
     price?: number;
     price_currency?: string;
     status?: PropertyStatus;
@@ -284,7 +306,11 @@ export async function createListing(
     authority_starts_at?: string;
     authority_expires_at?: string | null;
   },
-): Promise<Listing> {
+  // tb-listings-property-specs-001: listings now insert directly as 'active',
+  // so the same exclusivity conflict-check activation already ran can now
+  // fire on creation too -- `warning` mirrors updateListingStatus's own
+  // optional field for the identical non-blocking case.
+): Promise<Listing & { warning?: string }> {
   const response = await fetch(`${BACKEND_URL}/listings`, {
     method: 'POST',
     headers: {

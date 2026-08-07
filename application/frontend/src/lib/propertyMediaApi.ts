@@ -14,6 +14,8 @@ export type PropertyDetail = {
   bedrooms: number | null;
   bathrooms: number | null;
   parking_slots: number | null;
+  storeys: number | null;
+  features: string[] | null;
   price: number | null;
   price_currency: string;
   status: string;

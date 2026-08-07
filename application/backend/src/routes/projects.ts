@@ -24,6 +24,12 @@ const PROPERTY_TYPES = [
 const PROPERTY_STATUSES = ['available', 'reserved', 'sold', 'off_market', 'leased'] as const;
 type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
 
+// tb-listings-property-specs-001: mirrors listings.ts's own LISTING_TYPES/
+// EXCLUSIVITY_VALUES -- same hand-kept-in-sync precedent as PROPERTY_STATUSES
+// above, since there's no shared-types package in this codebase.
+const LISTING_TYPES = ['sale', 'rent'] as const;
+const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
+
 function emptyStatusCounts(): Record<PropertyStatus, number> {
   return { available: 0, reserved: 0, sold: 0, off_market: 0, leased: 0 };
 }
@@ -63,8 +69,12 @@ type CreateUnitTypeBody = {
   bedrooms?: number;
   bathrooms?: number;
   parking_slots?: number;
+  storeys?: number;
+  features?: string[];
   price?: number;
   price_currency?: string;
+  listing_type?: string;
+  exclusivity?: string;
 };
 
 type GenerateUnitsBody = {
@@ -85,8 +95,12 @@ type ProjectUnitTypeRow = {
   bedrooms: number | null;
   bathrooms: number | null;
   parking_slots: number | null;
+  storeys: number | null;
+  features: string[] | null;
   price: number | null;
   price_currency: string;
+  listing_type: string;
+  exclusivity: string;
 };
 
 // tb-properties-bulk-units-001: every unit-types/generate-units route re-
@@ -367,7 +381,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       const { data, error } = await supabase
         .from('project_unit_types')
         .select(
-          'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency',
+          'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features, price, price_currency, listing_type, exclusivity',
         )
         .eq('project_id', request.params.id)
         .order('created_at', { ascending: true });
@@ -407,8 +421,12 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         bedrooms,
         bathrooms,
         parking_slots,
+        storeys,
+        features,
         price,
         price_currency,
+        listing_type,
+        exclusivity,
       } = request.body ?? {};
 
       if (!name || !name.trim() || !property_type) {
@@ -417,12 +435,24 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       if (!PROPERTY_TYPES.includes(property_type as (typeof PROPERTY_TYPES)[number])) {
         return reply.status(400).send({ error: `property_type must be one of: ${PROPERTY_TYPES.join(', ')}` });
       }
+      if (listing_type !== undefined && !LISTING_TYPES.includes(listing_type as (typeof LISTING_TYPES)[number])) {
+        return reply.status(400).send({ error: "listing_type must be 'sale' or 'rent'" });
+      }
+      if (
+        exclusivity !== undefined &&
+        !EXCLUSIVITY_VALUES.includes(exclusivity as (typeof EXCLUSIVITY_VALUES)[number])
+      ) {
+        return reply.status(400).send({ error: "exclusivity must be 'exclusive' or 'open'" });
+      }
 
-      const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price };
+      const numericFields = { floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, price };
       for (const [field, value] of Object.entries(numericFields)) {
         if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
           return reply.status(400).send({ error: `${field} must be a non-negative number` });
         }
+      }
+      if (features !== undefined && (!Array.isArray(features) || features.some((f) => typeof f !== 'string'))) {
+        return reply.status(400).send({ error: 'features must be an array of strings' });
       }
 
       const { data: unitType, error } = await supabase
@@ -438,11 +468,15 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
           bedrooms,
           bathrooms,
           parking_slots,
+          storeys,
+          features: features ?? null,
           price,
           price_currency: price_currency ?? 'PHP',
+          ...(listing_type !== undefined ? { listing_type } : {}),
+          ...(exclusivity !== undefined ? { exclusivity } : {}),
         })
         .select(
-          'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency',
+          'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features, price, price_currency, listing_type, exclusivity',
         )
         .single();
 
@@ -496,7 +530,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       const { data: unitType, error: unitTypeError } = await supabase
         .from('project_unit_types')
         .select(
-          'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, price, price_currency',
+          'id, project_id, name, property_type, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features, price, price_currency, listing_type, exclusivity',
         )
         .eq('id', request.params.unitTypeId)
         .eq('project_id', request.params.id)
@@ -508,6 +542,15 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
       }
       if (!unitType) {
         return reply.status(404).send({ error: 'Unit type not found for this project' });
+      }
+      // tb-listings-property-specs-001: each generated unit now also gets a
+      // listing, and listings.price is NOT NULL -- fail fast with a clear
+      // message rather than letting the listings insert below throw a raw
+      // constraint error after the properties rows already exist.
+      if (unitType.price == null) {
+        return reply
+          .status(400)
+          .send({ error: 'This unit type has no price set -- add one before generating units' });
       }
 
       // tb-properties-project-rollup-001 follow-up (unit removal): unit_number
@@ -543,6 +586,8 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         bedrooms: unitType.bedrooms,
         bathrooms: unitType.bathrooms,
         parking_slots: unitType.parking_slots,
+        storeys: unitType.storeys,
+        features: unitType.features,
         price: unitType.price,
         price_currency: unitType.price_currency,
       }));
@@ -557,9 +602,39 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not generate units' });
       }
 
+      // tb-listings-property-specs-001: bulk-generated units previously got
+      // no listing at all -- an agent had to open each one individually and
+      // create a listing by hand. Each generated property now gets a
+      // matching listing, active immediately, sourced from the unit type's
+      // own listing_type/exclusivity/price (validated non-null above).
+      const listingRows = created.map((property: { id: string }) => ({
+        tenant_id: request.user!.tenantId,
+        property_id: property.id,
+        agent_id: request.user!.id,
+        listing_type: unitType.listing_type,
+        price: unitType.price as number,
+        price_currency: unitType.price_currency,
+        exclusivity: unitType.exclusivity,
+        authority_starts_at: new Date().toISOString(),
+        authority_expires_at: null,
+        status: 'active',
+      }));
+
+      const { data: createdListings, error: listingsInsertError } = await supabase
+        .from('listings')
+        .insert(listingRows)
+        .select('id');
+
+      if (listingsInsertError) {
+        // Properties already exist at this point -- log and report a partial
+        // result rather than claiming failure for rows that did get created.
+        request.log.error(listingsInsertError);
+      }
+
       return reply.status(201).send({
         created: created.length,
         property_ids: created.map((p: { id: string }) => p.id),
+        listings_created: createdListings?.length ?? 0,
       });
     },
   );

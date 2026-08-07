@@ -64,6 +64,20 @@ const EXPIRING_SOON_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 // Purely a read-only client-side derivation over authority_expires_at -- does
 // not touch, and is independent of, the listing's `status` field or the
 // backend's autoExpireLapsedListings sweep.
+// tb-listings-property-specs-001: compact one-line summary of the listing's
+// underlying property specs, omitting any field that's null.
+function formatSpecsSummary(listing: Listing): string {
+  const parts: string[] = [];
+  if (listing.property_bedrooms !== null) parts.push(`${listing.property_bedrooms} BD`);
+  if (listing.property_bathrooms !== null) parts.push(`${listing.property_bathrooms} BA`);
+  if (listing.property_parking_slots !== null) parts.push(`${listing.property_parking_slots} parking`);
+  if (listing.property_storeys !== null) {
+    parts.push(`${listing.property_storeys} storey${listing.property_storeys === 1 ? '' : 's'}`);
+  }
+  if (listing.property_floor_area_sqm !== null) parts.push(`${listing.property_floor_area_sqm} sqm`);
+  return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
 function expiryBucket(listing: Listing, now: number): ExpiryBucket {
   const expiresAt = listing.authority_expires_at ? new Date(listing.authority_expires_at).getTime() : null;
   if (expiresAt !== null && expiresAt < now) return 'expired';
@@ -200,6 +214,7 @@ export function ListingsPage({ session }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>Property</TableHead>
+                <TableHead>Specs</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Exclusivity</TableHead>
@@ -219,6 +234,7 @@ export function ListingsPage({ session }: Props) {
                   )}
                 >
                   <TableCell className="font-medium">{listing.property_title}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{formatSpecsSummary(listing)}</TableCell>
                   <TableCell className="capitalize">{listing.listing_type}</TableCell>
                   <TableCell>
                     {listing.price_currency} {listing.price.toLocaleString()}
