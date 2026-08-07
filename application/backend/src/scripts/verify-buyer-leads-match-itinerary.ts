@@ -224,7 +224,7 @@ async function main() {
     console.log('\n--- 7. Generate itinerary: fails clearly (not silently) with no Google credentials configured ---');
     const itineraryRes = await call(agentToken, `/buyer-requirements/${leadId}/itinerary`, { method: 'POST', body: JSON.stringify({ items }) });
     if (itineraryRes.status !== 501) throw new Error(`FAIL: expected 501 (not configured), got ${itineraryRes.status}: ${JSON.stringify(itineraryRes.body)}`);
-    if (!itineraryRes.body.error || !itineraryRes.body.error.includes('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS')) {
+    if (!itineraryRes.body.error || !itineraryRes.body.error.includes('GOOGLE_APPLICATION_CREDENTIALS')) {
       throw new Error(`FAIL: expected a clear credential-gap error message, got: ${JSON.stringify(itineraryRes.body)}`);
     }
     console.log(`PASS (clear 501: ${itineraryRes.body.error})`);

@@ -6,62 +6,48 @@ import { google } from 'googleapis';
 // shared Residoro-owned service account (not per-agent OAuth), then shared
 // out to the requesting agent.
 //
-// Credential storage decision (the doc's own open question, resolved here):
-// a single backend-only env var, GOOGLE_SERVICE_ACCOUNT_CREDENTIALS, holding
-// the full GCP service-account JSON key as a one-line JSON string. This
-// codebase's existing `vault.decrypted_secrets` pattern (see
-// 20260722120000_contract_expiry.sql, 20260727110000_listing_authority_expiry_notification.sql)
-// is Postgres-side only -- used exclusively by pg_net/pg_cron jobs calling
-// Supabase Edge Functions from *inside* the database, never by the Node
-// backend, which has read every other credential (SUPABASE_SERVICE_ROLE_KEY,
-// RESEND_API_KEY, etc.) directly from process.env via dotenv since day one
-// (see supabaseAdmin.ts, email.ts). This integration lives entirely in the
-// Node backend, so following THAT precedent -- not vault -- is the actual
-// "prefer consistency with what fits" call: reaching into Postgres via an
-// extra service-role round trip just to fetch a credential the backend could
-// read from its own process env would be inconsistent with every other
-// secret this backend already owns.
+// Credential storage decision (tb-buyer-leads-itinerary-credential-path-001,
+// superseding tb-buyer-leads-match-itinerary-001's original choice): a
+// backend-only env var, GOOGLE_APPLICATION_CREDENTIALS, holding the
+// filesystem path to a GCP service-account JSON key file -- loaded via
+// google.auth.GoogleAuth({ keyFile }), the googleapis package's standard
+// ADC-style loader, rather than the key's full JSON contents pasted as a
+// one-line string into the env var itself. This keeps the raw key out of a
+// routinely-read `.env` file; it is not a security boundary against anyone
+// who already has shell access to the backend, since the key file still
+// lives readably on the same disk. Everything else about where this
+// backend reads credentials from (process.env via dotenv, not
+// `vault.decrypted_secrets` -- see supabaseAdmin.ts, email.ts) is unchanged
+// from the original decision.
 //
 // CREDENTIAL GAP (see tracer bullet doc + final report): this agent has no
-// real GCP project/service account and cannot provision one. Set
-// GOOGLE_SERVICE_ACCOUNT_CREDENTIALS in application/backend/.env to the full
-// JSON key downloaded from a GCP service account (IAM & Admin > Service
-// Accounts > Keys > Add key > JSON) that has the Google Docs API and Google
-// Drive API enabled on its project, to finish verifying this end-to-end.
+// real GCP project/service account and cannot provision one. The user sets
+// GOOGLE_APPLICATION_CREDENTIALS in application/backend/.env himself, to
+// the absolute path of a JSON key file downloaded from a GCP service
+// account (IAM & Admin > Service Accounts > Keys > Add key > JSON) that has
+// the Google Docs API and Google Drive API enabled on its project, to
+// finish verifying this end-to-end.
 
 const SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file'];
 
 export class GoogleDocsNotConfiguredError extends Error {
   constructor() {
     super(
-      'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS is not set -- itinerary generation needs a real GCP service-account JSON key (see googleDocs.ts header comment).',
+      'GOOGLE_APPLICATION_CREDENTIALS is not set -- itinerary generation needs a real GCP service-account JSON key file path (see googleDocs.ts header comment).',
     );
     this.name = 'GoogleDocsNotConfiguredError';
   }
 }
 
 export function isGoogleDocsConfigured(): boolean {
-  return !!process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS;
+  return !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
 }
 
 function getAuth() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS;
-  if (!raw) throw new GoogleDocsNotConfiguredError();
+  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!keyFile) throw new GoogleDocsNotConfiguredError();
 
-  let credentials: { client_email: string; private_key: string };
-  try {
-    credentials = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS is set but is not valid JSON -- expected the full GCP service-account key file contents as a one-line JSON string.',
-    );
-  }
-
-  return new google.auth.JWT({
-    email: credentials.client_email,
-    key: credentials.private_key,
-    scopes: SCOPES,
-  });
+  return new google.auth.GoogleAuth({ keyFile, scopes: SCOPES });
 }
 
 export type ItineraryItem = {
