@@ -32,6 +32,7 @@ import { registerCommissionRoutes } from './routes/commission.js';
 import { registerProfileRoutes } from './routes/profile.js';
 import { registerBillingRoutes } from './routes/billing.js';
 import { registerNotificationsRoutes } from './routes/notifications.js';
+import { registerSearchRoutes } from './routes/search.js';
 
 const app = Fastify({ logger: true });
 
@@ -67,6 +68,7 @@ await registerCommissionRoutes(app);
 await registerProfileRoutes(app);
 await registerBillingRoutes(app);
 await registerNotificationsRoutes(app);
+await registerSearchRoutes(app);
 
 const port = Number(process.env.PORT ?? 4000);
 

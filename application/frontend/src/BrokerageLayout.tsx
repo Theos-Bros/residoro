@@ -9,6 +9,7 @@ import { exportData } from './lib/workspaceApi';
 import { AuthPage } from './pages/AuthPage';
 import { ContractWarningBanner } from './components/ContractWarningBanner';
 import { ContractNotificationPanel } from './components/ContractNotificationPanel';
+import { GlobalSearchBox } from './components/GlobalSearchBox';
 import { Button } from './components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from './components/ui/sheet';
 import { cn } from './lib/utils';
@@ -198,14 +199,21 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-end gap-2 border-b bg-card px-4 sm:px-6">
-          <span className="hidden text-sm text-tertiary-foreground sm:inline">{session.user.email}</span>
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
-            {exporting ? 'Exporting…' : 'Export My Data'}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
-            Sign out
-          </Button>
+        <header className="flex h-14 items-center justify-between gap-2 border-b bg-card px-4 sm:px-6">
+          {/* tb-search-core-entities-001: header-level, not a nav link --
+              /search already means cap-buyer-leads-001's matching search. */}
+          <div className="hidden flex-1 sm:flex">
+            <GlobalSearchBox session={session} />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden text-sm text-tertiary-foreground sm:inline">{session.user.email}</span>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+              {exporting ? 'Exporting…' : 'Export My Data'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
+              Sign out
+            </Button>
+          </div>
         </header>
         {exportError && (
           <p role="alert" className="bg-card px-4 pb-2 text-sm text-destructive sm:px-6">
