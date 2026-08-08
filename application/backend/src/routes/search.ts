@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 
 type GlobalSearchResult = {
-  entity_type: 'property' | 'listing' | 'contact' | 'task' | 'project';
+  entity_type: 'property' | 'listing' | 'contact' | 'lead' | 'inquiry' | 'task' | 'project';
   entity_id: string;
   title: string;
   subtitle: string | null;

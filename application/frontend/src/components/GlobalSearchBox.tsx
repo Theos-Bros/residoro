@@ -14,6 +14,8 @@ const ENTITY_LABELS: Record<GlobalSearchEntityType, string> = {
   property: 'Properties',
   listing: 'Listings',
   contact: 'Contacts',
+  lead: 'Leads',
+  inquiry: 'Inquiries',
   task: 'Tasks',
   project: 'Projects',
 };
@@ -69,10 +71,19 @@ export function GlobalSearchBox({ session }: Props) {
       navigate(`/projects/${result.entity_id}`);
       return;
     }
-    const routeByType: Record<Exclude<GlobalSearchEntityType, 'project'>, string> = {
+    // 'lead' reuses LeadsPage.tsx's existing location.state.openLeadId
+    // deep-link convention (tb-calendar-schedule-001's precedent) -- the
+    // only one of these seven entities whose list page already supports
+    // auto-opening a specific record's detail panel from outside itself.
+    if (result.entity_type === 'lead') {
+      navigate('/leads', { state: { openLeadId: result.entity_id } });
+      return;
+    }
+    const routeByType: Record<Exclude<GlobalSearchEntityType, 'project' | 'lead'>, string> = {
       property: '/properties',
       listing: '/listings',
       contact: '/contacts',
+      inquiry: '/leads',
       task: '/tasks',
     };
     navigate(routeByType[result.entity_type]);
@@ -82,7 +93,7 @@ export function GlobalSearchBox({ session }: Props) {
     (acc[r.entity_type] ??= []).push(r);
     return acc;
   }, {});
-  const groupOrder: GlobalSearchEntityType[] = ['property', 'listing', 'contact', 'task', 'project'];
+  const groupOrder: GlobalSearchEntityType[] = ['property', 'listing', 'contact', 'lead', 'inquiry', 'task', 'project'];
 
   return (
     <div ref={containerRef} className="relative w-full max-w-sm">

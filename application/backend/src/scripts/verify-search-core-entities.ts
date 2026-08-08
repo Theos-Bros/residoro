@@ -3,12 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 // tb-search-core-entities-001 DoD verification: seeds one distinctively-named
-// row per TB1 entity (property, contact, task, project; a listing pointed at
-// the seeded property covers the "listing via its property join" case), hits
-// the real GET /global-search HTTP route as a signed-in tenant user, confirms
-// each shows up under the right entity_type, and confirms a second tenant's
-// signed-in session does NOT see this tenant's seeded rows (cross-tenant
-// isolation, via RLS -- same posture as verify-rls-scoped-client.ts).
+// row per searched entity (property, contact, task, project; a listing
+// pointed at the seeded property covers the "listing via its property join"
+// case; an inquiry and a buyer_requirement/lead cover the search_leads.sql
+// follow-up -- buyer_requirements has no name of its own, searched via its
+// contact join same as listings), hits the real GET /global-search HTTP
+// route as a signed-in tenant user, confirms each shows up under the right
+// entity_type, and confirms a second tenant's signed-in session does NOT see
+// this tenant's seeded rows (cross-tenant isolation, via RLS -- same posture
+// as verify-rls-scoped-client.ts).
 // Run via (from application/backend): npx tsx src/scripts/verify-search-core-entities.ts
 const EMAIL = process.env.MOBILE_TEST_ACCOUNT_EMAIL;
 const PASSWORD = process.env.MOBILE_TEST_ACCOUNT_PASSWORD;
@@ -81,6 +84,27 @@ async function main() {
       .single();
     createdIds.push({ table: 'projects', id: project!.id });
 
+    const { data: inquiry } = await supabaseAdmin
+      .from('inquiries')
+      .insert({ tenant_id: tenantId, buyer_name: `${MARKER} Inquiry` })
+      .select('id')
+      .single();
+    createdIds.push({ table: 'inquiries', id: inquiry!.id });
+
+    const { data: leadContact } = await supabaseAdmin
+      .from('contacts')
+      .insert({ tenant_id: tenantId, name: `${MARKER} Lead`, type: 'buyer_lead' })
+      .select('id')
+      .single();
+    createdIds.push({ table: 'contacts', id: leadContact!.id });
+
+    const { data: lead } = await supabaseAdmin
+      .from('buyer_requirements')
+      .insert({ tenant_id: tenantId, contact_id: leadContact!.id })
+      .select('id')
+      .single();
+    createdIds.push({ table: 'buyer_requirements', id: lead!.id });
+
     console.log('Seeded test rows:', createdIds.map((r) => `${r.table}:${r.id}`).join(', '));
 
     // Real end-to-end call: the actual HTTP route, as a real signed-in session.
@@ -94,16 +118,16 @@ async function main() {
     console.log(JSON.stringify(body, null, 2));
 
     const byType = new Set(body.results.map((r) => r.entity_type));
-    const expectedTypes = ['property', 'listing', 'contact', 'task', 'project'];
+    const expectedTypes = ['property', 'listing', 'contact', 'lead', 'inquiry', 'task', 'project'];
     const missing = expectedTypes.filter((t) => !byType.has(t));
     if (missing.length > 0) {
       console.error(`\nFAIL: missing entity_type(s) in results: ${missing.join(', ')}`);
       process.exit(1);
     }
-    // Two contacts were seeded (Contact + Developer) -- both must appear.
+    // Three contacts were seeded (Contact, Developer, Lead's own contact) -- all must appear.
     const contactTitles = body.results.filter((r) => r.entity_type === 'contact').map((r) => r.title);
     if (!contactTitles.includes(`${MARKER} Contact`) || !contactTitles.includes(`${MARKER} Developer`)) {
-      console.error('\nFAIL: expected both seeded contacts in the contact group, got:', contactTitles);
+      console.error('\nFAIL: expected both seeded plain contacts in the contact group, got:', contactTitles);
       process.exit(1);
     }
     const listingResult = body.results.find((r) => r.entity_type === 'listing');
@@ -111,7 +135,17 @@ async function main() {
       console.error('\nFAIL: listing result should carry its joined property title, got:', listingResult);
       process.exit(1);
     }
-    console.log('\nPASS: all five entity types matched, listing carried its property title, both contacts matched.');
+    const leadResult = body.results.find((r) => r.entity_type === 'lead');
+    if (leadResult?.title !== `${MARKER} Lead`) {
+      console.error('\nFAIL: lead result should carry its joined contact name, got:', leadResult);
+      process.exit(1);
+    }
+    const inquiryResult = body.results.find((r) => r.entity_type === 'inquiry');
+    if (inquiryResult?.title !== `${MARKER} Inquiry`) {
+      console.error('\nFAIL: inquiry result should carry its own buyer_name, got:', inquiryResult);
+      process.exit(1);
+    }
+    console.log('\nPASS: all seven entity types matched, listing/lead carried their joined title, contacts matched.');
 
     // Cross-tenant isolation: a DIFFERENT tenant's session must see none of this.
     const { data: otherProfile } = await supabaseAdmin
@@ -153,11 +187,11 @@ async function main() {
       console.log('SKIPPED cross-tenant check (no second tenant found).');
     }
   } finally {
-    // Delete children before parents -- listings.property_id and
-    // projects.developer_id are both FKs with no cascade, so deleting a
-    // referenced property/contact first fails silently unless listings/
-    // projects go first.
-    const deleteOrder = ['listings', 'projects', 'properties', 'contacts', 'tasks'];
+    // Delete children before parents -- listings.property_id,
+    // projects.developer_id, and buyer_requirements.contact_id are all FKs
+    // with no cascade, so deleting a referenced property/contact first fails
+    // silently unless listings/projects/buyer_requirements go first.
+    const deleteOrder = ['listings', 'projects', 'buyer_requirements', 'properties', 'contacts', 'tasks', 'inquiries'];
     for (const table of deleteOrder) {
       for (const { table: t, id } of createdIds.filter((r) => r.table === table)) {
         const { error } = await supabaseAdmin.from(t).delete().eq('id', id);

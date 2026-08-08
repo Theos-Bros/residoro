@@ -1,6 +1,6 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
-export type GlobalSearchEntityType = 'property' | 'listing' | 'contact' | 'task' | 'project';
+export type GlobalSearchEntityType = 'property' | 'listing' | 'contact' | 'lead' | 'inquiry' | 'task' | 'project';
 
 export type GlobalSearchResult = {
   entity_type: GlobalSearchEntityType;
