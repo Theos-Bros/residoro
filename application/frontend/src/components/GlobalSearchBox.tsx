@@ -75,10 +75,16 @@ export function GlobalSearchBox({ session }: Props) {
     // deep-link convention (tb-calendar-schedule-001's precedent) -- the
     // only one of these seven entities whose list page already supports
     // auto-opening a specific record's detail panel from outside itself.
+    // highlightId rides along too, so the row behind the panel is also
+    // highlighted once the panel is closed.
     if (result.entity_type === 'lead') {
-      navigate('/leads', { state: { openLeadId: result.entity_id } });
+      navigate('/leads', { state: { openLeadId: result.entity_id, highlightId: result.entity_id } });
       return;
     }
+    // Every other entity type lands on its list page only (no per-record
+    // route/state to auto-open a detail view -- see this tracer bullet's
+    // Context) and instead scrolls to + highlights the matching row via
+    // useHighlightFromSearch, keyed off this same highlightId.
     const routeByType: Record<Exclude<GlobalSearchEntityType, 'project' | 'lead'>, string> = {
       property: '/properties',
       listing: '/listings',
@@ -86,7 +92,7 @@ export function GlobalSearchBox({ session }: Props) {
       inquiry: '/leads',
       task: '/tasks',
     };
-    navigate(routeByType[result.entity_type]);
+    navigate(routeByType[result.entity_type], { state: { highlightId: result.entity_id } });
   }
 
   const grouped = (results ?? []).reduce<Partial<Record<GlobalSearchEntityType, GlobalSearchResult[]>>>((acc, r) => {

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ContactDetailPanel } from '@/components/ContactDetailPanel';
+import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
+import { cn } from '@/lib/utils';
 
 type Props = {
   session: Session;
@@ -32,6 +34,7 @@ export function ContactsPage({ session }: Props) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['value']>('all');
   const [error, setError] = useState<string | null>(null);
   const [openContactId, setOpenContactId] = useState<string | 'new' | null>(null);
+  const { highlightedId, clearHighlight } = useHighlightFromSearch(contacts !== null);
 
   function reload() {
     fetchContacts(session.access_token, filter === 'all' ? undefined : { isCompany: filter === 'company' })
@@ -80,7 +83,15 @@ export function ContactsPage({ session }: Props) {
             </TableHeader>
             <TableBody>
               {contacts.map((contact) => (
-                <TableRow key={contact.id} className="cursor-pointer" onClick={() => setOpenContactId(contact.id)}>
+                <TableRow
+                  key={contact.id}
+                  data-row-id={contact.id}
+                  className={cn('cursor-pointer', highlightedId === contact.id && 'bg-amber-100')}
+                  onClick={() => {
+                    clearHighlight();
+                    setOpenContactId(contact.id);
+                  }}
+                >
                   <TableCell className="font-medium">{contact.name}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{contact.type}</TableCell>
                   <TableCell>

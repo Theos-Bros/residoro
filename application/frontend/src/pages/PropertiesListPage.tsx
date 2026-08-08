@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn } from '@/lib/utils';
 
 const verificationSelectClass =
@@ -149,6 +150,7 @@ export function PropertiesListPage({ session }: Props) {
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
   const [openDetailToken, setOpenDetailToken] = useState(0);
   const openDetailProperty = properties?.find((p) => p.id === openDetailId) ?? null;
+  const { highlightedId, clearHighlight } = useHighlightFromSearch(properties !== null);
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
 
@@ -400,10 +402,14 @@ export function PropertiesListPage({ session }: Props) {
               {filteredProperties.map((property) => (
                 <TableRow
                   key={property.id}
-                  onClick={() => openDetail(property.id)}
+                  data-row-id={property.id}
+                  onClick={() => {
+                    clearHighlight();
+                    openDetail(property.id);
+                  }}
                   className={cn(
                     'cursor-pointer hover:bg-muted/50',
-                    openPanel?.propertyId === property.id && 'bg-accent/60',
+                    (openPanel?.propertyId === property.id || highlightedId === property.id) && 'bg-accent/60',
                   )}
                 >
                   <TableCell onClick={(e) => e.stopPropagation()}>

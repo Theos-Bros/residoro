@@ -17,6 +17,7 @@ import { ShareDetailsModal } from '@/components/ShareDetailsModal';
 import { ShareDocketModal } from '@/components/ShareDocketModal';
 import { ListingDetailModal } from '@/components/ListingDetailModal';
 import { ListingFilterTabs, type FilterTabOption } from '@/components/ListingFilterTabs';
+import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -123,6 +124,7 @@ export function ListingsPage({ session }: Props) {
   // across a plain prop change.
   const [openDetailToken, setOpenDetailToken] = useState(0);
   const openDetailListing = listings?.find((l) => l.id === openDetailId) ?? null;
+  const { highlightedId, clearHighlight } = useHighlightFromSearch(listings !== null);
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -229,10 +231,15 @@ export function ListingsPage({ session }: Props) {
               {filteredListings.map((listing) => (
                 <TableRow
                   key={listing.id}
-                  onClick={() => openDetail(listing.id)}
+                  data-row-id={listing.id}
+                  onClick={() => {
+                    clearHighlight();
+                    openDetail(listing.id);
+                  }}
                   className={cn(
                     'cursor-pointer hover:bg-muted/50',
-                    openHistory?.propertyId === listing.property_id && 'bg-amber-100',
+                    (openHistory?.propertyId === listing.property_id || highlightedId === listing.id) &&
+                      'bg-amber-100',
                   )}
                 >
                   <TableCell className="font-medium">{listing.property_title}</TableCell>

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
+import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 
@@ -118,6 +119,7 @@ export function TasksPage({ session }: Props) {
   const [assigneeFilter, setAssigneeFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [openTaskId, setOpenTaskId] = useState<string | 'new' | null>(null);
+  const { highlightedId, clearHighlight } = useHighlightFromSearch(tasks !== null);
 
   const [quickTitle, setQuickTitle] = useState('');
   const [quickTaskType, setQuickTaskType] = useState('');
@@ -278,15 +280,23 @@ export function TasksPage({ session }: Props) {
                       return (
                         <div
                           key={task.id}
+                          data-row-id={task.id}
                           role="button"
                           tabIndex={0}
-                          onClick={() => setOpenTaskId(task.id)}
+                          onClick={() => {
+                            clearHighlight();
+                            setOpenTaskId(task.id);
+                          }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') setOpenTaskId(task.id);
+                            if (e.key === 'Enter') {
+                              clearHighlight();
+                              setOpenTaskId(task.id);
+                            }
                           }}
                           className={cn(
                             'grid min-w-[560px] cursor-pointer grid-cols-[28px_1fr_1.1fr_110px_130px] items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-muted/60',
                             i < grouped[bucket].length - 1 && 'border-b border-border/70',
+                            highlightedId === task.id && 'bg-amber-100',
                           )}
                         >
                           <button

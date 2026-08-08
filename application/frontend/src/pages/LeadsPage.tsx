@@ -20,6 +20,7 @@ import { LeadDetailPanel } from '@/components/LeadDetailPanel';
 import { BroadcastModal } from '@/components/BroadcastModal';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import type { BroadcastEntityType } from '@/lib/broadcastApi';
+import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -138,6 +139,7 @@ export function LeadsPage({ session }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(openLeadId ? { type: 'lead', id: openLeadId } : null);
   const [qualifyingInquiry, setQualifyingInquiry] = useState<Inquiry | null>(null);
+  const { highlightedId, clearHighlight } = useHighlightFromSearch(inquiries !== null && leads !== null);
 
   function reloadInquiries() {
     fetchInquiries(session.access_token)
@@ -234,8 +236,12 @@ export function LeadsPage({ session }: Props) {
             {rows.map((lead) => (
               <TableRow
                 key={lead.id}
-                className="cursor-pointer"
-                onClick={() => setOpenPanel({ type: 'lead', id: lead.id })}
+                data-row-id={lead.id}
+                className={cn('cursor-pointer', highlightedId === lead.id && 'bg-amber-100')}
+                onClick={() => {
+                  clearHighlight();
+                  setOpenPanel({ type: 'lead', id: lead.id });
+                }}
               >
                 <TableCell className="font-medium">{lead.contacts?.name ?? '—'}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
@@ -326,8 +332,12 @@ export function LeadsPage({ session }: Props) {
                 {inquiries.map((inquiry) => (
                   <TableRow
                     key={inquiry.id}
-                    className="cursor-pointer"
-                    onClick={() => setOpenPanel({ type: 'inquiry', id: inquiry.id })}
+                    data-row-id={inquiry.id}
+                    className={cn('cursor-pointer', highlightedId === inquiry.id && 'bg-amber-100')}
+                    onClick={() => {
+                      clearHighlight();
+                      setOpenPanel({ type: 'inquiry', id: inquiry.id });
+                    }}
                   >
                     <TableCell className="font-medium">{inquiry.buyer_name || '(no name)'}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
