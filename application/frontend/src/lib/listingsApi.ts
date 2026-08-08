@@ -80,6 +80,10 @@ export type Listing = {
   // tb-listings-properties-keyword-search-001: added so ListingsPage's
   // keyword filter can match against address alongside property_title.
   property_address: string | null;
+  // City isn't concatenated into property_address server-side -- kept separate
+  // since callers needing a full geocodable address (the NOAH hazard-check link)
+  // are the exception, not the common case for property_address's other uses.
+  property_city: string | null;
   // tb-listings-property-specs-001: embedded from the same properties(...)
   // sub-select as property_title/property_address above.
   property_floor_area_sqm: number | null;

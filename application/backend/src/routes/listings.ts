@@ -739,7 +739,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
     const { data, error } = await supabase
       .from('listings')
       .select(
-        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title, address, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features), contacts(name)',
+        'id, property_id, agent_id, listing_type, price, price_currency, exclusivity, authority_starts_at, authority_expires_at, status, created_at, buyer_contact_id, properties(title, address, city, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features), contacts(name)',
       )
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: false });
@@ -765,6 +765,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       properties: {
         title: string;
         address: string | null;
+        city: string | null;
         floor_area_sqm: number | null;
         lot_area_sqm: number | null;
         bedrooms: number | null;
@@ -781,6 +782,10 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       // tb-listings-properties-keyword-search-001: mirrors how property_title
       // is derived from the same properties(...) embed above.
       property_address: l.properties?.address ?? null,
+      // Kept separate from property_address (not concatenated server-side) since
+      // callers that need a search-engine-friendly full address (e.g. the NOAH
+      // hazard-check link) are the exception, not the common case.
+      property_city: l.properties?.city ?? null,
       // tb-listings-property-specs-001: same embed, so a listing row can show
       // its property's specs without a second round-trip.
       property_floor_area_sqm: l.properties?.floor_area_sqm ?? null,

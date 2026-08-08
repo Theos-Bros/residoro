@@ -50,6 +50,7 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
   const [renewDate, setRenewDate] = useState('');
   // tb-transactions-viewings-001: read-only viewing history for this listing --
   // scheduling/outcome editing only happens from the Lead side (LeadDetailPanel).
+  const [hazardCopied, setHazardCopied] = useState(false);
   const [viewings, setViewings] = useState<Viewing[]>([]);
   // tb-transactions-offers-001: read-only offer/negotiation history for this
   // listing -- recording/resolving offers only happens from the Lead side
@@ -199,6 +200,32 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
     }
   }
 
+  // Links out to UP NOAH's public hazard-lookup tool rather than embedding it --
+  // it has no deep-linking support (confirmed 2026-08-08: URL query params are
+  // ignored, all location state is client-side only), so the best we can do is
+  // copy the address for the agent to paste into NOAH's own search box.
+  // Clipboard write must happen before window.open(), not after -- once the new
+  // tab opens it steals document focus, and Clipboard.writeText() throws on an
+  // unfocused document.
+  // NOAH's own search box only geocodes on a dropdown-suggestion click -- its
+  // search/magnifying-glass button and Enter are both no-ops that silently leave
+  // the pin at NOAH's default location (confirmed 2026-08-08 against a real
+  // listing address). The on-screen instructions below call this out explicitly.
+  function handleCheckHazardRisk() {
+    const street = listing.property_address ?? listing.property_title;
+    // City is appended so NOAH's geocoder (a generic Mapbox search, not
+    // NOAH-specific) has enough context to disambiguate a street name that
+    // isn't unique nationwide -- property_address alone omits it.
+    const address = listing.property_city ? `${street}, ${listing.property_city}` : street;
+    navigator.clipboard
+      .writeText(address)
+      .then(() => setHazardCopied(true))
+      .catch(() => setHazardCopied(false))
+      .finally(() => {
+        window.open('https://noah.up.edu.ph/know-your-hazards', '_blank', 'noopener,noreferrer');
+      });
+  }
+
   return (
     <FloatingPanel
       title={mode === 'edit' ? 'Edit listing' : 'Listing details'}
@@ -345,9 +372,20 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
             </div>
           )}
 
-          <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
-            Edit
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
+              Edit
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleCheckHazardRisk}>
+              Check Hazard Risk
+            </Button>
+            {hazardCopied && (
+              <span className="text-sm text-muted-foreground">
+                Address copied — paste it into NOAH's search box, then click the matching suggestion (the search
+                button alone won't move the pin).
+              </span>
+            )}
+          </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           {warning && (
