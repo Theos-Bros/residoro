@@ -27,7 +27,7 @@ type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
 // tb-listings-property-specs-001: mirrors listings.ts's own LISTING_TYPES/
 // EXCLUSIVITY_VALUES -- same hand-kept-in-sync precedent as PROPERTY_STATUSES
 // above, since there's no shared-types package in this codebase.
-const LISTING_TYPES = ['sale', 'rent'] as const;
+const LISTING_TYPES = ['sale', 'lease'] as const;
 const EXCLUSIVITY_VALUES = ['exclusive', 'open'] as const;
 
 function emptyStatusCounts(): Record<PropertyStatus, number> {
@@ -436,7 +436,7 @@ export async function registerProjectsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: `property_type must be one of: ${PROPERTY_TYPES.join(', ')}` });
       }
       if (listing_type !== undefined && !LISTING_TYPES.includes(listing_type as (typeof LISTING_TYPES)[number])) {
-        return reply.status(400).send({ error: "listing_type must be 'sale' or 'rent'" });
+        return reply.status(400).send({ error: "listing_type must be 'sale' or 'lease'" });
       }
       if (
         exclusivity !== undefined &&

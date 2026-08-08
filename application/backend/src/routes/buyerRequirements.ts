@@ -464,7 +464,7 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
 
       // tb-buyer-leads-revisit-page-001: whether lease_end_date is required
       // is derived from the won listing's own listing_type, not passed by the
-      // client -- a rent-type won deal is a lease and needs a lease-end date
+      // client -- a lease-type won deal is a lease and needs a lease-end date
       // for the Revisit page; a sale-type deal never gets one, so any
       // lease_end_date sent alongside a sale is silently dropped (leniency
       // call from the tracer bullet doc: don't error on it, just ignore it).
@@ -483,7 +483,7 @@ export async function registerBuyerRequirementsRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Listing not found in your workspace' });
       }
 
-      const isRental = wonListing.listing_type === 'rent';
+      const isRental = wonListing.listing_type === 'lease';
       if (isRental && !lease_end_date) {
         return reply.status(400).send({ error: 'lease_end_date is required when the won listing is a rental' });
       }

@@ -40,7 +40,7 @@ export type BuyerRequirement = RequirementFields & {
   stage: LeadStage;
   last_searched_at: string | null;
   won_listing_id: string | null;
-  // tb-buyer-leads-revisit-page-001: only ever non-null for a rent-type won
+  // tb-buyer-leads-revisit-page-001: only ever non-null for a lease-type won
   // listing -- see mark-won's server-side validation in buyerRequirements.ts.
   lease_end_date: string | null;
   created_at: string;
@@ -134,7 +134,7 @@ export async function markWon(
 }
 
 // tb-buyer-leads-revisit-page-001: a won lead's own lease term (client-facing),
-// captured on mark-won when the won listing is rent-type. Deliberately unrelated
+// captured on mark-won when the won listing is lease-type. Deliberately unrelated
 // to tb-properties-unit-leasing-001's properties.status='leased' (a developer's
 // own unit inventory) -- same word, two different concepts, no shared schema.
 export type RevisitLead = {
@@ -142,7 +142,7 @@ export type RevisitLead = {
   lease_end_date: string;
   contacts: { name: string } | null;
   listing: {
-    listing_type: 'sale' | 'rent';
+    listing_type: 'sale' | 'lease';
     price: number;
     price_currency: string;
     properties: { title: string; address: string | null; city: string | null; province: string | null } | null;

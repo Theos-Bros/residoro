@@ -63,7 +63,7 @@ export type ProjectUnitType = {
   features: string[] | null;
   price: number | null;
   price_currency: string;
-  listing_type: 'sale' | 'rent';
+  listing_type: 'sale' | 'lease';
   exclusivity: 'exclusive' | 'open';
 };
 
@@ -180,7 +180,7 @@ export async function createUnitType(
     features?: string[];
     price?: number;
     price_currency?: string;
-    listing_type?: 'sale' | 'rent';
+    listing_type?: 'sale' | 'lease';
     exclusivity?: 'exclusive' | 'open';
   },
 ): Promise<ProjectUnitType> {

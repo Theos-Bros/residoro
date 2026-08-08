@@ -16,9 +16,9 @@
 
 export type Intent = 'buy' | 'lease';
 
-const INTENT_TO_LISTING_TYPE: Record<Intent, 'sale' | 'rent'> = {
+const INTENT_TO_LISTING_TYPE: Record<Intent, 'sale' | 'lease'> = {
   buy: 'sale',
-  lease: 'rent',
+  lease: 'lease',
 };
 
 export type MatchableField = 'intent' | 'property_type' | 'budget' | 'location' | 'bedrooms' | 'bathrooms' | 'area';

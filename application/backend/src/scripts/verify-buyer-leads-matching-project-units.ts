@@ -112,7 +112,7 @@ async function main() {
       if (status !== 'available') {
         const patchBody: Record<string, unknown> = { status };
         if (status === 'leased') {
-          patchBody.lease_monthly_rent = 30000;
+          patchBody.lease_monthly_amount = 30000;
           patchBody.lease_term_months = 12;
         }
         const patchRes = await call(`/properties/${propRes.body.id}`, { method: 'PATCH', body: JSON.stringify(patchBody) });
@@ -238,6 +238,10 @@ async function main() {
     await supabaseAdmin.from('workspace_sharing_settings').delete().eq('tenant_id', tenantId);
     await supabaseAdmin.from('workspace_performance_settings').delete().eq('tenant_id', tenantId);
     await supabaseAdmin.from('workspace_matching_settings').delete().eq('tenant_id', tenantId);
+    // tb-commission-structure-001 (shipped after this script was written)
+    // added a fourth auto-provisioned-per-tenant settings row -- same
+    // no-cascade gap as the three above.
+    await supabaseAdmin.from('workspace_commission_settings').delete().eq('tenant_id', tenantId);
     await supabaseAdmin.auth.admin.deleteUser(userId);
     const { error: workspaceDeleteError } = await supabaseAdmin.from('workspaces').delete().eq('id', tenantId);
     if (workspaceDeleteError) throw new Error(`cleanup: workspace delete: ${workspaceDeleteError.message}`);

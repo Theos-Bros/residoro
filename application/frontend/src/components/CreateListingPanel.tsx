@@ -59,7 +59,7 @@ export function CreateListingPanel({
   embedded,
 }: Props) {
   const isEditing = editingListing !== undefined;
-  const [listingType, setListingType] = useState<'sale' | 'rent'>(editingListing?.listing_type ?? 'sale');
+  const [listingType, setListingType] = useState<'sale' | 'lease'>(editingListing?.listing_type ?? 'sale');
   const [price, setPrice] = useState(
     editingListing ? String(editingListing.price) : initialPrice != null ? String(initialPrice) : '',
   );
@@ -112,11 +112,11 @@ export function CreateListingPanel({
           <select
             id="listing_type"
             value={listingType}
-            onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
+            onChange={(e) => setListingType(e.target.value as 'sale' | 'lease')}
             className={selectClass}
           >
             <option value="sale">Sale</option>
-            <option value="rent">Rent</option>
+            <option value="lease">Lease</option>
           </select>
         </div>
         <div className="space-y-1.5">

@@ -161,7 +161,7 @@ export async function registerClosingsRoutes(app: FastifyInstance) {
         if (!listing) {
           return reply.status(404).send({ error: 'Listing not found in your workspace' });
         }
-        if (listing.listing_type === 'rent' && !lease_end_date) {
+        if (listing.listing_type === 'lease' && !lease_end_date) {
           return reply.status(400).send({ error: 'lease_end_date is required when the listing is a rental' });
         }
         completingListing = listing;
@@ -226,7 +226,7 @@ export async function registerClosingsRoutes(app: FastifyInstance) {
             .update({
               stage: 'won',
               won_listing_id: current.listing_id,
-              lease_end_date: completingListing?.listing_type === 'rent' ? lease_end_date : null,
+              lease_end_date: completingListing?.listing_type === 'lease' ? lease_end_date : null,
             })
             .eq('id', lead.id)
             .eq('tenant_id', request.user!.tenantId);

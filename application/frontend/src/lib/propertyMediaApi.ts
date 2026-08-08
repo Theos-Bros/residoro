@@ -19,7 +19,7 @@ export type PropertyDetail = {
   price: number | null;
   price_currency: string;
   status: string;
-  lease_monthly_rent: number | null;
+  lease_monthly_amount: number | null;
   lease_term_months: number | null;
   verification_status: VerificationStatus;
   owner_type: string;

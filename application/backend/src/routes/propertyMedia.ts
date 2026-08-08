@@ -45,7 +45,7 @@ export async function registerPropertyMediaRoutes(app: FastifyInstance) {
     const { data: property, error } = await supabase
       .from('properties')
       .select(
-        'id, title, type, address, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features, price, price_currency, status, lease_monthly_rent, lease_term_months, verification_status, owner_type, owner_id, project_id, projects(name)',
+        'id, title, type, address, city, province, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features, price, price_currency, status, lease_monthly_amount, lease_term_months, verification_status, owner_type, owner_id, project_id, projects(name)',
       )
       .eq('id', request.params.id)
       .eq('tenant_id', request.user!.tenantId)

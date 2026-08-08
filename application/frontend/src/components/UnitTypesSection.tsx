@@ -139,7 +139,7 @@ export function UnitTypesSection({
   const [storeys, setStoreys] = useState('');
   const [features, setFeatures] = useState<string[]>([]);
   const [price, setPrice] = useState('');
-  const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
+  const [listingType, setListingType] = useState<'sale' | 'lease'>('sale');
   const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -355,11 +355,11 @@ export function UnitTypesSection({
                 <select
                   id="unit_type_listing_type"
                   value={listingType}
-                  onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
+                  onChange={(e) => setListingType(e.target.value as 'sale' | 'lease')}
                   className={selectClass}
                 >
                   <option value="sale">Sale</option>
-                  <option value="rent">Rent</option>
+                  <option value="lease">Lease</option>
                 </select>
               </div>
               <div className="space-y-1.5">

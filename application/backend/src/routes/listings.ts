@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 
-const LISTING_TYPES = ['sale', 'rent'] as const;
+const LISTING_TYPES = ['sale', 'lease'] as const;
 const STATUSES = [
   'draft',
   'active',
@@ -117,11 +117,11 @@ type UpdatePropertyVerificationBody = {
 // route below) -- everything else is open to any authenticated tenant user,
 // matching POST /properties' own lack of a role check.
 //
-// tb-properties-unit-leasing-001: lease_monthly_rent/lease_term_months are
+// tb-properties-unit-leasing-001: lease_monthly_amount/lease_term_months are
 // only ever writable together, and only when the property's status is (or
 // is being set to, in this same request) 'leased' -- see the validation in
 // the route below. Not required-together with `status` itself: a later
-// PATCH to an already-leased property can update just the rent/term.
+// PATCH to an already-leased property can update just the amount/term.
 //
 // tb-properties-project-link-001: project_id is no longer create-time-only
 // (see tb-properties-project-001's original carve-out) -- it may now be set
@@ -143,7 +143,7 @@ type UpdatePropertyBody = {
   price?: number;
   price_currency?: string;
   status?: string;
-  lease_monthly_rent?: number;
+  lease_monthly_amount?: number;
   lease_term_months?: number;
   owner_type?: string;
   owner_id?: string | null;
@@ -472,7 +472,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         price,
         price_currency,
         status,
-        lease_monthly_rent,
+        lease_monthly_amount,
         lease_term_months,
         owner_type,
         owner_id,
@@ -516,27 +516,27 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         updateFields.status = status;
       }
 
-      // tb-properties-unit-leasing-001: lease_monthly_rent/lease_term_months
+      // tb-properties-unit-leasing-001: lease_monthly_amount/lease_term_months
       // are only ever set together, and only for a property whose status is
       // (or is being set to, right here) 'leased' -- everywhere else they
       // must stay null. If this PATCH doesn't touch `status` at all but does
       // supply lease fields, the property's *current* status is what's
-      // checked (a follow-up edit to an already-leased unit's rent/term
+      // checked (a follow-up edit to an already-leased unit's amount/term
       // doesn't need to resend status every time).
-      const hasLeaseFields = lease_monthly_rent !== undefined || lease_term_months !== undefined;
-      if (hasLeaseFields && (lease_monthly_rent === undefined || lease_term_months === undefined)) {
+      const hasLeaseFields = lease_monthly_amount !== undefined || lease_term_months !== undefined;
+      if (hasLeaseFields && (lease_monthly_amount === undefined || lease_term_months === undefined)) {
         return reply
           .status(400)
-          .send({ error: 'lease_monthly_rent and lease_term_months must be provided together' });
+          .send({ error: 'lease_monthly_amount and lease_term_months must be provided together' });
       }
       if (status === 'leased' && !hasLeaseFields) {
         return reply
           .status(400)
-          .send({ error: 'lease_monthly_rent and lease_term_months are required when marking a unit leased' });
+          .send({ error: 'lease_monthly_amount and lease_term_months are required when marking a unit leased' });
       }
       if (hasLeaseFields) {
-        if (typeof lease_monthly_rent !== 'number' || !Number.isFinite(lease_monthly_rent) || lease_monthly_rent <= 0) {
-          return reply.status(400).send({ error: 'lease_monthly_rent must be a positive number' });
+        if (typeof lease_monthly_amount !== 'number' || !Number.isFinite(lease_monthly_amount) || lease_monthly_amount <= 0) {
+          return reply.status(400).send({ error: 'lease_monthly_amount must be a positive number' });
         }
         if (
           typeof lease_term_months !== 'number' ||
@@ -570,15 +570,15 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         if (targetStatus !== 'leased') {
           return reply
             .status(400)
-            .send({ error: 'lease_monthly_rent and lease_term_months can only be set on a leased unit' });
+            .send({ error: 'lease_monthly_amount and lease_term_months can only be set on a leased unit' });
         }
-        updateFields.lease_monthly_rent = lease_monthly_rent;
+        updateFields.lease_monthly_amount = lease_monthly_amount;
         updateFields.lease_term_months = lease_term_months;
       } else if (status !== undefined && status !== 'leased') {
         // Moving to (or staying at) any non-leased status clears any lease
         // data left over from a prior 'leased' period -- the invariant is
         // these two columns are null for every status except 'leased'.
-        updateFields.lease_monthly_rent = null;
+        updateFields.lease_monthly_amount = null;
         updateFields.lease_term_months = null;
       }
 
@@ -665,7 +665,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         .eq('id', request.params.id)
         .eq('tenant_id', request.user!.tenantId)
         .select(
-          'id, title, price, price_currency, status, lease_monthly_rent, lease_term_months, owner_type, owner_id, project_id, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features',
+          'id, title, price, price_currency, status, lease_monthly_amount, lease_term_months, owner_type, owner_id, project_id, floor_area_sqm, lot_area_sqm, bedrooms, bathrooms, parking_slots, storeys, features',
         )
         .single();
 
@@ -834,7 +834,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'property_id, listing_type, and price are required' });
     }
     if (!LISTING_TYPES.includes(listing_type as (typeof LISTING_TYPES)[number])) {
-      return reply.status(400).send({ error: "listing_type must be 'sale' or 'rent'" });
+      return reply.status(400).send({ error: "listing_type must be 'sale' or 'lease'" });
     }
     if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
       return reply.status(400).send({ error: 'price must be a positive number' });
@@ -968,7 +968,7 @@ export async function registerListingsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: `status must be one of: ${STATUSES.join(', ')}` });
       }
       if (listing_type !== undefined && !LISTING_TYPES.includes(listing_type as (typeof LISTING_TYPES)[number])) {
-        return reply.status(400).send({ error: "listing_type must be 'sale' or 'rent'" });
+        return reply.status(400).send({ error: "listing_type must be 'sale' or 'lease'" });
       }
       if (price !== undefined && (typeof price !== 'number' || !Number.isFinite(price) || price <= 0)) {
         return reply.status(400).send({ error: 'price must be a positive number' });

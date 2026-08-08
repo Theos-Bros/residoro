@@ -44,9 +44,9 @@ export type PropertyType =
 export type OwnerType = 'developer' | 'individual' | 'company';
 
 // tb-properties-unit-leasing-001: 'leased' is a fifth, unit-level terminal
-// status distinct from listings.listing_type = 'rent' (an unrelated concept
+// status distinct from listings.listing_type = 'lease' (an unrelated concept
 // -- listing_type is active marketing/authority for a unit, not that the
-// unit is already rented out). lease_monthly_rent/lease_term_months (see
+// unit is already leased out). lease_monthly_amount/lease_term_months (see
 // Property/updateProperty below) are only ever populated for this status.
 export type PropertyStatus = 'available' | 'reserved' | 'sold' | 'off_market' | 'leased';
 
@@ -90,7 +90,7 @@ export type Listing = {
   property_storeys: number | null;
   property_features: string[] | null;
   agent_id: string;
-  listing_type: 'sale' | 'rent';
+  listing_type: 'sale' | 'lease';
   price: number;
   price_currency: string;
   exclusivity: 'exclusive' | 'open';
@@ -167,10 +167,10 @@ export const LISTING_STATUS_TRANSITIONS: Record<ListingStatus, readonly ListingS
 };
 
 // UX follow-up: an expired listing's warning names which document lapsed --
-// Authority to Sell (sale) or Authority to Lease (rent) -- so the agent
+// Authority to Sell (sale) or Authority to Lease (lease) -- so the agent
 // knows what to go re-secure, not just that "something" expired.
-export function authorityWarningLabel(listingType: 'sale' | 'rent'): string {
-  return listingType === 'rent' ? 'Needs updated ATL' : 'Needs updated ATS';
+export function authorityWarningLabel(listingType: 'sale' | 'lease'): string {
+  return listingType === 'lease' ? 'Needs updated ATL' : 'Needs updated ATS';
 }
 
 // tb-listings-properties-keyword-search-001: shared by ListingsPage's
@@ -279,7 +279,7 @@ export async function updateProperty(
     price?: number;
     price_currency?: string;
     status?: PropertyStatus;
-    lease_monthly_rent?: number;
+    lease_monthly_amount?: number;
     lease_term_months?: number;
     owner_type?: OwnerType;
     owner_id?: string | null;
@@ -300,7 +300,7 @@ export async function createListing(
   accessToken: string,
   input: {
     property_id: string;
-    listing_type: 'sale' | 'rent';
+    listing_type: 'sale' | 'lease';
     price: number;
     exclusivity?: 'exclusive' | 'open';
     authority_starts_at?: string;

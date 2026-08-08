@@ -108,7 +108,7 @@ type EditFormState = {
   features: string[];
   price: string;
   status: PropertyStatus;
-  lease_monthly_rent: string;
+  lease_monthly_amount: string;
   lease_term_months: string;
   owner_type: OwnerType;
   owner_id: string;
@@ -129,7 +129,7 @@ function toFormState(property: PropertyDetail): EditFormState {
     features: property.features ?? [],
     price: property.price?.toString() ?? '',
     status: property.status as PropertyStatus,
-    lease_monthly_rent: property.lease_monthly_rent?.toString() ?? '',
+    lease_monthly_amount: property.lease_monthly_amount?.toString() ?? '',
     lease_term_months: property.lease_term_months?.toString() ?? '',
     owner_type: property.owner_type as OwnerType,
     owner_id: property.owner_id ?? '',
@@ -276,21 +276,21 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
       numericPatch[field] = value;
     }
 
-    // tb-properties-unit-leasing-001: lease_monthly_rent/lease_term_months
+    // tb-properties-unit-leasing-001: lease_monthly_amount/lease_term_months
     // are required together, only when the form's status is 'leased' --
     // mirrors PATCH /properties/:id's own validation so the error surfaces
     // before the round-trip, not just after a rejected request.
-    let leasePatch: { lease_monthly_rent?: number; lease_term_months?: number } = {};
+    let leasePatch: { lease_monthly_amount?: number; lease_term_months?: number } = {};
     if (form.status === 'leased') {
-      const rentRaw = form.lease_monthly_rent.trim();
+      const amountRaw = form.lease_monthly_amount.trim();
       const termRaw = form.lease_term_months.trim();
-      if (!rentRaw || !termRaw) {
-        setSaveError('Lease monthly rent and lease term (months) are both required when status is Leased.');
+      if (!amountRaw || !termRaw) {
+        setSaveError('Lease monthly amount and lease term (months) are both required when status is Leased.');
         return;
       }
-      const rent = Number(rentRaw);
-      if (!Number.isFinite(rent) || rent <= 0) {
-        setSaveError('Lease monthly rent must be a positive number.');
+      const amount = Number(amountRaw);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setSaveError('Lease monthly amount must be a positive number.');
         return;
       }
       const term = Number(termRaw);
@@ -298,7 +298,7 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
         setSaveError('Lease term (months) must be a positive whole number.');
         return;
       }
-      leasePatch = { lease_monthly_rent: rent, lease_term_months: term };
+      leasePatch = { lease_monthly_amount: amount, lease_term_months: term };
     }
 
     setSaving(true);
@@ -403,7 +403,7 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
             <p className="font-mono text-lg font-medium">{formatPrice(property.price, property.price_currency)}</p>
             {property.status === 'leased' && (
               <p className="text-sm text-tertiary-foreground">
-                Leased: <span className="font-mono">{formatPrice(property.lease_monthly_rent, property.price_currency)}</span>/mo for{' '}
+                Leased: <span className="font-mono">{formatPrice(property.lease_monthly_amount, property.price_currency)}</span>/mo for{' '}
                 {property.lease_term_months ?? '—'} months
               </p>
             )}
@@ -582,16 +582,16 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                   {form.status === 'leased' && (
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <Label htmlFor="edit_lease_monthly_rent">
-                          Lease monthly rent ({property.price_currency})
+                        <Label htmlFor="edit_lease_monthly_amount">
+                          Lease monthly amount ({property.price_currency})
                         </Label>
                         <Input
-                          id="edit_lease_monthly_rent"
+                          id="edit_lease_monthly_amount"
                           type="number"
                           min="0"
                           step="0.01"
-                          value={form.lease_monthly_rent}
-                          onChange={(e) => updateForm({ lease_monthly_rent: e.target.value })}
+                          value={form.lease_monthly_amount}
+                          onChange={(e) => updateForm({ lease_monthly_amount: e.target.value })}
                           required
                         />
                       </div>

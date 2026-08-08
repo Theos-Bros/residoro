@@ -1,10 +1,10 @@
 # CTX-002 — Product Architecture
 
 **Status:** Approved  
-**Version:** 2.1.0  
+**Version:** 2.1.1  
 **Owner:** Residoro Engineering  
 **Created:** 2026-07-20  
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-08
 
 ---
 
@@ -149,7 +149,8 @@ Not yet built: Amenities as a structured entity.
 
 ## Listing Management — **Built**
 
-Manages: Listings (sale/rent, full lifecycle state machine, auto-expiry), Authority to
+Manages: Listings (sale/lease — renamed from sale/rent 2026-08-08, `tb-listings-rent-to-lease-001`
+— full lifecycle state machine, auto-expiry), Authority to
 Sell/Lease (exclusivity, term dates, per-workspace hard-block policy), cross-brokerage docket
 sharing. See DD-006, DS-004.
 
@@ -366,3 +367,4 @@ without requiring changes to the core business architecture.
 | 1.0.0 | 2026-07-20 | Initial version. |
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: added Built/Partially Built/Future status to every business domain (verified against actual code, not aspirational); added the Client Lifecycle domain, missing from the original PRD entirely despite being one of the most fully-built parts of the platform; flagged the Business Lifecycle diagram and AI Services section as largely aspirational relative to current implementation. Structural revision, hence major version bump per STD-002. |
 | 2.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: a full day of feature work (2026-07-28) landed the day immediately after this doc's last revision and was never reflected here. Flipped Buyer Operations, Task & Workflow Engine, and Reporting & Analytics from Future to Partially Built; updated the CRM section for Company/Buyer/Developer-consolidation. |
+| 2.1.1 | 2026-08-08 | `tb-listings-rent-to-lease-001`: Listing Management summary corrected from "sale/rent" to "sale/lease" (that `listing_type` enum value was renamed app-wide). |

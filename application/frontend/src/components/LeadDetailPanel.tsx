@@ -121,7 +121,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   );
   const [wonListingId, setWonListingId] = useState('');
   // tb-buyer-leads-revisit-page-001: only asked for -- and only required --
-  // when the selected won listing is rent-type; a sale-type win never sends
+  // when the selected won listing is lease-type; a sale-type win never sends
   // this along (see handleMarkWon below).
   const [leaseEndDate, setLeaseEndDate] = useState('');
 
@@ -605,7 +605,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
 
   async function handleCompleteClosing() {
     if (!closing) return;
-    const closingListingIsRental = listings.find((l) => l.id === closing.listing_id)?.listing_type === 'rent';
+    const closingListingIsRental = listings.find((l) => l.id === closing.listing_id)?.listing_type === 'lease';
     if (closingListingIsRental && !closingLeaseEndDate) {
       setError('Lease end date is required for a rental closing');
       return;
@@ -680,7 +680,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
   const title = isNew ? 'New Lead' : `Lead — ${lead?.contacts?.name ?? '…'}`;
   const matches = lead?.buyer_requirement_matches ?? [];
   const latestAcceptedOffer = offers.find((o) => o.status === 'accepted');
-  const wonListingIsRental = listings.find((l) => l.id === wonListingId)?.listing_type === 'rent';
+  const wonListingIsRental = listings.find((l) => l.id === wonListingId)?.listing_type === 'lease';
 
   return (
     <FloatingPanel title={title} onClose={onClose} className="max-w-lg sm:max-w-xl">
@@ -844,7 +844,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                       Mark Won
                     </Button>
                   </div>
-                  {/* tb-buyer-leads-revisit-page-001: a rent-type won listing
+                  {/* tb-buyer-leads-revisit-page-001: a lease-type won listing
                       is a lease -- the agent enters the actual lease end date
                       directly (never calculated) so it can surface on the
                       Revisit page. Sale-type wins never show or send this. */}
@@ -1233,7 +1233,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                       Save
                     </Button>
                   </div>
-                  {listings.find((l) => l.id === closing.listing_id)?.listing_type === 'rent' && (
+                  {listings.find((l) => l.id === closing.listing_id)?.listing_type === 'lease' && (
                     <div className="flex items-center gap-2">
                       <Label htmlFor="closing_lease_end_date" className="text-xs">
                         Lease end date

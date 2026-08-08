@@ -31,7 +31,7 @@ type OpenShare = { listingId: string; propertyTitle: string } | null;
 // no persistence across reload/navigation (state resets on remount by
 // design, per the tracer bullet's non-goals).
 type StatusFilter = 'all' | ListingStatus;
-type TypeFilter = 'all' | 'sale' | 'rent';
+type TypeFilter = 'all' | 'sale' | 'lease';
 type ExpiryBucket = 'active' | 'expiring_soon' | 'expired';
 type ExpiryFilter = 'all' | ExpiryBucket;
 
@@ -49,7 +49,7 @@ const STATUS_FILTER_OPTIONS: readonly FilterTabOption<StatusFilter>[] = [
 const TYPE_FILTER_OPTIONS: readonly FilterTabOption<TypeFilter>[] = [
   { value: 'all', label: 'All' },
   { value: 'sale', label: 'Sale' },
-  { value: 'rent', label: 'Rent' },
+  { value: 'lease', label: 'Lease' },
 ];
 
 const EXPIRY_FILTER_OPTIONS: readonly FilterTabOption<ExpiryFilter>[] = [

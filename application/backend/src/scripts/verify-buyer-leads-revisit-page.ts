@@ -10,7 +10,7 @@ import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 // created" pattern applies (properties/listings/contacts/leads only; the
 // workspace/user themselves are never touched).
 //
-// Covers: mark-won 400s without lease_end_date on a rent-type win, succeeds
+// Covers: mark-won 400s without lease_end_date on a lease-type win, succeeds
 // with it (Expired/Expiring Soon/Active date buckets all exercised), a
 // sale-type win never requires it (and any lease_end_date sent alongside a
 // sale-type win is silently dropped, per the tracer bullet's chosen
@@ -71,23 +71,25 @@ async function main() {
   const contactIds: string[] = [];
 
   try {
-    console.log('\n--- Setup: one active rent-type listing, one active sale-type listing ---');
-    const rentProp = await call('/properties', {
+    console.log('\n--- Setup: one active lease-type listing, one active sale-type listing ---');
+    const leaseProp = await call('/properties', {
       method: 'POST',
-      body: JSON.stringify({ title: `Revisit Verify Rent Property ${suffix}`, type: 'condo_unit', owner_type: 'individual', city: 'Taguig', province: 'Metro Manila' }),
+      body: JSON.stringify({ title: `Revisit Verify Lease Property ${suffix}`, type: 'condo_unit', owner_type: 'individual', city: 'Taguig', province: 'Metro Manila' }),
     });
-    if (rentProp.status !== 201) throw new Error(`FAIL setup: rent property: ${JSON.stringify(rentProp.body)}`);
-    propertyIds.push(rentProp.body.id);
+    if (leaseProp.status !== 201) throw new Error(`FAIL setup: lease property: ${JSON.stringify(leaseProp.body)}`);
+    propertyIds.push(leaseProp.body.id);
 
-    const rentListing = await call('/listings', {
+    const leaseListing = await call('/listings', {
       method: 'POST',
-      body: JSON.stringify({ property_id: rentProp.body.id, listing_type: 'rent', price: 45000, authority_starts_at: daysFromNow(0) }),
+      body: JSON.stringify({ property_id: leaseProp.body.id, listing_type: 'lease', price: 45000, authority_starts_at: daysFromNow(0) }),
     });
-    if (rentListing.status !== 201) throw new Error(`FAIL setup: rent listing: ${JSON.stringify(rentListing.body)}`);
-    const rentListingId = rentListing.body.id as string;
-    listingIds.push(rentListingId);
-    const rentActivate = await call(`/listings/${rentListingId}`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) });
-    if (rentActivate.status !== 200) throw new Error(`FAIL setup: activate rent listing: ${JSON.stringify(rentActivate.body)}`);
+    if (leaseListing.status !== 201) throw new Error(`FAIL setup: lease listing: ${JSON.stringify(leaseListing.body)}`);
+    const leaseListingId = leaseListing.body.id as string;
+    listingIds.push(leaseListingId);
+    // tb-listings-property-specs-001 (shipped after this script was written):
+    // POST /listings now inserts directly as 'active', so the PATCH this
+    // script used to run here to activate it is both redundant and now
+    // illegal (active -> active isn't a transition STATUS_TRANSITIONS allows).
 
     const saleProp = await call('/properties', {
       method: 'POST',
@@ -103,8 +105,6 @@ async function main() {
     if (saleListing.status !== 201) throw new Error(`FAIL setup: sale listing: ${JSON.stringify(saleListing.body)}`);
     const saleListingId = saleListing.body.id as string;
     listingIds.push(saleListingId);
-    const saleActivate = await call(`/listings/${saleListingId}`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) });
-    if (saleActivate.status !== 200) throw new Error(`FAIL setup: activate sale listing: ${JSON.stringify(saleActivate.body)}`);
 
     console.log('PASS (setup)');
 
@@ -126,44 +126,44 @@ async function main() {
       return leadId;
     }
 
-    console.log('\n--- 1. mark-won on a rent-type listing without lease_end_date -> 400 ---');
-    const l1 = await newLead('Expired', rentListingId);
-    const rentNoDate = await call(`/buyer-requirements/${l1}/mark-won`, {
+    console.log('\n--- 1. mark-won on a lease-type listing without lease_end_date -> 400 ---');
+    const l1 = await newLead('Expired', leaseListingId);
+    const leaseNoDate = await call(`/buyer-requirements/${l1}/mark-won`, {
       method: 'PATCH',
-      body: JSON.stringify({ listing_id: rentListingId }),
+      body: JSON.stringify({ listing_id: leaseListingId }),
     });
-    if (rentNoDate.status !== 400) throw new Error(`FAIL: expected 400, got ${rentNoDate.status}: ${JSON.stringify(rentNoDate.body)}`);
-    console.log(`PASS (400: ${rentNoDate.body.error})`);
+    if (leaseNoDate.status !== 400) throw new Error(`FAIL: expected 400, got ${leaseNoDate.status}: ${JSON.stringify(leaseNoDate.body)}`);
+    console.log(`PASS (400: ${leaseNoDate.body.error})`);
 
-    console.log('\n--- 2. mark-won on rent-type listing WITH lease_end_date (Expired bucket, -10 days) succeeds ---');
+    console.log('\n--- 2. mark-won on lease-type listing WITH lease_end_date (Expired bucket, -10 days) succeeds ---');
     const expiredDate = daysFromNow(-10);
     const l1Won = await call(`/buyer-requirements/${l1}/mark-won`, {
       method: 'PATCH',
-      body: JSON.stringify({ listing_id: rentListingId, lease_end_date: expiredDate }),
+      body: JSON.stringify({ listing_id: leaseListingId, lease_end_date: expiredDate }),
     });
     if (l1Won.status !== 200 || l1Won.body.lease_end_date !== expiredDate) {
       throw new Error(`FAIL: expected 200 with lease_end_date=${expiredDate}, got ${JSON.stringify(l1Won.body)}`);
     }
     console.log(`PASS (lease_end_date=${l1Won.body.lease_end_date})`);
 
-    console.log('\n--- 3. mark-won, rent-type, Expiring Soon bucket (+15 days) ---');
-    const l2 = await newLead('ExpiringSoon', rentListingId);
+    console.log('\n--- 3. mark-won, lease-type, Expiring Soon bucket (+15 days) ---');
+    const l2 = await newLead('ExpiringSoon', leaseListingId);
     const soonDate = daysFromNow(15);
     const l2Won = await call(`/buyer-requirements/${l2}/mark-won`, {
       method: 'PATCH',
-      body: JSON.stringify({ listing_id: rentListingId, lease_end_date: soonDate }),
+      body: JSON.stringify({ listing_id: leaseListingId, lease_end_date: soonDate }),
     });
     if (l2Won.status !== 200 || l2Won.body.lease_end_date !== soonDate) {
       throw new Error(`FAIL: expected 200 with lease_end_date=${soonDate}, got ${JSON.stringify(l2Won.body)}`);
     }
     console.log(`PASS (lease_end_date=${l2Won.body.lease_end_date})`);
 
-    console.log('\n--- 4. mark-won, rent-type, Active bucket (+90 days) ---');
-    const l3 = await newLead('Active', rentListingId);
+    console.log('\n--- 4. mark-won, lease-type, Active bucket (+90 days) ---');
+    const l3 = await newLead('Active', leaseListingId);
     const activeDate = daysFromNow(90);
     const l3Won = await call(`/buyer-requirements/${l3}/mark-won`, {
       method: 'PATCH',
-      body: JSON.stringify({ listing_id: rentListingId, lease_end_date: activeDate }),
+      body: JSON.stringify({ listing_id: leaseListingId, lease_end_date: activeDate }),
     });
     if (l3Won.status !== 200 || l3Won.body.lease_end_date !== activeDate) {
       throw new Error(`FAIL: expected 200 with lease_end_date=${activeDate}, got ${JSON.stringify(l3Won.body)}`);
@@ -192,13 +192,13 @@ async function main() {
     }
     console.log('PASS (sale-type win ignored the sent lease_end_date, left it null)');
 
-    console.log('\n--- 7. GET /buyer-requirements/revisit: exactly the 3 rent-type wins, sorted soonest-first ---');
+    console.log('\n--- 7. GET /buyer-requirements/revisit: exactly the 3 lease-type wins, sorted soonest-first ---');
     const revisit = await call('/buyer-requirements/revisit');
     if (revisit.status !== 200) throw new Error(`FAIL: GET revisit: ${JSON.stringify(revisit.body)}`);
     const rows = revisit.body.revisit_leads as any[];
     const ours = rows.filter((r) => [l1, l2, l3, l4, l5].includes(r.id));
     if (ours.length !== 3) {
-      throw new Error(`FAIL: expected exactly 3 of our leads (the rent-type wins) in revisit, got ${ours.length}: ${JSON.stringify(ours)}`);
+      throw new Error(`FAIL: expected exactly 3 of our leads (the lease-type wins) in revisit, got ${ours.length}: ${JSON.stringify(ours)}`);
     }
     if (ours.some((r) => r.id === l4 || r.id === l5)) {
       throw new Error('FAIL: a sale-type win (null lease_end_date) leaked into the revisit list');
@@ -207,7 +207,7 @@ async function main() {
     if (JSON.stringify(ourIdsInOrder) !== JSON.stringify([l1, l2, l3])) {
       throw new Error(`FAIL: expected order [expired, soon, active] = [${l1}, ${l2}, ${l3}], got ${JSON.stringify(ourIdsInOrder)}`);
     }
-    console.log('PASS (exactly the 3 rent-type wins, ascending by lease_end_date)');
+    console.log('PASS (exactly the 3 lease-type wins, ascending by lease_end_date)');
 
     console.log('\n--- 8. Revisit rows carry contact name + listing/property joins, and client-side bucket math lands correctly ---');
     function bucketFor(dateStr: string): 'expired' | 'expiring_soon' | 'active' {
@@ -226,7 +226,7 @@ async function main() {
       const row = byId.get(id);
       if (!row) throw new Error(`FAIL: lead ${id} missing from revisit rows`);
       if (!row.contacts?.name) throw new Error(`FAIL: lead ${id} missing contacts.name join: ${JSON.stringify(row)}`);
-      if (row.listing?.listing_type !== 'rent') throw new Error(`FAIL: lead ${id} listing.listing_type not 'rent': ${JSON.stringify(row)}`);
+      if (row.listing?.listing_type !== 'lease') throw new Error(`FAIL: lead ${id} listing.listing_type not 'lease': ${JSON.stringify(row)}`);
       if (!row.listing?.properties?.title) throw new Error(`FAIL: lead ${id} missing listing.properties.title join: ${JSON.stringify(row)}`);
       const actualBucket = bucketFor(row.lease_end_date);
       if (actualBucket !== expectedBucket) {

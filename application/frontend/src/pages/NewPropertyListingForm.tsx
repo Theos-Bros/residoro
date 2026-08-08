@@ -77,7 +77,7 @@ export function NewPropertyListingForm({ session }: Props) {
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [ownerId, setOwnerId] = useState<string>('');
 
-  const [listingType, setListingType] = useState<'sale' | 'rent'>('sale');
+  const [listingType, setListingType] = useState<'sale' | 'lease'>('sale');
   const [price, setPrice] = useState('');
   const [exclusivity, setExclusivity] = useState<'exclusive' | 'open'>('open');
   const [authorityStartsAt, setAuthorityStartsAt] = useState(() => new Date().toISOString().slice(0, 10));
@@ -458,11 +458,11 @@ export function NewPropertyListingForm({ session }: Props) {
                   <select
                     id="listing_type"
                     value={listingType}
-                    onChange={(e) => setListingType(e.target.value as 'sale' | 'rent')}
+                    onChange={(e) => setListingType(e.target.value as 'sale' | 'lease')}
                     className={selectClass}
                   >
                     <option value="sale">Sale</option>
-                    <option value="rent">Rent</option>
+                    <option value="lease">Lease</option>
                   </select>
                 </div>
                 <div className="space-y-1.5">

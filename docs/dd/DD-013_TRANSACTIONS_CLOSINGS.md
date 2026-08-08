@@ -1,10 +1,10 @@
 # DD-013 — Transactions: Closing
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.0.1
 **Owner:** Residoro Engineering
 **Created:** 2026-08-04
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-08
 
 ---
 
@@ -87,7 +87,8 @@ from it.
 
 **Completion (`PATCH /closings/:id` with `completed: true`)** is a one-way action:
 
-1. If the listing is a rental (`listing_type = 'rent'`), `lease_end_date` is required in the same
+1. If the listing is a rental (`listing_type = 'lease'`, renamed from `'rent'` 2026-08-08 by
+   `tb-listings-rent-to-lease-001`), `lease_end_date` is required in the same
    request — a 400 otherwise. This mirrors the pre-existing, options-sent-based `mark-won` route's
    own rule (`buyerRequirements.ts`), confirmed with the user as a deliberate parity requirement:
    both paths to `'won'` set the same downstream fields, so neither the Won banner nor the Revisit
@@ -142,3 +143,4 @@ own read endpoints.
 | Version | Date | Description |
 |---------|------|--------------|
 | 1.0.0 | 2026-08-04 | Initial version, written alongside implementation per RFC-004. |
+| 1.0.1 | 2026-08-08 | `tb-listings-rent-to-lease-001`: the completion rule's `listing_type = 'rent'` check corrected to `'lease'` (that enum value was renamed app-wide). |

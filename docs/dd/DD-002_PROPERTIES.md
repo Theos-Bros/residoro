@@ -1,10 +1,10 @@
 # DD-002 — Properties
 
 **Status:** Draft
-**Version:** 2.1.0
+**Version:** 2.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-08
 
 ---
 
@@ -49,9 +49,9 @@ covered by DD-008.
 | `parking_slots` | `smallint` | nullable | |
 | `price` | `numeric(14,2)` | nullable | |
 | `price_currency` | `text` | not null, default `'PHP'` | |
-| `status` | `text` | not null, default `'available'`, `CHECK` in (`available`, `reserved`, `sold`, `off_market`, `leased`) | `'leased'` added by `tb-properties-unit-leasing-001` (2026-07-30) — distinct from `listings.listing_type = 'rent'`, which is active marketing/authority, not that the unit is already rented out |
+| `status` | `text` | not null, default `'available'`, `CHECK` in (`available`, `reserved`, `sold`, `off_market`, `leased`) | `'leased'` added by `tb-properties-unit-leasing-001` (2026-07-30) — distinct from `listings.listing_type = 'lease'` (renamed from `'rent'` 2026-08-08, see `tb-listings-rent-to-lease-001`), which is active marketing/authority, not that the unit is already leased out |
 | `verification_status` | `text` | not null, default `'unverified'`, `CHECK` in (`unverified`, `pending`, `verified`, `flagged`) | |
-| `lease_monthly_rent` | `numeric(14,2)` | nullable | Added by `tb-properties-unit-leasing-001`. PHP by default like `price`/`price_currency`. Null for every status other than `'leased'`; enforced app-side (`PATCH /properties/:id`), no DB constraint |
+| `lease_monthly_amount` | `numeric(14,2)` | nullable | Added by `tb-properties-unit-leasing-001` as `lease_monthly_rent`; **renamed to `lease_monthly_amount` 2026-08-08** by `tb-listings-rent-to-lease-001` (0 live rows at rename time, pure schema op). PHP by default like `price`/`price_currency`. Null for every status other than `'leased'`; enforced app-side (`PATCH /properties/:id`), no DB constraint |
 | `lease_term_months` | `smallint` | nullable | Same migration. Plain integer duration — no lease start date, no expiry/renewal tracking. Null for every status other than `'leased'`; enforced app-side |
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | Nullable: future service-role/bulk-import writes may not have a single acting user |
 | `created_at` | `timestamptz` | not null, default `now()` | |
@@ -156,3 +156,4 @@ client with no app-level `tenant_id` filter returns empty, not the row
 | 1.0.0 | 2026-07-21 | Initial version, matching the first platform foundation migration. |
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: `project_id` FK added, `owner_id` made nullable, `unit_type_id`/`unit_number` added. Corrected the `service_role` Consequences note — usage became universal, not importer-only; pointed to ADR-003 for the corrected target architecture. Structural revision, hence major version bump per STD-002. |
 | 2.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: `owner_id` FK added (→ `contacts(id)`, once `developers` folded into `contacts`), `'leased'` status + `lease_monthly_rent`/`lease_term_months` columns added, and the `service_role`-for-all-routes claim corrected now that `tb-platform-rls-scoped-client-001` moved `properties` reads/writes to a per-request scoped client. |
+| 2.2.0 | 2026-08-08 | `tb-listings-rent-to-lease-001`: `lease_monthly_rent` renamed to `lease_monthly_amount` (0 live rows, pure schema op), and the `'leased'` status note's cross-reference to `listings.listing_type = 'rent'` corrected to `'lease'` (that enum value was renamed app-wide in the same tracer bullet). |

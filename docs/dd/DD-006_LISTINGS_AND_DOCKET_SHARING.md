@@ -1,10 +1,10 @@
 # DD-006 — Listings & Docket Sharing
 
 **Status:** Draft
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-08
 
 ---
 
@@ -35,7 +35,7 @@ time. Mirrors `properties`'s table shape and RLS pattern.
 | `tenant_id` | `uuid` | not null, FK → `workspaces(id)` | |
 | `property_id` | `uuid` | not null, FK → `properties(id)` | |
 | `agent_id` | `uuid` | not null, FK → `profiles(id)` | Always the creating profile — no distinct Agent/Team-Lead role exists in `profiles.role` (`admin`\|`member`\|`operator`) yet, so cross-agent assignment is deferred |
-| `listing_type` | `text` | not null, `CHECK` in (`sale`, `rent`) | |
+| `listing_type` | `text` | not null, `CHECK` in (`sale`, `lease`) | **2026-08-08:** renamed from `CHECK` in (`sale`, `rent`) by `tb-listings-rent-to-lease-001` — live data migration converted 7 existing `'rent'` rows to `'lease'` |
 | `price` | `numeric(14,2)` | not null | |
 | `price_currency` | `text` | not null, default `'PHP'` | |
 | `status` | `text` | not null, default `'draft'`, `CHECK` in (`draft`, `active`, `under_offer`, `sold`, `expired`, `withdrawn`, `inactive`) | Widened from an original `draft`/`active`/`withdrawn`-only set by `tb-listings-lifecycle-001`; `'inactive'` added by `tb-listings-status-ladder-001` (2026-07-29) as a pausable state reachable from `active` (`active <-> inactive`), additive alongside `draft`. Legal transitions enforced in application code (`listings.ts`), not a DB trigger. Listings are never deleted — reassigning to a new agent means withdrawing this row and creating a new one |
@@ -135,3 +135,4 @@ exception table: `matching.ts` (`scoreReceivedDockets`) and `buyerRequirements.t
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering five already-shipped tracer bullets. |
 | 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: `'inactive'` status, `buyer_contact_id`, `commission_note` columns added; corrected the stale "`service_role` for all routes" RLS claim now that `tb-platform-rls-scoped-client-001` moved `listings.ts`/`dockets.ts` mostly onto the scoped client per ADR-003. |
+| 1.2.0 | 2026-08-08 | `tb-listings-rent-to-lease-001`: `listing_type`'s `CHECK` constraint renamed from (`sale`, `rent`) to (`sale`, `lease`), with a live data migration converting 7 existing rows. |
