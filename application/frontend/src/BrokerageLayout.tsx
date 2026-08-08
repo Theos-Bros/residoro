@@ -60,6 +60,7 @@ function getNavGroups(isAdmin: boolean): { label: string; links: { to: string; l
     {
       label: 'Brokerage',
       links: [
+        { to: '/notifications', label: 'Notifications' },
         { to: '/performance', label: 'Performance' },
         ...(isAdmin ? [{ to: '/billing', label: 'Billing' }] : []),
         { to: '/settings', label: 'Settings' },
