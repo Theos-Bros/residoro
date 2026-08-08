@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireOperator } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { validateEmail } from '../lib/emailValidation.js';
 
 type NewClientBody = {
   brokerage_name?: string;
@@ -60,8 +59,13 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         error: 'brokerage_name, admin_email, contract_start_date, and contract_end_date are required',
       });
     }
-    if (!EMAIL_RE.test(admin_email)) {
-      return reply.status(400).send({ error: 'admin_email is not a valid email address' });
+    const emailCheck = validateEmail(admin_email);
+    if (!emailCheck.ok) {
+      return reply.status(400).send({
+        error: emailCheck.reason === 'disposable_domain'
+          ? 'admin_email is a disposable/temporary email address, which is not allowed'
+          : 'admin_email is not a valid email address',
+      });
     }
 
     const start = new Date(contract_start_date);

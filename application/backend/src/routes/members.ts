@@ -1,8 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { validateEmail } from '../lib/emailValidation.js';
 
 type InviteMemberBody = {
   email?: string;
@@ -50,8 +49,16 @@ export async function registerMembersRoutes(app: FastifyInstance) {
     }
 
     const { email, full_name } = request.body ?? {};
-    if (!email || !EMAIL_RE.test(email)) {
+    if (!email) {
       return reply.status(400).send({ error: 'A valid email is required' });
+    }
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.ok) {
+      return reply.status(400).send({
+        error: emailCheck.reason === 'disposable_domain'
+          ? 'Disposable/temporary email addresses are not allowed'
+          : 'A valid email is required',
+      });
     }
 
     const frontendUrl = process.env.FRONTEND_URL;
