@@ -20,7 +20,7 @@ import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
 import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
-import { cn } from '@/lib/utils';
+import { cn, toSentenceCase } from '@/lib/utils';
 
 const verificationSelectClass =
   'h-7 rounded-md border border-input bg-card px-2 text-xs shadow-sm';
@@ -451,7 +451,7 @@ export function PropertiesListPage({ session }: Props) {
                       >
                         {VERIFICATION_STATUSES.map((value) => (
                           <option key={value} value={value}>
-                            {value}
+                            {toSentenceCase(value)}
                           </option>
                         ))}
                       </select>

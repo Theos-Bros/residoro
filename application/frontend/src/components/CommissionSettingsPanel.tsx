@@ -97,6 +97,7 @@ export function CommissionSettingsPanel({ session }: Props) {
                 value={brokeragePct}
                 disabled={!canEdit}
                 onChange={(e) => setBrokeragePct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                onWheel={(e) => e.currentTarget.blur()}
                 className="h-9 w-32 rounded-md border border-input px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
@@ -110,6 +111,7 @@ export function CommissionSettingsPanel({ session }: Props) {
                 value={agentPct}
                 disabled={!canEdit}
                 onChange={(e) => setAgentPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                onWheel={(e) => e.currentTarget.blur()}
                 className="h-9 w-32 rounded-md border border-input px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               />
             </div>
@@ -123,6 +125,7 @@ export function CommissionSettingsPanel({ session }: Props) {
                 value={coBrokerPct}
                 disabled={!canEdit}
                 onChange={(e) => setCoBrokerPct(Math.min(100, Math.max(0, Number(e.target.value))))}
+                onWheel={(e) => e.currentTarget.blur()}
                 className="h-9 w-32 rounded-md border border-input px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               />
               <p className="text-xs text-muted-foreground">Only relevant when the deal involved a docket-shared listing.</p>

@@ -34,6 +34,8 @@ import { FloatingPanel } from '@/components/FloatingPanel';
 import { RequirementFieldsForm } from '@/components/RequirementFieldsForm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
+import { toSentenceCase } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 
 type Props = {
@@ -730,7 +732,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               >
                 {LEAD_STAGES.map((s) => (
                   <option key={s} value={s}>
-                    {s.replace(/_/g, ' ')}
+                    {toSentenceCase(s)}
                   </option>
                 ))}
               </select>
@@ -850,12 +852,15 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                       Revisit page. Sale-type wins never show or send this. */}
                   {wonListingId && wonListingIsRental && (
                     <div className="space-y-1">
-                      <Label htmlFor="lease_end_date">Lease end date</Label>
+                      <Label htmlFor="lease_end_date">
+                        Lease end date <span className="text-primary">*</span>
+                      </Label>
                       <Input
                         id="lease_end_date"
                         type="date"
                         value={leaseEndDate}
                         onChange={(e) => setLeaseEndDate(e.target.value)}
+                        required
                       />
                     </div>
                   )}
@@ -1003,7 +1008,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                         >
                           {VIEWING_OUTCOMES.map((o) => (
                             <option key={o} value={o}>
-                              {o.replace(/_/g, ' ')}
+                              {toSentenceCase(o)}
                             </option>
                           ))}
                         </select>
@@ -1051,15 +1056,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                     </option>
                   ))}
                 </select>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Amount"
-                  className="w-32"
-                  value={offerAmount}
-                  onChange={(e) => setOfferAmount(e.target.value)}
-                />
+                <MoneyInput placeholder="Amount" className="w-32" value={offerAmount} onChange={setOfferAmount} />
                 <Input
                   type="text"
                   placeholder="Currency"
@@ -1147,14 +1144,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               {contract && (
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-32"
-                      value={contractPrice}
-                      onChange={(e) => setContractPrice(e.target.value)}
-                    />
+                    <MoneyInput className="w-32" value={contractPrice} onChange={setContractPrice} />
                     <Input
                       type="text"
                       className="w-20"
@@ -1215,14 +1205,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               {closing && !closing.completed_at && (
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-32"
-                      value={closingFinalPrice}
-                      onChange={(e) => setClosingFinalPrice(e.target.value)}
-                    />
+                    <MoneyInput className="w-32" value={closingFinalPrice} onChange={setClosingFinalPrice} />
                     <Input
                       type="text"
                       className="w-20"
@@ -1236,7 +1219,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                   {listings.find((l) => l.id === closing.listing_id)?.listing_type === 'lease' && (
                     <div className="flex items-center gap-2">
                       <Label htmlFor="closing_lease_end_date" className="text-xs">
-                        Lease end date
+                        Lease end date <span className="text-primary">*</span>
                       </Label>
                       <Input
                         id="closing_lease_end_date"
@@ -1244,6 +1227,7 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
                         className="w-40"
                         value={closingLeaseEndDate}
                         onChange={(e) => setClosingLeaseEndDate(e.target.value)}
+                        required
                       />
                     </div>
                   )}
@@ -1266,14 +1250,11 @@ export function LeadDetailPanel({ session, leadId, listings, onClose, onSaved, o
               <p className="text-sm font-medium">Commission</p>
               {!commissionEarnings && (
                 <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                  <MoneyInput
                     placeholder="Total commission"
                     className="w-40"
                     value={commissionTotalInput}
-                    onChange={(e) => setCommissionTotalInput(e.target.value)}
+                    onChange={setCommissionTotalInput}
                   />
                   <Button size="sm" onClick={handleRecordCommission} disabled={saving}>
                     Record Commission

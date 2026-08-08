@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { createListing, updateListingFields, type Listing } from '@/lib/listingsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { FloatingPanel } from '@/components/FloatingPanel';
 
@@ -108,7 +109,9 @@ export function CreateListingPanel({
   const form = (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="listing_type">Listing type</Label>
+          <Label htmlFor="listing_type">
+            Listing type <span className="text-primary">*</span>
+          </Label>
           <select
             id="listing_type"
             value={listingType}
@@ -120,19 +123,15 @@ export function CreateListingPanel({
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="price">Price (PHP)</Label>
-          <Input
-            id="price"
-            type="number"
-            min="0"
-            step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            required
-          />
+          <Label htmlFor="price">
+            Price (PHP) <span className="text-primary">*</span>
+          </Label>
+          <MoneyInput id="price" value={price} onChange={setPrice} required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="exclusivity">Exclusivity</Label>
+          <Label htmlFor="exclusivity">
+            Exclusivity <span className="text-primary">*</span>
+          </Label>
           <select
             id="exclusivity"
             value={exclusivity}
@@ -146,12 +145,15 @@ export function CreateListingPanel({
         {!isEditing && (
           <>
             <div className="space-y-1.5">
-              <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
+              <Label htmlFor="authority_starts_at">
+                Authority to Sell/Lease starts <span className="text-primary">*</span>
+              </Label>
               <Input
                 id="authority_starts_at"
                 type="date"
                 value={authorityStartsAt}
                 onChange={(e) => setAuthorityStartsAt(e.target.value)}
+                required
               />
             </div>
             <div className="space-y-1.5">

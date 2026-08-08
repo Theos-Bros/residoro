@@ -10,6 +10,8 @@ import {
 import { RemoveUnitsPanel } from '@/components/RemoveUnitsPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
+import { toSentenceCase } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -239,7 +241,9 @@ export function UnitTypesSection({
         <CardContent className="space-y-3 pt-6">
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="unit_type_name">New unit type name</Label>
+              <Label htmlFor="unit_type_name">
+                New unit type name <span className="text-primary">*</span>
+              </Label>
               <Input
                 id="unit_type_name"
                 type="text"
@@ -250,7 +254,9 @@ export function UnitTypesSection({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="unit_type_property_type">Property type</Label>
+              <Label htmlFor="unit_type_property_type">
+                Property type <span className="text-primary">*</span>
+              </Label>
               <select
                 id="unit_type_property_type"
                 value={propertyType}
@@ -259,7 +265,7 @@ export function UnitTypesSection({
               >
                 {PROPERTY_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t.replace(/_/g, ' ')}
+                    {toSentenceCase(t)}
                   </option>
                 ))}
               </select>
@@ -341,17 +347,12 @@ export function UnitTypesSection({
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="unit_type_price">Price (PHP)</Label>
-                <Input
-                  id="unit_type_price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
+                <MoneyInput id="unit_type_price" value={price} onChange={setPrice} />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unit_type_listing_type">Listing type</Label>
+                <Label htmlFor="unit_type_listing_type">
+                  Listing type <span className="text-primary">*</span>
+                </Label>
                 <select
                   id="unit_type_listing_type"
                   value={listingType}
@@ -363,7 +364,9 @@ export function UnitTypesSection({
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="unit_type_exclusivity">Exclusivity</Label>
+                <Label htmlFor="unit_type_exclusivity">
+                  Exclusivity <span className="text-primary">*</span>
+                </Label>
                 <select
                   id="unit_type_exclusivity"
                   value={exclusivity}

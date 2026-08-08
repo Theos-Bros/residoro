@@ -23,6 +23,8 @@ import { FloatingPanel } from '@/components/FloatingPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
+import { toSentenceCase } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { FeatureTagInput } from '@/components/ui/feature-tag-input';
@@ -257,6 +259,20 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
       return;
     }
 
+    // Matches NewPropertyListingForm's create-flow requirement for the same
+    // field -- price was previously optional here, an inconsistency between
+    // the create and edit paths for the same underlying property price.
+    const priceRaw = form.price.trim();
+    if (!priceRaw) {
+      setSaveError('Price is required.');
+      return;
+    }
+    const numericPrice = Number(priceRaw);
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+      setSaveError('Price must be a positive number.');
+      return;
+    }
+
     const numericPatch: Record<string, number> = {};
     for (const [field, raw] of Object.entries({
       floor_area_sqm: form.floor_area_sqm,
@@ -392,7 +408,7 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                 >
                   {VERIFICATION_STATUSES.map((value) => (
                     <option key={value} value={value}>
-                      {value}
+                      {toSentenceCase(value)}
                     </option>
                   ))}
                 </select>
@@ -438,7 +454,9 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
               <CardContent className="pt-6">
                 <form onSubmit={handleEditSubmit} className="space-y-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="edit_title">Title</Label>
+                    <Label htmlFor="edit_title">
+                      Title <span className="text-primary">*</span>
+                    </Label>
                     <Input
                       id="edit_title"
                       type="text"
@@ -552,19 +570,19 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="edit_price">
-                      Price ({property.price_currency})
+                      Price ({property.price_currency}) <span className="text-primary">*</span>
                     </Label>
-                    <Input
+                    <MoneyInput
                       id="edit_price"
-                      type="number"
-                      min="0"
-                      step="0.01"
                       value={form.price}
-                      onChange={(e) => updateForm({ price: e.target.value })}
+                      onChange={(raw) => updateForm({ price: raw })}
+                      required
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="edit_status">Status</Label>
+                    <Label htmlFor="edit_status">
+                      Status <span className="text-primary">*</span>
+                    </Label>
                     <select
                       id="edit_status"
                       value={form.status}
@@ -573,7 +591,7 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                     >
                       {PROPERTY_STATUSES.map((value) => (
                         <option key={value} value={value}>
-                          {value}
+                          {toSentenceCase(value)}
                         </option>
                       ))}
                     </select>
@@ -583,20 +601,19 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1.5">
                         <Label htmlFor="edit_lease_monthly_amount">
-                          Lease monthly amount ({property.price_currency})
+                          Lease monthly amount ({property.price_currency}) <span className="text-primary">*</span>
                         </Label>
-                        <Input
+                        <MoneyInput
                           id="edit_lease_monthly_amount"
-                          type="number"
-                          min="0"
-                          step="0.01"
                           value={form.lease_monthly_amount}
-                          onChange={(e) => updateForm({ lease_monthly_amount: e.target.value })}
+                          onChange={(raw) => updateForm({ lease_monthly_amount: raw })}
                           required
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="edit_lease_term_months">Lease term (months)</Label>
+                        <Label htmlFor="edit_lease_term_months">
+                          Lease term (months) <span className="text-primary">*</span>
+                        </Label>
                         <Input
                           id="edit_lease_term_months"
                           type="number"
@@ -613,7 +630,9 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                   {isAdmin && (
                     <>
                       <div className="space-y-1.5">
-                        <Label htmlFor="edit_owner_type">Owner type (admin only)</Label>
+                        <Label htmlFor="edit_owner_type">
+                          Owner type (admin only) <span className="text-primary">*</span>
+                        </Label>
                         <select
                           id="edit_owner_type"
                           value={form.owner_type}
@@ -624,7 +643,7 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                         >
                           {OWNER_TYPES.map((o) => (
                             <option key={o} value={o}>
-                              {o}
+                              {toSentenceCase(o)}
                             </option>
                           ))}
                         </select>

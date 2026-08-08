@@ -5,6 +5,7 @@ import {
 } from '@/lib/inquiriesApi';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toSentenceCase } from '@/lib/utils';
 
 type Props = {
   values: RequirementFields;
@@ -36,7 +37,7 @@ export function RequirementFieldsForm({ values, onChange }: Props) {
           <option value="">—</option>
           {INTENTS.map((i) => (
             <option key={i} value={i}>
-              {i}
+              {toSentenceCase(i)}
             </option>
           ))}
         </select>
@@ -53,7 +54,7 @@ export function RequirementFieldsForm({ values, onChange }: Props) {
           <option value="">—</option>
           {REQUIREMENT_PROPERTY_TYPES.map((t) => (
             <option key={t} value={t}>
-              {t.replace(/_/g, ' ')}
+              {toSentenceCase(t)}
             </option>
           ))}
         </select>

@@ -15,6 +15,7 @@ import { FloatingPanel } from '@/components/FloatingPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { toSentenceCase } from '@/lib/utils';
 
 type Props = {
   session: Session;
@@ -171,7 +172,9 @@ export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, prefi
           )}
 
           <div className="space-y-1">
-            <Label>Title</Label>
+            <Label>
+              Title <span className="text-primary">*</span>
+            </Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
 
@@ -210,7 +213,9 @@ export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, prefi
 
           {!isNew && (
             <div className="space-y-1">
-              <Label>Status</Label>
+              <Label>
+                Status <span className="text-primary">*</span>
+              </Label>
               <select
                 className={selectClass}
                 value={status}
@@ -218,7 +223,7 @@ export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, prefi
               >
                 {TASK_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {s.replace(/_/g, ' ')}
+                    {toSentenceCase(s)}
                   </option>
                 ))}
               </select>

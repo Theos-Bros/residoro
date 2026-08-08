@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { toSentenceCase } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 
 type Props = {
@@ -113,7 +114,9 @@ export function NewProjectForm({ session }: Props) {
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="developer">Developer</Label>
+              <Label htmlFor="developer">
+                Developer <span className="text-primary">*</span>
+              </Label>
               <select
                 id="developer"
                 value={developerId}
@@ -130,7 +133,9 @@ export function NewProjectForm({ session }: Props) {
             </div>
             {developerId === NEW_DEVELOPER_VALUE && (
               <div className="space-y-1.5">
-                <Label htmlFor="new_developer_name">New developer name</Label>
+                <Label htmlFor="new_developer_name">
+                  New developer name <span className="text-primary">*</span>
+                </Label>
                 <Input
                   id="new_developer_name"
                   type="text"
@@ -144,7 +149,9 @@ export function NewProjectForm({ session }: Props) {
             <Separator className="my-2" />
 
             <div className="space-y-1.5">
-              <Label htmlFor="name">Project name</Label>
+              <Label htmlFor="name">
+                Project name <span className="text-primary">*</span>
+              </Label>
               <Input
                 id="name"
                 type="text"
@@ -155,7 +162,9 @@ export function NewProjectForm({ session }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="project_type">Project type</Label>
+              <Label htmlFor="project_type">
+                Project type <span className="text-primary">*</span>
+              </Label>
               <select
                 id="project_type"
                 value={projectType}
@@ -164,7 +173,7 @@ export function NewProjectForm({ session }: Props) {
               >
                 {PROJECT_TYPES.map((t) => (
                   <option key={t} value={t}>
-                    {t.replace(/_/g, ' ')}
+                    {toSentenceCase(t)}
                   </option>
                 ))}
               </select>
@@ -185,7 +194,9 @@ export function NewProjectForm({ session }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">
+                Status <span className="text-primary">*</span>
+              </Label>
               <select
                 id="status"
                 value={status}
@@ -194,7 +205,7 @@ export function NewProjectForm({ session }: Props) {
               >
                 {PROJECT_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {s.replace(/_/g, ' ')}
+                    {toSentenceCase(s)}
                   </option>
                 ))}
               </select>

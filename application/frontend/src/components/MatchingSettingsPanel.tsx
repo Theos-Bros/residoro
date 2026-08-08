@@ -78,6 +78,7 @@ export function MatchingSettingsPanel({ session }: Props) {
               value={threshold}
               disabled={!canEdit}
               onChange={(e) => setThreshold(Math.min(100, Math.max(0, Math.round(Number(e.target.value)))))}
+              onWheel={(e) => e.currentTarget.blur()}
               className="h-9 w-32 rounded-md border border-input px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
             />
           </div>

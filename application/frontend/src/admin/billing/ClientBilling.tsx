@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
@@ -142,7 +143,9 @@ export function ClientBilling({ session }: Props) {
           <h2 className="text-sm font-medium">Contract value</h2>
           <form onSubmit={handleSaveContract} className="flex items-end gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="currency">Currency</Label>
+              <Label htmlFor="currency">
+                Currency <span className="text-primary">*</span>
+              </Label>
               <Input
                 id="currency"
                 value={currency}
@@ -152,16 +155,10 @@ export function ClientBilling({ session }: Props) {
               />
             </div>
             <div className="flex-1 space-y-1.5">
-              <Label htmlFor="contract_value">Contract value</Label>
-              <Input
-                id="contract_value"
-                type="number"
-                min={0}
-                step="0.01"
-                value={contractValue}
-                onChange={(e) => setContractValueInput(e.target.value)}
-                required
-              />
+              <Label htmlFor="contract_value">
+                Contract value <span className="text-primary">*</span>
+              </Label>
+              <MoneyInput id="contract_value" value={contractValue} onChange={setContractValueInput} required />
             </div>
             <Button type="submit" disabled={savingContract}>
               {savingContract ? 'Saving…' : 'Save'}
@@ -231,7 +228,9 @@ export function ClientBilling({ session }: Props) {
 
           <form onSubmit={handleAddInstallment} className="flex items-end gap-3 border-t pt-4">
             <div className="space-y-1.5">
-              <Label htmlFor="new_currency">Currency</Label>
+              <Label htmlFor="new_currency">
+                Currency <span className="text-primary">*</span>
+              </Label>
               <Input
                 id="new_currency"
                 value={newCurrency}
@@ -241,19 +240,15 @@ export function ClientBilling({ session }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new_amount">Amount</Label>
-              <Input
-                id="new_amount"
-                type="number"
-                min={0}
-                step="0.01"
-                value={newAmount}
-                onChange={(e) => setNewAmount(e.target.value)}
-                required
-              />
+              <Label htmlFor="new_amount">
+                Amount <span className="text-primary">*</span>
+              </Label>
+              <MoneyInput id="new_amount" value={newAmount} onChange={setNewAmount} required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="new_due_date">Due date</Label>
+              <Label htmlFor="new_due_date">
+                Due date <span className="text-primary">*</span>
+              </Label>
               <Input
                 id="new_due_date"
                 type="date"

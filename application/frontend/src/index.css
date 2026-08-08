@@ -79,3 +79,16 @@
   --input: 40 13.6% 17.3%;
   --ring: 44 69.2% 60.6%;
 }
+
+/* Removes the native up/down spinner on every number input app-wide -- the
+   scroll-wheel-changes-value fix (Input's onWheel blur) stopped the spinner
+   from being a functional trap, but it stayed visually present and distracting. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

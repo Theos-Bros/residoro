@@ -6,6 +6,8 @@ import { fetchDevelopers, fetchProjects, type Developer, type Project } from '@/
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
+import { toSentenceCase } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { FeatureTagInput } from '@/components/ui/feature-tag-input';
@@ -250,7 +252,9 @@ export function NewPropertyListingForm({ session }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="type">Property type</Label>
+                  <Label htmlFor="type">
+                    Property type <span className="text-primary">*</span>
+                  </Label>
                   <select
                     id="type"
                     value={type}
@@ -259,13 +263,15 @@ export function NewPropertyListingForm({ session }: Props) {
                   >
                     {PROPERTY_TYPES.map((t) => (
                       <option key={t} value={t}>
-                        {t.replace(/_/g, ' ')}
+                        {toSentenceCase(t)}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="owner_type">Owner type</Label>
+                  <Label htmlFor="owner_type">
+                    Owner type <span className="text-primary">*</span>
+                  </Label>
                   <select
                     id="owner_type"
                     value={ownerType}
@@ -274,7 +280,7 @@ export function NewPropertyListingForm({ session }: Props) {
                   >
                     {OWNER_TYPES.map((o) => (
                       <option key={o} value={o}>
-                        {o}
+                        {toSentenceCase(o)}
                       </option>
                     ))}
                   </select>
@@ -341,15 +347,7 @@ export function NewPropertyListingForm({ session }: Props) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ask_price">Owner&apos;s ask price (optional, PHP)</Label>
-                <Input
-                  id="ask_price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={askPrice}
-                  onChange={(e) => setAskPrice(e.target.value)}
-                  className="font-mono"
-                />
+                <MoneyInput id="ask_price" value={askPrice} onChange={setAskPrice} className="font-mono" />
               </div>
             </CardContent>
           </Card>
@@ -454,7 +452,9 @@ export function NewPropertyListingForm({ session }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="listing_type">Listing type</Label>
+                  <Label htmlFor="listing_type">
+                    Listing type <span className="text-primary">*</span>
+                  </Label>
                   <select
                     id="listing_type"
                     value={listingType}
@@ -469,20 +469,13 @@ export function NewPropertyListingForm({ session }: Props) {
                   <Label htmlFor="price">
                     Price (PHP) <span className="text-primary">*</span>
                   </Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    required
-                    className="font-mono"
-                  />
+                  <MoneyInput id="price" value={price} onChange={setPrice} required className="font-mono" />
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="exclusivity">Exclusivity</Label>
+                <Label htmlFor="exclusivity">
+                  Exclusivity <span className="text-primary">*</span>
+                </Label>
                 <select
                   id="exclusivity"
                   value={exclusivity}
@@ -495,12 +488,15 @@ export function NewPropertyListingForm({ session }: Props) {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="authority_starts_at">Authority to Sell/Lease starts</Label>
+                  <Label htmlFor="authority_starts_at">
+                    Authority to Sell/Lease starts <span className="text-primary">*</span>
+                  </Label>
                   <Input
                     id="authority_starts_at"
                     type="date"
                     value={authorityStartsAt}
                     onChange={(e) => setAuthorityStartsAt(e.target.value)}
+                    required
                   />
                 </div>
                 <div className="space-y-1.5">

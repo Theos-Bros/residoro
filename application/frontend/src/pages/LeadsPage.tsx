@@ -21,7 +21,7 @@ import { BroadcastModal } from '@/components/BroadcastModal';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import type { BroadcastEntityType } from '@/lib/broadcastApi';
 import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
-import { cn } from '@/lib/utils';
+import { cn, toSentenceCase } from '@/lib/utils';
 
 type Props = {
   session: Session;
@@ -253,7 +253,7 @@ export function LeadsPage({ session }: Props) {
                   >
                     {LEAD_STAGES.map((s) => (
                       <option key={s} value={s}>
-                        {s.replace(/_/g, ' ')}
+                        {toSentenceCase(s)}
                       </option>
                     ))}
                   </select>
@@ -352,7 +352,7 @@ export function LeadsPage({ session }: Props) {
                           : INLINE_INQUIRY_STAGES
                         ).map((s) => (
                           <option key={s} value={s}>
-                            {s.replace(/_/g, ' ')}
+                            {toSentenceCase(s)}
                           </option>
                         ))}
                       </select>
