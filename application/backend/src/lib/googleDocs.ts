@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { google } from 'googleapis';
 
 // tb-buyer-leads-match-itinerary-001: residoro's first external third-party
@@ -28,7 +29,16 @@ import { google } from 'googleapis';
 // the Google Docs API and Google Drive API enabled on its project, to
 // finish verifying this end-to-end.
 
-const SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file'];
+// tb-buyer-leads-itinerary-settings-001: widened from 'drive.file' to full
+// 'drive' -- the template-copy/folder-targeting flow this tracer bullet adds
+// reads and writes files the service account never created itself (an
+// admin-authored template doc, an admin-owned Drive folder), only manually
+// shared with the service account's own email via Drive's normal sharing UI.
+// 'drive.file' only covers files the app itself created or that were opened
+// through a Picker flow, neither of which applies here -- see this
+// tracer bullet's semantic_scope for why manual sharing is a real,
+// unavoidable prerequisite rather than something this feature can automate.
+const SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive'];
 
 export class GoogleDocsNotConfiguredError extends Error {
   constructor() {
@@ -50,6 +60,32 @@ function getAuth() {
   return new google.auth.GoogleAuth({ keyFile, scopes: SCOPES });
 }
 
+let cachedServiceAccountEmail: string | null | undefined;
+
+// tb-buyer-leads-itinerary-settings-001: the Settings UI needs to show the
+// admin the exact address to manually share a template/folder with -- reads
+// it straight out of the same key file getAuth() already points at, rather
+// than asking the user to set a second env var that could drift from the
+// real key. Cached after the first successful read since the key file's
+// contents don't change at runtime.
+export function getServiceAccountEmail(): string | null {
+  if (cachedServiceAccountEmail !== undefined) return cachedServiceAccountEmail;
+
+  const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (!keyFile) {
+    cachedServiceAccountEmail = null;
+    return null;
+  }
+
+  try {
+    const key = JSON.parse(readFileSync(keyFile, 'utf-8')) as { client_email?: string };
+    cachedServiceAccountEmail = key.client_email ?? null;
+  } catch {
+    cachedServiceAccountEmail = null;
+  }
+  return cachedServiceAccountEmail;
+}
+
 export type ItineraryItem = {
   // Display fields only -- this lib never re-derives or re-scores anything,
   // it just formats what the caller (matchLogs.ts route) already resolved
@@ -63,6 +99,14 @@ export type CreateItineraryInput = {
   title: string; // doc title, e.g. "Showing Itinerary -- Juan Dela Cruz"
   buyerLabel: string;
   items: ItineraryItem[];
+  // tb-buyer-leads-itinerary-settings-001: when set, generation copies this
+  // template (via drive.files.copy + replaceAllText merge-fill) instead of
+  // building plain text from scratch. folderId works independently of
+  // templateDocumentId -- the template path passes it straight to
+  // files.copy's `parents`, the plain-text path moves the doc into it with
+  // a follow-up files.update (docs.documents.create has no parents option).
+  templateDocumentId?: string | null;
+  folderId?: string | null;
 };
 
 export type CreateItineraryResult = {
@@ -80,6 +124,101 @@ export type CreateItineraryResult = {
 // intermediate re-fetch of the document is needed for a single top-to-bottom
 // insert.
 export async function createItineraryDoc(input: CreateItineraryInput): Promise<CreateItineraryResult> {
+  if (input.templateDocumentId) {
+    return createItineraryDocFromTemplate(input, input.templateDocumentId);
+  }
+
+  const result = await createItineraryDocFromScratch(input);
+  if (input.folderId) {
+    await moveDocToFolder(result.documentId, input.folderId);
+  }
+  return result;
+}
+
+// tb-buyer-leads-itinerary-settings-001: the merge-field template mechanism
+// follows tb-distribution-share-text-001's mergeTemplate() philosophy
+// applied to a Doc structure instead of a plain string. drive.files.copy
+// reads the admin-authored template (only visible to the service account
+// because the admin manually shared it -- see the SCOPES comment above),
+// then docs.documents.batchUpdate's replaceAllText substitutes each
+// {{merge_field}} token in one pass -- simpler and more robust to the
+// admin's own formatting than character-index-based insertion.
+async function createItineraryDocFromTemplate(
+  input: CreateItineraryInput,
+  templateDocumentId: string,
+): Promise<CreateItineraryResult> {
+  const auth = getAuth();
+  const drive = google.drive({ version: 'v3', auth });
+  const docs = google.docs({ version: 'v1', auth });
+
+  let documentId: string;
+  try {
+    const copied = await drive.files.copy({
+      fileId: templateDocumentId,
+      requestBody: {
+        name: input.title,
+        ...(input.folderId ? { parents: [input.folderId] } : {}),
+      },
+    });
+    if (!copied.data.id) throw new Error('Google Drive API did not return a copied file id');
+    documentId = copied.data.id;
+  } catch (err) {
+    throw new Error(`Could not copy the itinerary template: ${(err as Error).message}`);
+  }
+
+  const itemsTable =
+    input.items.length === 0
+      ? '(No matched items were selected for this itinerary.)'
+      : input.items.map((item, i) => `${i + 1}. ${item.label} — ${item.detail} (${item.sourceNote})`).join('\n');
+
+  const mergeFields: Record<string, string> = {
+    title: input.title,
+    buyer_name: input.buyerLabel,
+    items_table: itemsTable,
+  };
+
+  try {
+    await docs.documents.batchUpdate({
+      documentId,
+      requestBody: {
+        requests: Object.entries(mergeFields).map(([key, value]) => ({
+          replaceAllText: {
+            containsText: { text: `{{${key}}}`, matchCase: true },
+            replaceText: value,
+          },
+        })),
+      },
+    });
+  } catch (err) {
+    throw new Error(`Itinerary doc copied from template but could not fill in its merge fields: ${(err as Error).message}`);
+  }
+
+  return { documentId, url: `https://docs.google.com/document/d/${documentId}/edit` };
+}
+
+// tb-buyer-leads-itinerary-settings-001: docs.documents.create has no
+// `parents` option, so a folder-targeted plain-text doc needs this
+// follow-up files.update -- reads the doc's current (default) parent so it
+// can be removed in the same call, rather than leaving the doc visible in
+// both its default location and the configured folder.
+async function moveDocToFolder(documentId: string, folderId: string): Promise<void> {
+  const auth = getAuth();
+  const drive = google.drive({ version: 'v3', auth });
+
+  try {
+    const file = await drive.files.get({ fileId: documentId, fields: 'parents' });
+    const previousParents = (file.data.parents ?? []).join(',');
+    await drive.files.update({
+      fileId: documentId,
+      addParents: folderId,
+      ...(previousParents ? { removeParents: previousParents } : {}),
+    });
+  } catch (err) {
+    throw new Error(`Doc created but could not be filed into the configured Drive folder: ${(err as Error).message}`);
+  }
+}
+
+async function createItineraryDocFromScratch(input: CreateItineraryInput): Promise<CreateItineraryResult> {
   const auth = getAuth();
   const docs = google.docs({ version: 'v1', auth });
 
@@ -150,7 +289,17 @@ export async function createItineraryDoc(input: CreateItineraryInput): Promise<C
 // doc reachable rather than silently unshared) -- this fallback is
 // deliberately 'reader', not 'writer', since it's no longer scoped to one
 // identity.
-export async function shareItineraryDoc(documentId: string, agentEmail: string | null): Promise<void> {
+// tb-buyer-leads-itinerary-settings-001: recipientEmail is a workspace-
+// configured standing recipient, ADDED alongside the agent's own share, not
+// a replacement -- confirmed explicitly during scoping, see this tracer
+// bullet's semantic_scope. Uses the same 'writer' grant as the agent share
+// (both are named individuals expected to annotate the doc, not "anyone
+// with the link").
+export async function shareItineraryDoc(
+  documentId: string,
+  agentEmail: string | null,
+  recipientEmail?: string | null,
+): Promise<void> {
   const auth = getAuth();
   const drive = google.drive({ version: 'v3', auth });
 
@@ -165,6 +314,14 @@ export async function shareItineraryDoc(documentId: string, agentEmail: string |
       await drive.permissions.create({
         fileId: documentId,
         requestBody: { type: 'anyone', role: 'reader' },
+      });
+    }
+
+    if (recipientEmail) {
+      await drive.permissions.create({
+        fileId: documentId,
+        sendNotificationEmail: false,
+        requestBody: { type: 'user', role: 'writer', emailAddress: recipientEmail },
       });
     }
   } catch (err) {

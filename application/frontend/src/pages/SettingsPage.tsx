@@ -5,6 +5,7 @@ import { SharingTemplatesPanel } from '@/components/SharingTemplatesPanel';
 import { PerformanceSettingsPanel } from '@/components/PerformanceSettingsPanel';
 import { MatchingSettingsPanel } from '@/components/MatchingSettingsPanel';
 import { CommissionSettingsPanel } from '@/components/CommissionSettingsPanel';
+import { ItinerarySettingsPanel } from '@/components/ItinerarySettingsPanel';
 import { TaskRoutingSettingsPanel } from '@/components/TaskRoutingSettingsPanel';
 import { PermissionsSettingsPanel } from '@/components/PermissionsSettingsPanel';
 import { TeamSettingsPanel } from '@/components/TeamSettingsPanel';
@@ -39,12 +40,17 @@ type Props = {
 // tb-commission-structure-001: sixth sub-section, reusing the same
 // view-all/edit-gated shape as Matching -- everyone can see the current
 // default split, only admin (or a 'commission' delegation grant) can edit it.
+//
+// tb-buyer-leads-itinerary-settings-001: seventh sub-section, same
+// view-all/edit-gated shape again -- makes tb-buyer-leads-match-itinerary-001's
+// Google Docs generation configurable (recipient/folder/template).
 const BASE_SECTIONS = [
   { id: 'sharing-templates', label: 'Sharing Templates' },
   { id: 'performance', label: 'Performance' },
   { id: 'matching', label: 'Matching' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'commission', label: 'Commission' },
+  { id: 'itinerary', label: 'Itinerary' },
 ] as const;
 const PERMISSIONS_SECTION = { id: 'permissions', label: 'Permissions' } as const;
 const TEAM_SECTION = { id: 'team', label: 'Team' } as const;
@@ -81,6 +87,7 @@ export function SettingsPage({ session }: Props) {
           {activeSection === 'matching' && <MatchingSettingsPanel session={session} />}
           {activeSection === 'tasks' && <TaskRoutingSettingsPanel session={session} />}
           {activeSection === 'commission' && <CommissionSettingsPanel session={session} />}
+          {activeSection === 'itinerary' && <ItinerarySettingsPanel session={session} />}
           {activeSection === 'permissions' && isAdmin && <PermissionsSettingsPanel session={session} />}
           {activeSection === 'team' && isAdmin && <TeamSettingsPanel session={session} />}
         </div>

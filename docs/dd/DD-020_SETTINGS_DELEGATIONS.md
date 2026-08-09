@@ -1,10 +1,10 @@
 # DD-020 — Settings Delegations & Per-Setting Tables
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-09
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -12,17 +12,23 @@
 
 Exact table/column/constraint definitions for `settings_edit_delegations` and the per-setting
 tables it governs delegated write access to: `workspace_sharing_settings`,
-`workspace_performance_settings`, `workspace_matching_settings`. Written retroactively — this
-domain shipped across three migrations (2026-07-28) with zero DD coverage, caught by a
-2026-08-09 birds-eye audit. See ADR-004 for the full architectural rationale (why per-setting
-tables, not a delegation check on the shared `workspaces` row) — this doc covers exact schema
-only, not design reasoning already recorded there.
+`workspace_performance_settings`, `workspace_matching_settings`, `workspace_commission_settings`,
+`workspace_itinerary_settings`. Written retroactively — this domain shipped across three
+migrations (2026-07-28) with zero DD coverage, caught by a 2026-08-09 birds-eye audit. See ADR-004
+for the full architectural rationale (why per-setting tables, not a delegation check on the shared
+`workspaces` row) — this doc covers exact schema only, not design reasoning already recorded
+there.
+
+**2026-08-10 note (per RFC-004's documentation-cadence requirement):** `tb-buyer-leads-itinerary-
+settings-001` added `workspace_itinerary_settings` and widened `setting_key` to add `itinerary` —
+same pattern as every prior addition to this table, documented below rather than deferred to a
+later catch-up review.
 
 ---
 
 ## Scope
 
-Covers the four tables named above. `workspace_task_routing_settings` — the same delegated-
+Covers the six tables named above. `workspace_task_routing_settings` — the same delegated-
 settings pattern applied to Tasks — is documented in DD-017 alongside `tasks` itself (the two
 ship and are read together); not duplicated here, only cross-referenced.
 
@@ -50,7 +56,7 @@ model — an admin's own edit rights always come from `role = 'admin'`, never fr
 | `id` | `uuid` | PK, default `gen_random_uuid()` | |
 | `tenant_id` | `uuid` | not null, FK → `workspaces(id)` | |
 | `member_id` | `uuid` | not null, FK → `profiles(id)` | |
-| `setting_key` | `text` | not null, `CHECK` in (`sharing_templates`, `performance`, `matching`, `tasks`) | Widened twice after initial ship: `matching` added by `tb-buyer-leads-matching-001` (2026-07-28), `tasks` added by `tb-tasks-crud-001` (2026-07-28) — each new delegatable setting widens this list, same pattern both times |
+| `setting_key` | `text` | not null, `CHECK` in (`sharing_templates`, `performance`, `matching`, `tasks`, `commission`, `itinerary`) | Widened four times after initial ship: `matching` (`tb-buyer-leads-matching-001`, 2026-07-28), `tasks` (`tb-tasks-crud-001`, 2026-07-28), `commission` (`tb-commission-structure-001`, 2026-08-04), `itinerary` (`tb-buyer-leads-itinerary-settings-001`, 2026-08-10) — each new delegatable setting widens this list, same pattern every time |
 | `granted_by` | `uuid` | not null, FK → `profiles(id)` | |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 
@@ -102,6 +108,51 @@ phase at all.
 
 ---
 
+## Table: `workspace_commission_settings`
+
+One row per tenant. Never had a `workspaces`-column phase — built directly as its own table,
+same shape as `workspace_matching_settings`. Missed by this doc's original 2026-08-09 version
+despite shipping 2026-08-04; added 2026-08-10 while documenting `workspace_itinerary_settings`,
+rather than left as a second known drift.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `tenant_id` | `uuid` | PK, FK → `workspaces(id)` | |
+| `default_brokerage_pct` | `numeric` | not null, default `50` | |
+| `default_agent_pct` | `numeric` | not null, default `50` | |
+| `default_co_broker_pct` | `numeric` | not null, default `0` | |
+| `updated_at` | `timestamptz` | not null, default `now()` | Bumped by `trg_workspace_commission_settings_updated_at` |
+
+**Constraint:** `check (default_brokerage_pct + default_agent_pct + default_co_broker_pct = 100)`
+— DB-level enforcement of the three-way split invariant, not trusted to application code alone.
+
+`setting_key`: `commission` — added by `tb-commission-structure-001` (2026-08-04).
+
+---
+
+## Table: `workspace_itinerary_settings`
+
+One row per tenant. Additive configuration for `tb-buyer-leads-match-itinerary-001`'s Google
+Docs itinerary generation — any field left null falls back to that tracer bullet's original
+behavior for that piece (plain-text builder, no folder, agent-only share).
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `tenant_id` | `uuid` | PK, FK → `workspaces(id)` | |
+| `recipient_email` | `text` | nullable | Standing recipient, gets `writer` access on every generated itinerary in addition to the requesting agent, not instead of |
+| `drive_folder_id` | `text` | nullable | Target Drive folder — must be manually shared with the service account's own email first (a real Google-side prerequisite, not automatable) |
+| `template_document_id` | `text` | nullable | Google Doc copied + merge-filled (`{{title}}`, `{{buyer_name}}`, `{{items_table}}`) instead of building plain text; same manual-share prerequisite as the folder |
+| `updated_at` | `timestamptz` | not null, default `now()` | Bumped by `trg_workspace_itinerary_settings_updated_at` |
+
+`setting_key`: `itinerary` — added by `tb-buyer-leads-itinerary-settings-001` (2026-08-10).
+
+Note: the backend accepts a full Drive/Docs URL or a bare file ID for `drive_folder_id`/
+`template_document_id` — URLs are normalized to their file ID at write time
+(`extractGoogleFileId()` in `application/backend/src/routes/itinerarySettings.ts`), so this
+column always holds a bare ID, never a URL.
+
+---
+
 ## Row-Level Security
 
 **`settings_edit_delegations`:** any tenant member can `select` (needed so a delegated member's
@@ -109,13 +160,14 @@ own `GET` can compute `can_edit`); `insert`/`update`/`delete` are admin-only, mi
 `workspaces_update_admin`'s shape.
 
 **Every per-setting table** (`workspace_sharing_settings`, `workspace_performance_settings`,
-`workspace_matching_settings`, and `workspace_task_routing_settings` per DD-017): any tenant
-member can `select`; `update` requires `has_settings_delegation('<setting_key>')` — true for an
-admin, or a member holding a matching `settings_edit_delegations` row. No table has an `insert`
-or `delete` policy for `authenticated` — rows are seeded once per tenant by the migration/tenant-
-creation trigger, never created or removed by a route.
+`workspace_matching_settings`, `workspace_commission_settings`, `workspace_itinerary_settings`,
+and `workspace_task_routing_settings` per DD-017): any tenant member can `select`; `update`
+requires `has_settings_delegation('<setting_key>')` — true for an admin, or a member holding a
+matching `settings_edit_delegations` row. No table has an `insert` or `delete` policy for
+`authenticated` — rows are seeded once per tenant by the migration/tenant-creation trigger, never
+created or removed by a route.
 
-`service_role` has full access on all four tables in this doc.
+`service_role` has full access on all six tables in this doc.
 
 ---
 
@@ -141,6 +193,12 @@ creation trigger, never created or removed by a route.
 - `supabase/migrations/20260728170000_buyer_leads_matching.sql` — `workspace_matching_settings`,
   `setting_key` widened to add `matching`
 - `supabase/migrations/20260728200000_tasks_schema.sql` — `setting_key` widened to add `tasks`
+- `supabase/migrations/20260804140000_commission_structure.sql` — `workspace_commission_settings`,
+  `setting_key` widened to add `commission`
+- `supabase/migrations/20260810120000_itinerary_settings.sql` — `workspace_itinerary_settings`,
+  `setting_key` widened to add `itinerary`
+- `tb-buyer-leads-match-itinerary-001` (Theos Registry) — the itinerary generation feature
+  `workspace_itinerary_settings` makes configurable
 
 ---
 
@@ -149,3 +207,4 @@ creation trigger, never created or removed by a route.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-08-09 | Initial version, written retroactively from a 2026-08-09 birds-eye audit — this four-table domain had zero DD coverage across three migrations since 2026-07-28. |
+| 1.1.0 | 2026-08-10 | Added `workspace_itinerary_settings` (`tb-buyer-leads-itinerary-settings-001`) and, catching a second pre-existing drift while here, the previously-undocumented `workspace_commission_settings` (`tb-commission-structure-001`, shipped 2026-08-04, missed by this doc's own initial 2026-08-09 version). |

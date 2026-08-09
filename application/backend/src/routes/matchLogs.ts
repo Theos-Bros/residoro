@@ -290,6 +290,20 @@ export async function registerMatchLogRoutes(app: FastifyInstance) {
         sourceNote: sourceNoteFor(item),
       }));
 
+      // tb-buyer-leads-itinerary-settings-001: any of the three fields left
+      // unset falls back to tb-buyer-leads-match-itinerary-001's original
+      // behavior for that piece (plain-text builder, no folder, agent-only
+      // share) -- additive configuration, not a prerequisite.
+      const { data: itinerarySettings, error: itinerarySettingsError } = await supabase
+        .from('workspace_itinerary_settings')
+        .select('recipient_email, drive_folder_id, template_document_id')
+        .eq('tenant_id', tenantId)
+        .single();
+      if (itinerarySettingsError) {
+        request.log.error(itinerarySettingsError);
+        return reply.status(500).send({ error: 'Could not load itinerary settings' });
+      }
+
       let documentId: string;
       let url: string;
       try {
@@ -297,6 +311,8 @@ export async function registerMatchLogRoutes(app: FastifyInstance) {
           title: `Showing Itinerary — ${buyerLabel}`,
           buyerLabel,
           items,
+          templateDocumentId: itinerarySettings?.template_document_id ?? null,
+          folderId: itinerarySettings?.drive_folder_id ?? null,
         });
         documentId = doc.documentId;
         url = doc.url;
@@ -307,7 +323,7 @@ export async function registerMatchLogRoutes(app: FastifyInstance) {
 
       try {
         const { data: userData } = await supabaseAdmin.auth.admin.getUserById(request.user!.id);
-        await shareItineraryDoc(documentId, userData.user?.email ?? null);
+        await shareItineraryDoc(documentId, userData.user?.email ?? null, itinerarySettings?.recipient_email ?? null);
       } catch (err) {
         request.log.error(err);
         // Doc exists and is retrievable via `url` (created under the shared
