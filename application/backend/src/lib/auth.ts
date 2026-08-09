@@ -22,6 +22,7 @@ export type AuthedOperator = {
 export type AuthedIdentity = {
   id: string;
   role: string;
+  email: string | null;
 };
 
 declare module 'fastify' {
@@ -37,6 +38,7 @@ type VerifiedProfile = {
   tenantId: string | null;
   role: string;
   accessState: AccessState | null;
+  email: string | null;
 };
 
 // Shared by requireAuth and requireOperator: verify the bearer token against
@@ -79,6 +81,7 @@ export async function verifyBearerAndFetchProfile(
     tenantId: profile.tenant_id,
     role: profile.role,
     accessState: profile.workspaces?.access_state ?? null,
+    email: userData.user.email ?? null,
   };
 }
 
@@ -150,7 +153,7 @@ export async function requireAnyIdentity(request: FastifyRequest, reply: Fastify
   const profile = await verifyBearerAndFetchProfile(request, reply);
   if (!profile) return;
 
-  request.identity = { id: profile.userId, role: profile.role };
+  request.identity = { id: profile.userId, role: profile.role, email: profile.email };
 }
 
 // tb-client-lifecycle-migration-execution-001: migration is the one flow both

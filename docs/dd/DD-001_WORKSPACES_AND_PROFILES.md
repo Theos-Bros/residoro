@@ -1,10 +1,10 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.2.0
+**Version:** 2.3.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-08-06
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -50,6 +50,7 @@ their trigger-based provisioning on signup, and their RLS policies. Does not cov
 | `role` | `text` | not null, default `'member'`, `check (role in ('admin','member','operator'))` | `'operator'` added by `tb-client-lifecycle-operator-access-001`. Column default is `'member'` (fail-safe); the signup trigger explicitly inserts the correct role per branch (see Signup Provisioning below) — the default only matters for any future insert path that omits the value. Mutable only via the trigger or service-role access, never by the profile owner directly |
 | `handle` | `text` | not null, unique | Added by `tb-accounts-handle-001`. Auto-assigned at account creation via `generate_unique_handle()` (lowercased email local-part, numeric suffix on collision). No client-facing rename endpoint by design — a platform admin edits this column directly in Supabase if it ever needs to change. The stable cross-tenant identifier `tb-listings-co-broker-share-001` uses to name a docket recipient |
 | `full_name` | `text` | nullable | |
+| `prefix` | `text` | nullable | Added by `tb-user-profile-email-prefix-001` (2026-08-10). Free-text professional/courtesy title (e.g. "Atty.", "Broker") — no fixed list, no format validation. Self-editable, same column-level-grant shape as `full_name` |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
 
@@ -163,11 +164,14 @@ still governs teammate-to-teammate visibility unchanged. Migration:
 `supabase/migrations/20260806110000_profiles_self_select.sql`.
 
 **Column-level grant, not a blanket one, on `profiles`:** `authenticated` is granted
-`update (full_name)` only — not a blanket `update`. A blanket grant combined with
+`update (full_name)` and, as of `tb-user-profile-email-prefix-001` (2026-08-10),
+`update (prefix)` — not a blanket `update`. A blanket grant combined with
 `profiles_update_own`'s row-level check would let a user change their *own* `role` or
 `tenant_id` via a client-side update (RLS restricts which row, not which column). `role` and
 `tenant_id` are mutable only via the `SECURITY DEFINER` signup trigger or direct service-role
-access. See ADR-002's Consequences section for the full reasoning.
+access. See ADR-002's Consequences section for the full reasoning. No new RLS policy was needed
+for `prefix` — `profiles_update_own`'s row-level check already covers any column on the
+caller's own row; enforcement of *which* columns is entirely the grant's job.
 
 `workspaces` gets no `insert` grant for `authenticated` — the only path that creates a
 workspace row is the signup trigger, which runs as `SECURITY DEFINER` and needs no grant.
@@ -214,6 +218,8 @@ reachable this way. See ADR-002's Consequences section.
   `20260729110000_fix_handle_new_user_handle_column.sql` — current `handle_new_user()`
 - `supabase/migrations/20260806110000_profiles_self_select.sql` — `profiles_select_own`
   (`tb-user-profile-display-name-001`, theos-registry)
+- `supabase/migrations/20260810140000_profiles_prefix.sql` — `prefix` column and its grant
+  (`tb-user-profile-email-prefix-001`, theos-registry)
 
 ---
 
@@ -225,3 +231,4 @@ reachable this way. See ADR-002's Consequences section.
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: added `operator` role, `handle`, `workspaces` contract/access-state/warning columns, `exclusivity_hard_block`, `rollback_window_hours`, and the `contract_notifications` table. Documented all four `handle_new_user()` branches. Structural revision (new table added), hence major version bump per STD-002. |
 | 2.1.0 | 2026-08-03 | Rewrote the Signup Provisioning section from a 2026-08-03 birds-eye review — the previous revision described the four-branch `handle_new_user()` that `20260729090000_fix_signup_privilege_escalation.sql` replaced to fix a CRITICAL finding in `docs/security-review-2026-07-29.md`. That section had gone eight days describing a patched vulnerability as current behavior; now describes the single-branch inert-profile trigger and the two trusted invite-then-assign call sites that actually grant privilege. |
 | 2.2.0 | 2026-08-06 | Added `profiles_select_own` RLS policy (`tb-user-profile-display-name-001`) — closes a gap where an operator could not read even their own `profiles` row through an RLS-scoped client, since `profiles_select_same_tenant` compares two nulls for a tenant-less operator. Additive, non-structural (no table/column change), hence a minor version bump per STD-002. |
+| 2.3.0 | 2026-08-10 | Added `profiles.prefix` column plus its `update (prefix)` grant (`tb-user-profile-email-prefix-001`) — self-editable free-text professional/courtesy title, same grant shape as `full_name`. No new RLS policy needed. Structural (new column), hence a minor version bump per STD-002 (additive column, not a breaking change). |

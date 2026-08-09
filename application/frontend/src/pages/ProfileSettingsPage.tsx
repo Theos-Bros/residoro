@@ -13,8 +13,14 @@ type Props = {
 // both identity types. One component, not two per-app wrappers -- the admin
 // dashboard already reuses top-level src/pages components (e.g. AuthPage),
 // so no new sharing convention is introduced here.
+//
+// tb-user-profile-email-prefix-001: adds email (read-only, never editable
+// here -- changing login email is separate, later scope) and prefix
+// (editable, same Save button as full_name).
 export function ProfileSettingsPage({ session }: Props) {
+  const [email, setEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
+  const [prefix, setPrefix] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +29,9 @@ export function ProfileSettingsPage({ session }: Props) {
   useEffect(() => {
     fetchProfile(session.access_token)
       .then((profile) => {
+        setEmail(profile.email);
         setFullName(profile.full_name ?? '');
+        setPrefix(profile.prefix ?? '');
         setLoaded(true);
       })
       .catch((err: Error) => setError(err.message));
@@ -34,8 +42,9 @@ export function ProfileSettingsPage({ session }: Props) {
     setSaved(false);
     setSaving(true);
     try {
-      const profile = await updateProfile(session.access_token, fullName);
+      const profile = await updateProfile(session.access_token, { full_name: fullName, prefix });
       setFullName(profile.full_name ?? '');
+      setPrefix(profile.prefix ?? '');
       setSaved(true);
     } catch (err) {
       setError((err as Error).message);
@@ -59,6 +68,22 @@ export function ProfileSettingsPage({ session }: Props) {
 
       {loaded && (
         <>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Email</label>
+            <p className="text-sm text-muted-foreground">{email ?? '—'}</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Prefix</label>
+            <input
+              type="text"
+              value={prefix}
+              onChange={(e) => setPrefix(e.target.value)}
+              placeholder="e.g. Atty., Broker"
+              className="h-9 w-full rounded-md border border-input px-3 text-sm"
+            />
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">Display name</label>
             <input

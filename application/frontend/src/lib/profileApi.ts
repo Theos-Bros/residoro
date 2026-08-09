@@ -2,6 +2,13 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
 export type Profile = {
   full_name: string | null;
+  prefix: string | null;
+  email: string | null;
+};
+
+export type ProfileUpdate = {
+  full_name: string;
+  prefix?: string | null;
 };
 
 async function parseJsonOrThrow(response: Response) {
@@ -22,14 +29,14 @@ export async function fetchProfile(accessToken: string): Promise<Profile> {
   return parseJsonOrThrow(response);
 }
 
-export async function updateProfile(accessToken: string, fullName: string): Promise<Profile> {
+export async function updateProfile(accessToken: string, update: ProfileUpdate): Promise<Profile> {
   const response = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ full_name: fullName }),
+    body: JSON.stringify(update),
   });
   return parseJsonOrThrow(response);
 }
