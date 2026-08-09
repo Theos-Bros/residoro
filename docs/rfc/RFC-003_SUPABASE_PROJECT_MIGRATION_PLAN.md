@@ -1,10 +1,10 @@
 # RFC-003 — Supabase Project Migration Plan
 
 **Status:** Approved
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-09
 
 ---
 
@@ -29,9 +29,12 @@ this migration doesn't have to resolve, only avoid making harder.
 
 ## Related Documents
 
-- RFC-001 — Pre-Scaling Infrastructure Readiness (deferred backup/DR and staging to this plan)
+- RFC-001 — Pre-Scaling Infrastructure Readiness (deferred backup/DR and staging to this plan;
+  its Decision 1 was superseded 2026-08-09 by RFC-005 — see the note on Decision 1 below)
 - RFC-002 — RLS Enforcement vs. Trusted-Backend-Only (the scoped-client work should land before
   or alongside this migration, not after — see Decision 1)
+- RFC-005 — Hosting & Deployment Plan Reconciliation (2026-08-09; confirmed this RFC's plan
+  executes as-is, and is now the RFC this migration's timing bundles with instead of RFC-001)
 
 ---
 
@@ -69,6 +72,12 @@ separate cutovers, and RFC-001 already anticipated this.
 
 **Decision:** Bundle with RFC-001's hosting setup, as recommended. No independent date — this
 migration is now scheduled to happen alongside the Vercel + Render/Fly.io cutover.
+
+**Note, 2026-08-09 (RFC-005):** RFC-001's Decision 1 (Vercel + Render/Fly.io) was superseded by
+RFC-005's Decision 1 (Cloudflare Pages + Render). This Decision's substance is unaffected — bundle
+with "whichever hosting cutover actually happens" was always the operative logic — only the
+cross-reference changes: this migration now bundles with RFC-005's hosting work, which RFC-005's
+own Decision 2 explicitly confirmed.
 
 ---
 
@@ -131,3 +140,4 @@ real client's data lands" or a specific date) rather than leaving it open-ended 
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial RFC, written from the 2026-07-27 birds-eye technical review's infra/ops survey findings and RFC-001's deferred backup/DR decision. |
 | 1.1.0 | 2026-07-27 | All 4 decisions recorded and approved: bundle with RFC-001's hosting setup; clean cutover (nothing worth preserving in the current project); explicit `supabase secrets set` for service-role; default daily backups only, PITR deferred again with a note to set an explicit trigger next time. |
+| 1.2.0 | 2026-08-09 | Decision 1's hosting cross-reference updated: RFC-001's Decision 1 was superseded by RFC-005, which also confirmed this RFC's plan (clean cutover, bundled timing) executes as-is — RFC-005's own Decision 2. No decision substance changed, only which RFC this migration bundles with. |

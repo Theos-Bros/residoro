@@ -1,10 +1,10 @@
 # RFC-001 — Pre-Scaling Infrastructure Readiness
 
-**Status:** Approved
-**Version:** 1.1.0
+**Status:** Approved (Decision 1 superseded by RFC-005, 2026-08-09)
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-09
 
 ---
 
@@ -82,6 +82,13 @@ what's already there (`PORT` env var, `0.0.0.0` bind).
 Compose option is explicitly deferred, not rejected — revisit only if a concrete signal of
 demand for it shows up (e.g. a cost or control constraint that the split-platform approach can't
 meet). Do not raise it again absent that signal.
+
+**Superseded 2026-08-09 by RFC-005** (Hosting & Deployment Plan Reconciliation): this decision
+was never priced, and RFC-005's live-sourced research found Vercel's Hobby (free) tier explicitly
+prohibits commercial use, making the real cost ~$27–45/mo, not the ~$0 this decision implicitly
+assumed. RFC-005 replaces this Decision with Cloudflare Pages (frontend) + Render (backend). This
+record is left as-is per this repo's convention for reversed decisions — see RFC-005 for the
+current, operative hosting decision.
 
 ---
 
@@ -167,3 +174,4 @@ no tradeoff to weigh:
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial RFC, written from the 2026-07-27 birds-eye technical review's infra/ops survey findings. |
 | 1.1.0 | 2026-07-27 | All 4 decisions recorded and approved: Vercel+Render/Fly.io hosting (VPS deferred, not rejected); defer staging, write a manual deploy runbook now; defer observability until hosting exists; defer backup/DR to the planned Supabase migration. |
+| 1.2.0 | 2026-08-09 | Decision 1 superseded by RFC-005 (a birds-eye audit found it conflicted, unreconciled, with `cap-deployment-001`) — pointer added below the original decision text, which is left unrewritten per this repo's convention. Decisions 2–4 unaffected. |
