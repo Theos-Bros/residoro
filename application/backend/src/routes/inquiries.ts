@@ -45,7 +45,7 @@ type UpdateInquiryBody = CreateInquiryBody & { stage?: string };
 
 type QualifyInquiryBody = {
   contact_id?: string;
-  create_contact?: { name: string; phone?: string; email?: string };
+  create_contact?: { name: string; phone?: string; email?: string; address?: string };
 };
 
 // tb-buyer-leads-schema-001: mirrors budget_min/budget_max etc across
@@ -268,6 +268,7 @@ export async function registerInquiriesRoutes(app: FastifyInstance) {
             name: create_contact.name,
             phone: create_contact.phone,
             email: create_contact.email,
+            address: create_contact.address,
             type: 'buyer_lead',
           })
           .select('id')

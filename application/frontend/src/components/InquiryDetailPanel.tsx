@@ -58,6 +58,9 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [newContactName, setNewContactName] = useState('');
+  const [newContactPhone, setNewContactPhone] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [newContactAddress, setNewContactAddress] = useState('');
   const [useNewContact, setUseNewContact] = useState(true);
 
   useEffect(() => {
@@ -175,6 +178,10 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
 
   function startQualify() {
     setQualifying(true);
+    setNewContactName(buyerFields.buyer_name);
+    setNewContactPhone(buyerFields.buyer_phone);
+    setNewContactEmail(buyerFields.buyer_email);
+    setNewContactAddress(buyerFields.buyer_address);
     if (contacts === null) {
       fetchContacts(session.access_token)
         .then(({ contacts }) => setContacts(contacts))
@@ -188,7 +195,14 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
     setError(null);
     try {
       const input = useNewContact
-        ? { create_contact: { name: newContactName } }
+        ? {
+            create_contact: {
+              name: newContactName,
+              phone: newContactPhone || undefined,
+              email: newContactEmail || undefined,
+              address: newContactAddress || undefined,
+            },
+          }
         : { contact_id: selectedContactId };
       if (useNewContact && !newContactName.trim()) {
         setError('Contact name is required');
@@ -236,7 +250,7 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label>Buyer Name</Label>
+              <Label>Inquirer Name</Label>
               <Input
                 value={buyerFields.buyer_name}
                 onChange={(e) => setBuyerFields((f) => ({ ...f, buyer_name: e.target.value }))}
@@ -336,11 +350,28 @@ export function InquiryDetailPanel({ session, inquiryId, isAdmin, onClose, onSav
                     </label>
                   </div>
                   {useNewContact ? (
-                    <Input
-                      placeholder="Contact name"
-                      value={newContactName}
-                      onChange={(e) => setNewContactName(e.target.value)}
-                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Contact name"
+                        value={newContactName}
+                        onChange={(e) => setNewContactName(e.target.value)}
+                      />
+                      <Input
+                        placeholder="Phone"
+                        value={newContactPhone}
+                        onChange={(e) => setNewContactPhone(e.target.value)}
+                      />
+                      <Input
+                        placeholder="Email"
+                        value={newContactEmail}
+                        onChange={(e) => setNewContactEmail(e.target.value)}
+                      />
+                      <Input
+                        placeholder="Address"
+                        value={newContactAddress}
+                        onChange={(e) => setNewContactAddress(e.target.value)}
+                      />
+                    </div>
                   ) : (
                     <select
                       className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"

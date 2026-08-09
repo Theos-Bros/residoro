@@ -17,6 +17,9 @@ type Props = {
   session: Session;
   inquiryId: string;
   buyerName: string;
+  buyerPhone?: string;
+  buyerEmail?: string;
+  buyerAddress?: string;
   onClose: () => void;
   onQualified: (leadId: string) => void;
 };
@@ -42,10 +45,22 @@ const selectClass = 'flex h-9 w-full rounded-md border border-input bg-backgroun
 // callback, out of scope for a markup-only pass. Kept at the default Dialog
 // width rather than forced to 700px since the content genuinely doesn't need
 // it.
-export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, onQualified }: Props) {
+export function QualifyInquiryModal({
+  session,
+  inquiryId,
+  buyerName,
+  buyerPhone = '',
+  buyerEmail = '',
+  buyerAddress = '',
+  onClose,
+  onQualified,
+}: Props) {
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [useNewContact, setUseNewContact] = useState(true);
   const [newContactName, setNewContactName] = useState(buyerName);
+  const [newContactPhone, setNewContactPhone] = useState(buyerPhone);
+  const [newContactEmail, setNewContactEmail] = useState(buyerEmail);
+  const [newContactAddress, setNewContactAddress] = useState(buyerAddress);
   const [selectedContactId, setSelectedContactId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +83,16 @@ export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, on
     }
     setSaving(true);
     try {
-      const input = useNewContact ? { create_contact: { name: newContactName } } : { contact_id: selectedContactId };
+      const input = useNewContact
+        ? {
+            create_contact: {
+              name: newContactName,
+              phone: newContactPhone || undefined,
+              email: newContactEmail || undefined,
+              address: newContactAddress || undefined,
+            },
+          }
+        : { contact_id: selectedContactId };
       const { lead } = await qualifyInquiry(session.access_token, inquiryId, input);
       onQualified((lead as { id: string }).id);
     } catch (err) {
@@ -116,7 +140,12 @@ export function QualifyInquiryModal({ session, inquiryId, buyerName, onClose, on
             </label>
           </div>
           {useNewContact ? (
-            <Input placeholder="Contact name" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} />
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="Contact name" value={newContactName} onChange={(e) => setNewContactName(e.target.value)} />
+              <Input placeholder="Phone" value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} />
+              <Input placeholder="Email" value={newContactEmail} onChange={(e) => setNewContactEmail(e.target.value)} />
+              <Input placeholder="Address" value={newContactAddress} onChange={(e) => setNewContactAddress(e.target.value)} />
+            </div>
           ) : (
             <select className={selectClass} value={selectedContactId} onChange={(e) => setSelectedContactId(e.target.value)}>
               <option value="">Select contact…</option>

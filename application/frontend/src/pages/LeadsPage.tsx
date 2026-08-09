@@ -319,7 +319,7 @@ export function LeadsPage({ session }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Buyer</TableHead>
+                  <TableHead>Inquirer Name</TableHead>
                   <TableHead>Stage</TableHead>
                   <TableHead>Intent</TableHead>
                   <TableHead className="text-right">Budget</TableHead>
@@ -401,6 +401,9 @@ export function LeadsPage({ session }: Props) {
           session={session}
           inquiryId={qualifyingInquiry.id}
           buyerName={qualifyingInquiry.buyer_name ?? ''}
+          buyerPhone={qualifyingInquiry.buyer_phone ?? ''}
+          buyerEmail={qualifyingInquiry.buyer_email ?? ''}
+          buyerAddress={qualifyingInquiry.buyer_address ?? ''}
           onClose={() => setQualifyingInquiry(null)}
           onQualified={() => {
             setQualifyingInquiry(null);

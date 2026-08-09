@@ -1,10 +1,10 @@
 # DD-005 — Contacts
 
 **Status:** Draft
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-09
 
 ---
 
@@ -35,6 +35,7 @@ CRM relationship data (lead status, assignment, activity history) a future CRM d
 | `email` | `text` | nullable | |
 | `phone` | `text` | nullable | |
 | `company` | `text` | nullable | |
+| `address` | `text` | nullable | Added by `tb-buyer-leads-inquiry-contact-carryover-001` (2026-08-09) so a qualified inquiry's captured address has somewhere to land — free text like `notes`, no structured components |
 | `notes` | `text` | nullable | |
 | `is_company` | `boolean` | not null, default `false` | Added by `tb-crm-developer-consolidation-001` (2026-07-28, `cap-crm-001` Milestone 1) when the standalone `developers` table was dropped and folded in here (`type = 'developer'`, `is_company = true` for former `developers` rows) — see DD-007 for that table's history |
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | Nullable, same rationale as `properties.created_by` — bulk/service-role writes may not have a single acting user |
@@ -86,6 +87,7 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 - ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 - `supabase/migrations/20260722140000_contacts.sql` — implements this doc
 - `supabase/migrations/20260728140000_crm_developer_consolidation.sql` — `is_company` added
+- `supabase/migrations/20260809100000_contacts_address.sql` — `address` added
 
 ---
 
@@ -95,3 +97,4 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review. |
 | 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: added `is_company` (from the `developers` consolidation), corrected the stale `service_role`-for-all-routes RLS claim, noted the unified Contacts page shipped on top of this table. |
+| 1.2.0 | 2026-08-09 | Added `address` (`tb-buyer-leads-inquiry-contact-carryover-001`) — closes the gap where a qualified inquiry's captured address had no destination. |
