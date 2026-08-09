@@ -1,7 +1,7 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.6.0
+**Version:** 2.7.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
 **Last Updated:** 2026-08-10
@@ -195,6 +195,24 @@ migration files alone.
 `workspaces` gets no `insert` grant for `authenticated` — the only path that creates a
 workspace row is the signup trigger, which runs as `SECURITY DEFINER` and needs no grant.
 
+**Correction (2026-08-10) — `workspaces` had the same accidental table-wide grant `profiles` did:**
+`authenticated` held a full table-wide `update` on `workspaces`
+(`20260721120000_platform_foundation.sql:247`, quoted above, never narrowed by any later
+migration) — Finding 7's fix for `profiles` deferred this at the time since it was lower severity
+(requires already being a legitimate admin of your own tenant, not a full cross-tenant takeover).
+Combined with `workspaces_update_admin`'s row-only RLS check, a real tenant admin could
+self-edit `access_state`, `contract_end_date`, `exclusivity_hard_block`, or
+`rollback_window_hours` directly via PostgREST — all four documented above as
+operator/Edge-Function/system-set only. Fixed same day via
+`supabase/migrations/20260810180000_workspaces_grant_lockdown.sql`: `revoke all` then re-`grant
+select` only — no `update` grant at all, since grepping every `getScopedClient(...).from
+('workspaces')` call in `application/backend/src` found exactly one, a read-only `.select()` in
+`routes/workspace.ts`. `workspaces_update_admin`'s RLS policy is unchanged but now unreachable via
+PostgREST with no grant behind it — the same shape `profiles.position` already uses for
+operator/system-only columns. Live-reverified — see
+`docs/security-review-2026-07-29.md` Finding 7's "Fix Applied (third pass same day)" note and
+`application/backend/src/scripts/verify-workspaces-grant-lockdown.ts`.
+
 ---
 
 ## Post-Apply Hardening (Supabase Advisor Findings)
@@ -248,6 +266,9 @@ reachable this way. See ADR-002's Consequences section.
   privilege-escalation exploit/fix narrative this correction summarizes
 - `supabase/migrations/20260810160000_profiles_position.sql` — `position` column, deliberately
   no `authenticated` grant (`tb-employee-position-001`, theos-registry)
+- `supabase/migrations/20260810180000_workspaces_grant_lockdown.sql` — closes the accidental
+  table-wide `update` grant to `authenticated` on `workspaces`; see
+  `docs/security-review-2026-07-29.md` Finding 7
 
 ---
 
@@ -263,3 +284,4 @@ reachable this way. See ADR-002's Consequences section.
 | 2.4.0 | 2026-08-10 | Replaced `profiles.full_name` with `first_name`/`last_name` (`tb-user-profile-name-split-001`) — existing rows backfilled by splitting on the first space, the `update (full_name)` grant swapped for `update (first_name, last_name)`, and `handle_new_user()` redefined to split incoming `full_name` signup metadata the same way. No new RLS policy needed. Breaking at the column level (a column was dropped, not just added) but every existing API response consumers outside the self-edit surface depend on kept its `full_name` field, now computed server-side — flagged as a minor bump per STD-002 since no external contract broke, only internal storage. |
 | 2.5.0 | 2026-08-10 | **Correction, critical.** The "Column-level grant, not a blanket one" paragraph (present since v1.0.0) described intent, not reality: `authenticated` actually held full table-level UPDATE/INSERT/DELETE/TRUNCATE on `profiles` via Supabase's un-revoked default privileges, letting any member self-promote to admin/operator or hijack any tenant via a direct PostgREST write. Fixed same day via `20260810170000_profiles_grant_lockdown.sql` (`revoke all` + precise re-grant). Full narrative in `docs/security-review-2026-07-29.md` Finding 7. Correction to previously-inaccurate documentation, not a new schema change, hence a minor bump per STD-002. |
 | 2.6.0 | 2026-08-10 | Added `profiles.position` column (`tb-employee-position-001`) — free-text job title, admin-set only via a service-role route, deliberately no `authenticated` grant at all (the first `profiles` column to follow `role`/`tenant_id`'s access pattern rather than the self-service one). No new RLS policy needed. Structural (new column), hence a minor version bump per STD-002. |
+| 2.7.0 | 2026-08-10 | **Correction, critical.** `workspaces` had the same accidental table-wide grant `profiles` did (v2.5.0) — `authenticated` held a full table-wide `update` on `workspaces` via the same un-revoked Supabase default, letting a real tenant admin self-edit `access_state`/`contract_end_date`/`exclusivity_hard_block`/`rollback_window_hours` directly, bypassing the operator/Edge-Function/system-only controls this doc always claimed governed them. Deferred at Finding 7's original fix time (lower severity, scoped out at the user's explicit direction), independently re-confirmed by a second review pass later the same day, then fixed and live-reverified in a third pass via `20260810180000_workspaces_grant_lockdown.sql` (`revoke all` + `select`-only re-grant — stronger than the `profiles` fix, since no legitimate feature updates `workspaces` via `authenticated` at all). Full narrative in `docs/security-review-2026-07-29.md` Finding 7. Correction to previously-inaccurate documentation, not a new schema change, hence a minor bump per STD-002. |
