@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { fetchMembers, inviteMember, removeMember, type WorkspaceMember } from '@/lib/membersApi';
+import { fetchMembers, inviteMember, removeMember, setMemberPosition, type WorkspaceMember } from '@/lib/membersApi';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,9 +31,16 @@ export function TeamSettingsPanel({ session }: Props) {
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
 
+  const [positionDrafts, setPositionDrafts] = useState<Record<string, string>>({});
+  const [savingPositionId, setSavingPositionId] = useState<string | null>(null);
+  const [positionError, setPositionError] = useState<string | null>(null);
+
   function reload() {
     fetchMembers(session.access_token)
-      .then(({ members }) => setMembers(members))
+      .then(({ members }) => {
+        setMembers(members);
+        setPositionDrafts(Object.fromEntries(members.map((m) => [m.id, m.position ?? ''])));
+      })
       .catch((err: Error) => setListError(err.message));
   }
 
@@ -69,6 +76,24 @@ export function TeamSettingsPanel({ session }: Props) {
       setRemoveError((err as Error).message);
     } finally {
       setRemoving(false);
+    }
+  }
+
+  async function handlePositionBlur(member: WorkspaceMember) {
+    const draft = positionDrafts[member.id] ?? '';
+    if (draft === (member.position ?? '')) return;
+    setPositionError(null);
+    setSavingPositionId(member.id);
+    try {
+      const result = await setMemberPosition(session.access_token, member.id, draft);
+      setMembers(
+        (current) => current?.map((m) => (m.id === member.id ? { ...m, position: result.position } : m)) ?? current,
+      );
+      setPositionDrafts((current) => ({ ...current, [member.id]: result.position ?? '' }));
+    } catch (err) {
+      setPositionError((err as Error).message);
+    } finally {
+      setSavingPositionId(null);
     }
   }
 
@@ -124,6 +149,12 @@ export function TeamSettingsPanel({ session }: Props) {
 
       {!listError && members === null && <p className="text-sm text-muted-foreground">Loading…</p>}
 
+      {positionError && (
+        <p role="alert" className="text-sm text-destructive">
+          {positionError}
+        </p>
+      )}
+
       {members && members.length > 0 && (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
@@ -131,6 +162,7 @@ export function TeamSettingsPanel({ session }: Props) {
               <TableRow>
                 <TableHead>Member</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Position</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -142,6 +174,16 @@ export function TeamSettingsPanel({ session }: Props) {
                     {member.handle && <span className="ml-1 text-muted-foreground">@{member.handle}</span>}
                   </TableCell>
                   <TableCell className="capitalize">{member.role}</TableCell>
+                  <TableCell>
+                    <Input
+                      value={positionDrafts[member.id] ?? ''}
+                      placeholder="e.g. Senior Agent"
+                      disabled={savingPositionId === member.id}
+                      onChange={(e) => setPositionDrafts((current) => ({ ...current, [member.id]: e.target.value }))}
+                      onBlur={() => handlePositionBlur(member)}
+                      className="h-9 max-w-48"
+                    />
+                  </TableCell>
                   <TableCell className="text-right">
                     {member.role !== 'admin' && (
                       <Button variant="outline" size="sm" onClick={() => setPendingRemoval(member)}>

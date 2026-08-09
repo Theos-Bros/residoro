@@ -6,6 +6,7 @@ export type WorkspaceMember = {
   handle: string | null;
   role: string;
   created_at: string;
+  position: string | null;
 };
 
 async function parseJsonOrThrow(response: Response) {
@@ -44,4 +45,23 @@ export async function removeMember(accessToken: string, memberId: string): Promi
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   await parseJsonOrThrow(response);
+}
+
+// tb-employee-position-001: admin-only, mirrors removeMember's shape --
+// position has no client-facing DB grant, so this is the only path that can
+// ever change it.
+export async function setMemberPosition(
+  accessToken: string,
+  memberId: string,
+  position: string,
+): Promise<{ id: string; position: string | null }> {
+  const response = await fetch(`${BACKEND_URL}/workspace/members/${memberId}/position`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ position }),
+  });
+  return parseJsonOrThrow(response);
 }

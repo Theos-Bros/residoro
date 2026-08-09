@@ -16,6 +16,7 @@ type ProfileRow = {
   handle: string | null;
   role: string;
   created_at: string;
+  position: string | null;
 };
 
 // tb-client-lifecycle-member-invite-001: lets a workspace's own admin grow
@@ -38,7 +39,7 @@ export async function registerMembersRoutes(app: FastifyInstance) {
 
     const { data, error } = await getScopedClient(request)
       .from('profiles')
-      .select('id, first_name, last_name, handle, role, created_at')
+      .select('id, first_name, last_name, handle, role, created_at, position')
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: true })
       .returns<ProfileRow[]>();
@@ -189,4 +190,51 @@ export async function registerMembersRoutes(app: FastifyInstance) {
 
     return { status: 'removed' };
   });
+
+  // tb-employee-position-001: position has NO client-facing update grant on
+  // profiles (unlike first_name/last_name/prefix) -- Postgres column grants
+  // apply to the single shared `authenticated` role regardless of the
+  // caller's app-level role, so there's no way to grant "admins only" at
+  // that layer. Enforcement is entirely this route's own role check plus
+  // supabaseAdmin (service-role), the same shape as invite/remove above.
+  app.patch<{ Params: { id: string }; Body: { position?: string | null } }>(
+    '/workspace/members/:id/position',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      if (request.user!.role !== 'admin') {
+        return reply.status(403).send({ error: "Only an admin can set a member's position" });
+      }
+
+      // Never trust :id alone -- same IDOR-prevention pattern as DELETE above.
+      const { data: target, error: targetError } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('id', request.params.id)
+        .eq('tenant_id', request.user!.tenantId)
+        .maybeSingle<{ id: string }>();
+
+      if (targetError) {
+        request.log.error(targetError);
+        return reply.status(500).send({ error: 'Could not verify the target member' });
+      }
+      if (!target) {
+        return reply.status(404).send({ error: 'Member not found in your workspace' });
+      }
+
+      const { position } = request.body ?? {};
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .update({ position: position?.trim() || null })
+        .eq('id', target.id)
+        .select('position')
+        .single<{ position: string | null }>();
+
+      if (error || !data) {
+        request.log.error(error);
+        return reply.status(500).send({ error: "Could not update this member's position" });
+      }
+
+      return { id: target.id, position: data.position };
+    },
+  );
 }

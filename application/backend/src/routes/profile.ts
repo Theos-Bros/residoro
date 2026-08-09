@@ -1,7 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAnyIdentity, getScopedClient } from '../lib/auth.js';
 
-type ProfileRow = { first_name: string | null; last_name: string | null; prefix: string | null };
+type ProfileRow = {
+  first_name: string | null;
+  last_name: string | null;
+  prefix: string | null;
+  position: string | null;
+};
 type ProfilePatchBody = { first_name?: string; last_name?: string | null; prefix?: string | null };
 
 // tb-user-profile-display-name-001: the smallest slice of cap-user-profile-001
@@ -22,11 +27,16 @@ type ProfilePatchBody = { first_name?: string; last_name?: string | null; prefix
 // validation shape full_name had); last_name and prefix are both optional
 // with partial-update semantics (an omitted key leaves the stored value
 // unchanged, an empty string clears it to null).
+//
+// tb-employee-position-001: position is read-only here, deliberately not in
+// ProfilePatchBody -- it has no client-facing update grant at all (see
+// 20260810160000_profiles_position.sql), admin-set only via
+// PATCH /workspace/members/:id/position in members.ts.
 export async function registerProfileRoutes(app: FastifyInstance) {
   app.get('/me/profile', { preHandler: requireAnyIdentity }, async (request, reply) => {
     const { data, error } = await getScopedClient(request)
       .from('profiles')
-      .select('first_name, last_name, prefix')
+      .select('first_name, last_name, prefix, position')
       .eq('id', request.identity!.id)
       .single<ProfileRow>();
 
@@ -39,6 +49,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
       first_name: data.first_name,
       last_name: data.last_name,
       prefix: data.prefix,
+      position: data.position,
       email: request.identity!.email,
     };
   });
@@ -60,7 +71,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
           ...(prefix !== undefined && { prefix: prefix?.trim() || null }),
         })
         .eq('id', request.identity!.id)
-        .select('first_name, last_name, prefix')
+        .select('first_name, last_name, prefix, position')
         .single<ProfileRow>();
 
       if (error || !data) {
@@ -72,6 +83,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
         first_name: data.first_name,
         last_name: data.last_name,
         prefix: data.prefix,
+        position: data.position,
         email: request.identity!.email,
       };
     },

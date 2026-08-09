@@ -1,7 +1,7 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.5.0
+**Version:** 2.6.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
 **Last Updated:** 2026-08-10
@@ -52,6 +52,7 @@ their trigger-based provisioning on signup, and their RLS policies. Does not cov
 | `first_name` | `text` | nullable | Added by `tb-user-profile-name-split-001` (2026-08-10), replacing `full_name`. Required at the API layer (`PATCH /me/profile`); nullable at the DB layer only because pre-existing rows were backfilled best-effort (split `full_name` on its first space) |
 | `last_name` | `text` | nullable | Same migration. Optional — a single-token name backfills into `first_name` with `last_name` left null, same rule `handle_new_user()` follows for new signups |
 | `prefix` | `text` | nullable | Added by `tb-user-profile-email-prefix-001` (2026-08-10). Free-text professional/courtesy title (e.g. "Atty.", "Broker") — no fixed list, no format validation. Self-editable, same column-level-grant shape `first_name`/`last_name` now use |
+| `position` | `text` | nullable | Added by `tb-employee-position-001` (2026-08-10). Free-text job title (e.g. "Senior Agent"). **No `authenticated` grant at all** — unlike every other self-service field above, mutated only via a trusted service-role route (`PATCH /workspace/members/:id/position`, admin-only), since Postgres column grants apply to the single shared `authenticated` role regardless of the caller's app-level `role` column, so "admin-only" cannot be expressed at the grant layer |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
 
@@ -245,6 +246,8 @@ reachable this way. See ADR-002's Consequences section.
   table-wide grant to `authenticated`; see `docs/security-review-2026-07-29.md` Finding 7
 - `docs/security-review-2026-07-29.md` — Finding 7 (2026-08-10 addendum): the full
   privilege-escalation exploit/fix narrative this correction summarizes
+- `supabase/migrations/20260810160000_profiles_position.sql` — `position` column, deliberately
+  no `authenticated` grant (`tb-employee-position-001`, theos-registry)
 
 ---
 
@@ -259,3 +262,4 @@ reachable this way. See ADR-002's Consequences section.
 | 2.3.0 | 2026-08-10 | Added `profiles.prefix` column plus its `update (prefix)` grant (`tb-user-profile-email-prefix-001`) — self-editable free-text professional/courtesy title, same grant shape as `full_name`. No new RLS policy needed. Structural (new column), hence a minor version bump per STD-002 (additive column, not a breaking change). |
 | 2.4.0 | 2026-08-10 | Replaced `profiles.full_name` with `first_name`/`last_name` (`tb-user-profile-name-split-001`) — existing rows backfilled by splitting on the first space, the `update (full_name)` grant swapped for `update (first_name, last_name)`, and `handle_new_user()` redefined to split incoming `full_name` signup metadata the same way. No new RLS policy needed. Breaking at the column level (a column was dropped, not just added) but every existing API response consumers outside the self-edit surface depend on kept its `full_name` field, now computed server-side — flagged as a minor bump per STD-002 since no external contract broke, only internal storage. |
 | 2.5.0 | 2026-08-10 | **Correction, critical.** The "Column-level grant, not a blanket one" paragraph (present since v1.0.0) described intent, not reality: `authenticated` actually held full table-level UPDATE/INSERT/DELETE/TRUNCATE on `profiles` via Supabase's un-revoked default privileges, letting any member self-promote to admin/operator or hijack any tenant via a direct PostgREST write. Fixed same day via `20260810170000_profiles_grant_lockdown.sql` (`revoke all` + precise re-grant). Full narrative in `docs/security-review-2026-07-29.md` Finding 7. Correction to previously-inaccurate documentation, not a new schema change, hence a minor bump per STD-002. |
+| 2.6.0 | 2026-08-10 | Added `profiles.position` column (`tb-employee-position-001`) — free-text job title, admin-set only via a service-role route, deliberately no `authenticated` grant at all (the first `profiles` column to follow `role`/`tenant_id`'s access pattern rather than the self-service one). No new RLS policy needed. Structural (new column), hence a minor version bump per STD-002. |
