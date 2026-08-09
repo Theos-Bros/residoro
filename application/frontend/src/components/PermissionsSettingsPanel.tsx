@@ -18,6 +18,7 @@ const SETTING_COLUMNS: { key: SettingKey; label: string }[] = [
   { key: 'matching', label: 'Matching' },
   { key: 'tasks', label: 'Tasks' },
   { key: 'commission', label: 'Commission' },
+  { key: 'itinerary', label: 'Itinerary' },
 ];
 
 // tb-brokerage-permissions-delegation-001: admin-only sub-section (not
