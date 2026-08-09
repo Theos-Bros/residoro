@@ -75,7 +75,7 @@ async function main() {
   try {
     const { error: updateError } = await supabaseAdmin
       .from('profiles')
-      .update({ tenant_id: tenantId, role: 'member', full_name: 'Temp Itinerary Delegate' })
+      .update({ tenant_id: tenantId, role: 'member', first_name: 'Temp', last_name: 'Itinerary Delegate' })
       .eq('id', memberId);
     if (updateError) throw new Error(`Could not repoint temp profile at test tenant: ${updateError.message}`);
 

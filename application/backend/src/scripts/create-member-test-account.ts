@@ -22,7 +22,7 @@ async function main() {
   if (existing) {
     await supabaseAdmin
       .from('profiles')
-      .update({ tenant_id: tenantId, role: 'member', full_name: 'Test Member' })
+      .update({ tenant_id: tenantId, role: 'member', first_name: 'Test', last_name: 'Member' })
       .eq('id', existing.id);
     console.log(`Member account already existed (${existing.id}) -- repointed at tenant ${tenantId}.`);
     console.log(`Email: ${MEMBER_EMAIL}`);
@@ -45,7 +45,7 @@ async function main() {
 
   await supabaseAdmin
     .from('profiles')
-    .update({ tenant_id: tenantId, role: 'member', full_name: 'Test Member' })
+    .update({ tenant_id: tenantId, role: 'member', first_name: 'Test', last_name: 'Member' })
     .eq('id', created.user.id);
   await supabaseAdmin.from('workspaces').delete().eq('id', leftoverWorkspaceId);
 
