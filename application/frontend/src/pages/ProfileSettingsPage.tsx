@@ -16,10 +16,15 @@ type Props = {
 //
 // tb-user-profile-email-prefix-001: adds email (read-only, never editable
 // here -- changing login email is separate, later scope) and prefix
-// (editable, same Save button as full_name).
+// (editable, same Save button as the name fields).
+//
+// tb-user-profile-name-split-001: full_name replaced by separate first/last
+// name inputs -- first name required, last name optional, same partial-
+// update semantics as prefix.
 export function ProfileSettingsPage({ session }: Props) {
   const [email, setEmail] = useState<string | null>(null);
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [prefix, setPrefix] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,7 +35,8 @@ export function ProfileSettingsPage({ session }: Props) {
     fetchProfile(session.access_token)
       .then((profile) => {
         setEmail(profile.email);
-        setFullName(profile.full_name ?? '');
+        setFirstName(profile.first_name ?? '');
+        setLastName(profile.last_name ?? '');
         setPrefix(profile.prefix ?? '');
         setLoaded(true);
       })
@@ -42,8 +48,13 @@ export function ProfileSettingsPage({ session }: Props) {
     setSaved(false);
     setSaving(true);
     try {
-      const profile = await updateProfile(session.access_token, { full_name: fullName, prefix });
-      setFullName(profile.full_name ?? '');
+      const profile = await updateProfile(session.access_token, {
+        first_name: firstName,
+        last_name: lastName,
+        prefix,
+      });
+      setFirstName(profile.first_name ?? '');
+      setLastName(profile.last_name ?? '');
       setPrefix(profile.prefix ?? '');
       setSaved(true);
     } catch (err) {
@@ -85,17 +96,27 @@ export function ProfileSettingsPage({ session }: Props) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Display name</label>
+            <label className="text-sm font-medium">First name</label>
             <input
               type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="h-9 w-full rounded-md border border-input px-3 text-sm"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Last name</label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
               className="h-9 w-full rounded-md border border-input px-3 text-sm"
             />
           </div>
 
           <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving || fullName.trim() === ''}>
+            <Button onClick={handleSave} disabled={saving || firstName.trim() === ''}>
               {saving ? 'Saving…' : 'Save'}
             </Button>
             {saved && <span className="text-sm text-muted-foreground">Saved.</span>}

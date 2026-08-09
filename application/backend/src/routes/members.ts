@@ -2,13 +2,21 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 import { validateEmail } from '../lib/emailValidation.js';
+import { formatDisplayName } from '../lib/displayName.js';
 
 type InviteMemberBody = {
   email?: string;
   full_name?: string;
 };
 
-type ProfileRow = { id: string; full_name: string | null; handle: string | null; role: string; created_at: string };
+type ProfileRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  handle: string | null;
+  role: string;
+  created_at: string;
+};
 
 // tb-client-lifecycle-member-invite-001: lets a workspace's own admin grow
 // their team without operator involvement -- the gap left by
@@ -30,7 +38,7 @@ export async function registerMembersRoutes(app: FastifyInstance) {
 
     const { data, error } = await getScopedClient(request)
       .from('profiles')
-      .select('id, full_name, handle, role, created_at')
+      .select('id, first_name, last_name, handle, role, created_at')
       .eq('tenant_id', request.user!.tenantId)
       .order('created_at', { ascending: true })
       .returns<ProfileRow[]>();
@@ -40,7 +48,12 @@ export async function registerMembersRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load the team list' });
     }
 
-    return { members: data ?? [] };
+    const members = (data ?? []).map((row) => ({
+      ...row,
+      full_name: formatDisplayName(row.first_name, row.last_name),
+    }));
+
+    return { members };
   });
 
   app.post<{ Body: InviteMemberBody }>('/workspace/members', { preHandler: requireAuth }, async (request, reply) => {

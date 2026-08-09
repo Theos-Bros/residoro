@@ -5,9 +5,13 @@ import { createClient } from '@supabase/supabase-js';
 //   1. GET/PATCH /me/profile work for a tenant user (MOBILE_TEST_ACCOUNT_*)
 //      and for an operator (BILLING_VERIFY_OPERATOR_*), reusing existing
 //      throwaway test accounts rather than minting new ones.
-//   2. Each identity only ever reads/writes their OWN full_name -- verified
+//   2. Each identity only ever reads/writes their OWN name -- verified
 //      by round-tripping a distinct value per identity and confirming no
 //      cross-identity bleed.
+// Updated by tb-user-profile-name-split-001: full_name no longer exists as a
+// PATCH key (replaced by first_name/last_name) -- this script's PATCH calls
+// and assertions were updated to match; the DoD intent (round-trip + no
+// cross-identity bleed) is unchanged.
 // Requires the local backend dev server running (npm run dev, from
 // application/backend) for these HTTP calls.
 // Run via (from application/backend): npx tsx src/scripts/verify-user-profile-display-name.ts
@@ -53,27 +57,27 @@ async function main() {
   const operatorHeaders = { Authorization: `Bearer ${operatorSession.access_token}`, 'Content-Type': 'application/json' };
 
   // ------------------------------------------------------------------------
-  // 1. Tenant user: GET then PATCH their own full_name
+  // 1. Tenant user: GET then PATCH their own first_name
   // ------------------------------------------------------------------------
   const tenantGetRes = await fetch(`${BACKEND_URL}/me/profile`, { headers: tenantHeaders });
   const tenantGetBody = await tenantGetRes.json();
   check('tenant user GET /me/profile succeeds', tenantGetRes.ok, tenantGetBody);
 
-  const tenantNewName = `Tenant Verify ${Date.now()}`;
+  const tenantNewName = `TenantVerify${Date.now()}`;
   const tenantPatchRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers: tenantHeaders,
-    body: JSON.stringify({ full_name: tenantNewName }),
+    body: JSON.stringify({ first_name: tenantNewName }),
   });
   const tenantPatchBody = await tenantPatchRes.json();
   check(
-    'tenant user PATCH /me/profile updates their own full_name',
-    tenantPatchRes.ok && tenantPatchBody.full_name === tenantNewName,
+    'tenant user PATCH /me/profile updates their own first_name',
+    tenantPatchRes.ok && tenantPatchBody.first_name === tenantNewName,
     tenantPatchBody,
   );
 
   // ------------------------------------------------------------------------
-  // 2. Operator: GET then PATCH their own full_name (the case
+  // 2. Operator: GET then PATCH their own first_name (the case
   //    profiles_select_same_tenant alone could NOT satisfy -- both sides of
   //    that comparison are null for an operator; profiles_select_own
   //    (20260806110000_profiles_self_select.sql) is what makes this pass).
@@ -82,16 +86,16 @@ async function main() {
   const operatorGetBody = await operatorGetRes.json();
   check('operator GET /me/profile succeeds (profiles_select_own)', operatorGetRes.ok, operatorGetBody);
 
-  const operatorNewName = `Operator Verify ${Date.now()}`;
+  const operatorNewName = `OperatorVerify${Date.now()}`;
   const operatorPatchRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers: operatorHeaders,
-    body: JSON.stringify({ full_name: operatorNewName }),
+    body: JSON.stringify({ first_name: operatorNewName }),
   });
   const operatorPatchBody = await operatorPatchRes.json();
   check(
-    'operator PATCH /me/profile updates their own full_name',
-    operatorPatchRes.ok && operatorPatchBody.full_name === operatorNewName,
+    'operator PATCH /me/profile updates their own first_name',
+    operatorPatchRes.ok && operatorPatchBody.first_name === operatorNewName,
     operatorPatchBody,
   );
 
@@ -103,7 +107,7 @@ async function main() {
   const tenantRefetchBody = await tenantRefetchRes.json();
   check(
     'tenant user re-fetch shows their own value, not the operator\'s',
-    tenantRefetchBody.full_name === tenantNewName,
+    tenantRefetchBody.first_name === tenantNewName,
     tenantRefetchBody,
   );
 
@@ -111,19 +115,19 @@ async function main() {
   const operatorRefetchBody = await operatorRefetchRes.json();
   check(
     'operator re-fetch shows their own value, not the tenant user\'s',
-    operatorRefetchBody.full_name === operatorNewName,
+    operatorRefetchBody.first_name === operatorNewName,
     operatorRefetchBody,
   );
 
   // ------------------------------------------------------------------------
-  // 4. Validation: empty full_name is rejected
+  // 4. Validation: empty first_name is rejected
   // ------------------------------------------------------------------------
   const emptyRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers: tenantHeaders,
-    body: JSON.stringify({ full_name: '' }),
+    body: JSON.stringify({ first_name: '' }),
   });
-  check('PATCH with empty full_name is rejected (400)', emptyRes.status === 400);
+  check('PATCH with empty first_name is rejected (400)', emptyRes.status === 400);
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

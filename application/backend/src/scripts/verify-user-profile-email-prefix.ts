@@ -5,10 +5,10 @@ import { createClient } from '@supabase/supabase-js';
 //   1. GET /me/profile returns the caller's real login email (from the
 //      verified Auth token, never a profiles column).
 //   2. PATCH /me/profile round-trips a new prefix value alongside the
-//      existing full_name.
+//      existing first_name.
 //   3. Partial-update semantics: PATCH with no `prefix` key leaves the
 //      stored prefix unchanged; an empty string clears it to null.
-//   4. full_name is still required (unchanged validation from
+//   4. first_name is still required (unchanged validation from
 //      tb-user-profile-display-name-001).
 // Requires the local backend dev server running (npm run dev, from
 // application/backend) for these HTTP calls.
@@ -52,16 +52,16 @@ async function main() {
   check('GET /me/profile returns the caller\'s real login email', getBody.email === EMAIL, getBody);
 
   const originalPrefix = getBody.prefix;
-  const originalFullName = getBody.full_name;
+  const originalFirstName = getBody.first_name;
 
   // --------------------------------------------------------------------
-  // 2. PATCH round-trips a new prefix alongside full_name
+  // 2. PATCH round-trips a new prefix alongside first_name
   // --------------------------------------------------------------------
   const newPrefix = `Verify-${Date.now()}`;
   const patchRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ full_name: originalFullName ?? 'Verify Account', prefix: newPrefix }),
+    body: JSON.stringify({ first_name: originalFirstName ?? 'Verify Account', prefix: newPrefix }),
   });
   const patchBody = await patchRes.json();
   check('PATCH sets prefix and returns it', patchRes.ok && patchBody.prefix === newPrefix, patchBody);
@@ -73,7 +73,7 @@ async function main() {
   const noPrefixKeyRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ full_name: originalFullName ?? 'Verify Account' }),
+    body: JSON.stringify({ first_name: originalFirstName ?? 'Verify Account' }),
   });
   const noPrefixKeyBody = await noPrefixKeyRes.json();
   check(
@@ -88,20 +88,20 @@ async function main() {
   const clearRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ full_name: originalFullName ?? 'Verify Account', prefix: '' }),
+    body: JSON.stringify({ first_name: originalFirstName ?? 'Verify Account', prefix: '' }),
   });
   const clearBody = await clearRes.json();
   check('PATCH with an empty string clears prefix to null', clearRes.ok && clearBody.prefix === null, clearBody);
 
   // --------------------------------------------------------------------
-  // 5. Regression: full_name is still required
+  // 5. Regression: first_name is still required
   // --------------------------------------------------------------------
   const emptyNameRes = await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ full_name: '', prefix: 'should not matter' }),
+    body: JSON.stringify({ first_name: '', prefix: 'should not matter' }),
   });
-  check('PATCH with empty full_name is still rejected (400), regardless of prefix', emptyNameRes.status === 400);
+  check('PATCH with empty first_name is still rejected (400), regardless of prefix', emptyNameRes.status === 400);
 
   // --------------------------------------------------------------------
   // Restore original state
@@ -109,7 +109,7 @@ async function main() {
   await fetch(`${BACKEND_URL}/me/profile`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ full_name: originalFullName ?? 'Verify Account', prefix: originalPrefix ?? '' }),
+    body: JSON.stringify({ first_name: originalFirstName ?? 'Verify Account', prefix: originalPrefix ?? '' }),
   });
 
   console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}`);

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import { canEditSetting } from '../lib/settingsDelegation.js';
+import { formatDisplayName } from '../lib/displayName.js';
 
 // tb-buyer-leads-stage-tasks-001: shared by POST /tasks (below) and
 // stageTaskGeneration.ts's stage-change trigger, so both routes' notion of
@@ -132,15 +133,24 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     const supabase = getScopedClient(request);
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, handle')
+      .select('id, first_name, last_name, handle')
       .eq('tenant_id', request.user!.tenantId)
-      .order('full_name', { ascending: true });
+      .order('first_name', { ascending: true })
+      .order('last_name', { ascending: true });
 
     if (error) {
       request.log.error(error);
       return reply.status(500).send({ error: 'Could not load tenant members' });
     }
-    return { members: data ?? [] };
+
+    type AssigneeRow = { id: string; first_name: string | null; last_name: string | null; handle: string | null };
+    const members = ((data ?? []) as AssigneeRow[]).map((row) => ({
+      id: row.id,
+      full_name: formatDisplayName(row.first_name, row.last_name),
+      handle: row.handle,
+    }));
+
+    return { members };
   });
 
   app.post<{ Body: CreateTaskBody }>('/tasks', { preHandler: requireAuth }, async (request, reply) => {

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
 import type { SettingKey } from '../lib/settingsDelegation.js';
+import { formatDisplayName } from '../lib/displayName.js';
 
 const SETTING_KEYS: SettingKey[] = ['sharing_templates', 'performance', 'matching', 'tasks', 'commission', 'itinerary'];
 
@@ -9,7 +10,7 @@ type PutPermissionBody = {
   granted?: boolean;
 };
 
-type ProfileRow = { id: string; full_name: string; handle: string | null; role: string };
+type ProfileRow = { id: string; first_name: string | null; last_name: string | null; handle: string | null; role: string };
 type DelegationRow = { member_id: string; setting_key: SettingKey };
 
 // tb-brokerage-permissions-delegation-001: the one Settings sub-section not
@@ -27,7 +28,7 @@ export async function registerSettingsPermissionsRoutes(app: FastifyInstance) {
 
     const { data: profiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, full_name, handle, role')
+      .select('id, first_name, last_name, handle, role')
       .eq('tenant_id', tenantId)
       .neq('id', request.user!.id)
       .returns<ProfileRow[]>();
@@ -61,7 +62,7 @@ export async function registerSettingsPermissionsRoutes(app: FastifyInstance) {
         const keys = grantedKeysByMember.get(profile.id) ?? new Set<SettingKey>();
         return {
           member_id: profile.id,
-          full_name: profile.full_name,
+          full_name: formatDisplayName(profile.first_name, profile.last_name),
           handle: profile.handle,
           sharing_templates: keys.has('sharing_templates'),
           performance: keys.has('performance'),

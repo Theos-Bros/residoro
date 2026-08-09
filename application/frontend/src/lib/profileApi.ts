@@ -1,13 +1,15 @@
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL as string;
 
 export type Profile = {
-  full_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
   prefix: string | null;
   email: string | null;
 };
 
 export type ProfileUpdate = {
-  full_name: string;
+  first_name: string;
+  last_name?: string | null;
   prefix?: string | null;
 };
 

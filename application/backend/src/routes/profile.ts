@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAnyIdentity, getScopedClient } from '../lib/auth.js';
 
-type ProfileRow = { full_name: string | null; prefix: string | null };
-type ProfilePatchBody = { full_name?: string; prefix?: string | null };
+type ProfileRow = { first_name: string | null; last_name: string | null; prefix: string | null };
+type ProfilePatchBody = { first_name?: string; last_name?: string | null; prefix?: string | null };
 
 // tb-user-profile-display-name-001: the smallest slice of cap-user-profile-001
 // -- full_name only, self-scoped, shared by both tenant users and operators
@@ -15,14 +15,18 @@ type ProfilePatchBody = { full_name?: string; prefix?: string | null };
 //
 // tb-user-profile-email-prefix-001: email is never a profiles column -- it's
 // read off the already-verified Auth token (request.identity!.email), never
-// queried or written here. prefix follows full_name's exact grant/RLS shape
-// (see 20260810140000_profiles_prefix.sql), so no new access-control code is
-// needed for it beyond including it in the select/update column lists.
+// queried or written here. prefix follows full_name's exact grant/RLS shape.
+//
+// tb-user-profile-name-split-001: full_name replaced by first_name/last_name
+// (20260810150000_profiles_name_split.sql). first_name is required (same
+// validation shape full_name had); last_name and prefix are both optional
+// with partial-update semantics (an omitted key leaves the stored value
+// unchanged, an empty string clears it to null).
 export async function registerProfileRoutes(app: FastifyInstance) {
   app.get('/me/profile', { preHandler: requireAnyIdentity }, async (request, reply) => {
     const { data, error } = await getScopedClient(request)
       .from('profiles')
-      .select('full_name, prefix')
+      .select('first_name, last_name, prefix')
       .eq('id', request.identity!.id)
       .single<ProfileRow>();
 
@@ -31,28 +35,32 @@ export async function registerProfileRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load your profile' });
     }
 
-    return { full_name: data.full_name, prefix: data.prefix, email: request.identity!.email };
+    return {
+      first_name: data.first_name,
+      last_name: data.last_name,
+      prefix: data.prefix,
+      email: request.identity!.email,
+    };
   });
 
   app.patch<{ Body: ProfilePatchBody }>(
     '/me/profile',
     { preHandler: requireAnyIdentity },
     async (request, reply) => {
-      const { full_name: fullName, prefix } = request.body ?? {};
-      if (typeof fullName !== 'string' || fullName.trim() === '') {
-        return reply.status(400).send({ error: 'full_name is required' });
+      const { first_name: firstName, last_name: lastName, prefix } = request.body ?? {};
+      if (typeof firstName !== 'string' || firstName.trim() === '') {
+        return reply.status(400).send({ error: 'first_name is required' });
       }
 
       const { data, error } = await getScopedClient(request)
         .from('profiles')
         .update({
-          full_name: fullName.trim(),
-          // Partial-update semantics: omitting `prefix` entirely leaves the
-          // stored value unchanged; an empty string clears it to null.
+          first_name: firstName.trim(),
+          ...(lastName !== undefined && { last_name: lastName?.trim() || null }),
           ...(prefix !== undefined && { prefix: prefix?.trim() || null }),
         })
         .eq('id', request.identity!.id)
-        .select('full_name, prefix')
+        .select('first_name, last_name, prefix')
         .single<ProfileRow>();
 
       if (error || !data) {
@@ -60,7 +68,12 @@ export async function registerProfileRoutes(app: FastifyInstance) {
         return reply.status(500).send({ error: 'Could not update your profile' });
       }
 
-      return { full_name: data.full_name, prefix: data.prefix, email: request.identity!.email };
+      return {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        prefix: data.prefix,
+        email: request.identity!.email,
+      };
     },
   );
 }
