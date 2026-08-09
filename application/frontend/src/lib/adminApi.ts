@@ -196,7 +196,7 @@ export type BillingInstallment = {
 export async function fetchBilling(
   accessToken: string,
   workspaceId: string,
-): Promise<{ contract_billing: ContractBilling | null; installments: BillingInstallment[] }> {
+): Promise<{ brokerage_name: string; contract_billing: ContractBilling | null; installments: BillingInstallment[] }> {
   const response = await fetch(`${BACKEND_URL}/admin/clients/${workspaceId}/billing`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

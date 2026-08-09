@@ -9,6 +9,7 @@ import { ClientMigration } from './clients/ClientMigration';
 import { TrainingScheduleForm } from './training/TrainingScheduleForm';
 import { TrainingOverview } from './training/TrainingOverview';
 import { ClientBilling } from './billing/ClientBilling';
+import { InvoiceView } from './billing/InvoiceView';
 import { ProfileSettingsPage } from '@/pages/ProfileSettingsPage';
 
 type AdminAppProps = {
@@ -38,6 +39,10 @@ export function AdminApp({ session, loading, operatorStatus }: AdminAppProps) {
 
   return (
     <Routes>
+      {/* tb-billing-invoice-generation-001: deliberately NOT nested under
+          AdminLayout -- a print-styled standalone page with no dashboard
+          header/nav to hide via @media print. */}
+      <Route path="clients/:tenantId/billing/installments/:installmentId/invoice" element={<InvoiceView session={session} />} />
       <Route element={<AdminLayout />}>
         <Route index element={<ClientList session={session} />} />
         <Route path="clients/new" element={<NewClientForm session={session} />} />
