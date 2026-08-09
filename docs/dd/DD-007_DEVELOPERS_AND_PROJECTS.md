@@ -1,10 +1,10 @@
 # DD-007 — Developers & Projects
 
 **Status:** Draft
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-09
 
 ---
 
@@ -70,8 +70,10 @@ Developer inventory container (`cap-properties-001` Milestone 2).
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
+| `search_vector` | `tsvector` | generated always as, stored | Added by `tb-search-core-entities-001` (2026-08-08). `setweight(name, 'A') \|\| setweight(location, 'B')`. Feeds `search_global()`'s `project` result type |
 
-Indexes: `idx_projects_tenant_id` on `(tenant_id)`, `idx_projects_developer_id` on `(developer_id)`.
+Indexes: `idx_projects_tenant_id` on `(tenant_id)`, `idx_projects_developer_id` on `(developer_id)`,
+`idx_projects_search_vector` (GIN, added by the same migration as the column).
 
 Bulk unit generation and rollup views were deliberately out of `tb-properties-project-001`'s
 scope — this table and the `properties.project_id` FK are the entity/link only. See
@@ -145,6 +147,7 @@ calls — RLS is the real enforcement boundary here, not `service_role`.
 - `supabase/migrations/20260727120000_properties_projects.sql` — original `developers`, `projects`, `properties.project_id` FK
 - `supabase/migrations/20260727130000_project_unit_types.sql` — `project_unit_types`, `properties.unit_type_id`
 - `supabase/migrations/20260728140000_crm_developer_consolidation.sql` — dropped `developers`, folded into `contacts`
+- `supabase/migrations/20260808140000_search_core_entities.sql` — `projects.search_vector` added
 
 ---
 
@@ -154,3 +157,4 @@ calls — RLS is the real enforcement boundary here, not `service_role`.
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering three already-shipped tracer bullets. |
 | 2.0.0 | 2026-08-03 | `developers` table dropped and folded into `contacts` the day after this doc's initial version was written (`tb-crm-developer-consolidation-001`, 2026-07-28) — this doc had described a table that no longer existed for six days. Rewrote the `developers` section as a historical record, repointed `projects.developer_id`'s documented FK target to `contacts(id)`, corrected the stale `service_role`-for-all-routes RLS claim. Structural revision (table removal), hence major version bump per STD-002. |
+| 2.1.0 | 2026-08-09 | Added `projects.search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by the same-day birds-eye audit that also caught DD-002/DD-005's identical gap). |

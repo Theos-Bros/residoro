@@ -1,10 +1,10 @@
 # DD-002 — Properties
 
 **Status:** Draft
-**Version:** 2.2.0
+**Version:** 2.3.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-09
 
 ---
 
@@ -56,10 +56,12 @@ covered by DD-008.
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | Nullable: future service-role/bulk-import writes may not have a single acting user |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
+| `search_vector` | `tsvector` | generated always as, stored | Added by `tb-search-core-entities-001` (2026-08-08). `setweight(title, 'A') \|\| setweight(address, 'B')` — title ranks above address. Feeds `search_global()`'s `property` result type; `listing` results are searched via the joined `properties.search_vector`, not a separate column on `listings` |
 
 Indexes: `idx_properties_tenant_id` on `(tenant_id)`, `idx_properties_tenant_status` on
 `(tenant_id, status)` — the obvious first query ("list my workspace's available properties")
-is composite-indexed from the start.
+is composite-indexed from the start. `idx_properties_search_vector` — GIN index on
+`search_vector`, added by the same migration as the column.
 
 ---
 
@@ -146,6 +148,7 @@ client with no app-level `tenant_id` filter returns empty, not the row
 - `supabase/migrations/20260727120000_properties_projects.sql` — `project_id` FK added
 - `supabase/migrations/20260727130000_project_unit_types.sql` — `unit_type_id`
 - `supabase/migrations/20260727140000_properties_unit_number.sql` — `unit_number`
+- `supabase/migrations/20260808140000_search_core_entities.sql` — `search_vector`
 
 ---
 
@@ -157,3 +160,4 @@ client with no app-level `tenant_id` filter returns empty, not the row
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: `project_id` FK added, `owner_id` made nullable, `unit_type_id`/`unit_number` added. Corrected the `service_role` Consequences note — usage became universal, not importer-only; pointed to ADR-003 for the corrected target architecture. Structural revision, hence major version bump per STD-002. |
 | 2.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: `owner_id` FK added (→ `contacts(id)`, once `developers` folded into `contacts`), `'leased'` status + `lease_monthly_rent`/`lease_term_months` columns added, and the `service_role`-for-all-routes claim corrected now that `tb-platform-rls-scoped-client-001` moved `properties` reads/writes to a per-request scoped client. |
 | 2.2.0 | 2026-08-08 | `tb-listings-rent-to-lease-001`: `lease_monthly_rent` renamed to `lease_monthly_amount` (0 live rows, pure schema op), and the `'leased'` status note's cross-reference to `listings.listing_type = 'rent'` corrected to `'lease'` (that enum value was renamed app-wide in the same tracer bullet). |
+| 2.3.0 | 2026-08-09 | Added `search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by a 2026-08-09 birds-eye audit). |

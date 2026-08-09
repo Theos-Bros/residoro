@@ -1,10 +1,10 @@
 # CTX-005 — Status & Roadmap
 
 **Status:** Approved
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-20
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-09
 **Supersedes:** This document merges the original CTX-005 (Current Status) and CTX-006
 (Roadmap) into one. CTX-006 is marked Deprecated and points here.
 
@@ -29,12 +29,16 @@ nothing forced a periodic re-check against reality.
 
 ---
 
-# Current Phase: Mixed — Phases 0–1 substantially complete, Phase 3 and Phase 6 complete, Phases 2 and 5 barely started, Phases 4 and 7 not started
+# Current Phase: Mixed — Phases 0–1 substantially complete, Phases 3 and 6 complete, Phases 2 and 4 well underway (not "barely started"/"not started" anymore), Phase 5 partially built, Phase 7 not started
 
 Unlike the original phase-by-phase framing (which implied strict sequential progress), actual
 delivery jumped ahead unevenly — Property Engine (Phase 3) and Migration Platform (Phase 6)
-are both fully built while CRM (Phase 2) and Automation (Phase 5) are barely started. See the
-per-phase status below.
+are both fully built, and by 2026-08-09 both CRM (Phase 2) and Buyer Operations/Transactions
+(Phase 4) had shipped substantial real functionality — this line was corrected during a
+2026-08-09 birds-eye audit that found it still calling Phase 4 "not started, no code exists"
+while `cap-buyer-leads-001` and `cap-transactions-001` were both `status: active` in the
+Registry with real shipped work, a genuinely misleading claim (not just stale) for anyone
+onboarding onto this doc. See the per-phase status below.
 
 ---
 
@@ -51,10 +55,16 @@ Entities is a moving target rather than a single milestone — see later phases 
 shipped. **Permissions remains not built** — the Permission Engine (fine-grained, per-domain,
 per-action) is still a scoped-out future milestone.
 
-## Phase 2 — CRM: Contacts, Companies, Buyers, Sellers — ⚠️ Barely Started
+## Phase 2 — CRM: Contacts, Companies, Buyers, Sellers — 🟡 Substantially Built
 
-Only Contacts exists (DS-005/DD-005), scoped narrowly for migration purposes. Companies,
-Buyers, and Sellers as distinct CRM concepts don't exist.
+**Corrected 2026-08-09** (was "Barely Started" — stale since 2026-07-28, caught by a birds-eye
+audit). Contacts (DS-005/DD-005) plus a Company concept (`contacts.is_company`, absorbed the
+standalone `developers` table — `tb-crm-developer-consolidation-001`), a unified Contacts page
+with full CRUD (`tb-crm-contacts-page-001`), and `properties.owner_id`'s FK to `contacts`
+(`tb-crm-owner-fk-001`) all shipped 2026-07-28 under `cap-crm-001` (`status: active`). "Buyers"
+as a distinct pipeline concept is really Phase 4's Buyer Operations (see below), not a separate
+CRM entity. "Sellers" as a distinct CRM concept still doesn't exist — property owners are
+`contacts` rows, not a dedicated Seller pipeline.
 
 ## Phase 3 — Property Engine, Verification, Media, Documents, Listings, Authority to Sell — ✅ Complete
 
@@ -63,15 +73,29 @@ Documents (title/tax), Verification workflow, Listings (full lifecycle), Authori
 Sell/Lease (exclusivity, term dates, per-workspace policy), cross-brokerage docket sharing. See
 DD-002, DD-006, DD-007, DD-008; DS-002, DS-004, DS-007, DS-008.
 
-## Phase 4 — Buyer Operations, Seller Operations, Matching, Viewings, Offers, Transactions — ❌ Not Started
+## Phase 4 — Buyer Operations, Seller Operations, Matching, Viewings, Offers, Transactions — 🟡 Substantially Built
 
-No code exists for any of this.
+**Corrected 2026-08-09** (was "Not Started, no code exists" — badly stale since 2026-07-28,
+caught by a birds-eye audit; this was the single most consequential correction in that audit,
+since it's a flatly wrong claim, not just an outdated one). **Buyer Operations**
+(`cap-buyer-leads-001`, `status: active`, shipped 2026-07-28 onward): Inquiries pre-qualification
+pen, the real Leads pipeline (`buyer_requirements`), a scored matching engine against active
+listings and cross-tenant shared dockets, a "Buyer Wanted" broadcast fallback, and match/activity
+history logging — see DD-018. **Transactions** (`cap-transactions-001`, `status: active`, shipped
+2026-08-04): Viewings, Offers, Contracts, and Closings all built (see DD-010 through DD-013).
+**Seller Operations** as a distinct concept still doesn't exist — a property's `owner_id` is a
+`contacts` row (Phase 2/3), not a dedicated seller pipeline with its own stages.
 
-## Phase 5 — Automation, Workflow Engine, Notifications, Reporting, Dashboards — ⚠️ Barely Started
+## Phase 5 — Automation, Workflow Engine, Notifications, Reporting, Dashboards — ⚠️ Partially Built
 
-Three narrow automated-notification checks exist (contract expiry, training reminders, listing
-authority expiry — see TS-003), not a general workflow/automation engine. No reporting or
-dashboards exist.
+**Corrected 2026-08-09** (Notifications specifically outgrew "barely started" — caught by a
+birds-eye audit). `cap-notifications-001` (`status: active`) now covers four automated checks
+(contract expiry, training reminders, listing authority expiry, and — added 2026-08-08 — task
+due-date reminders, see DD-017/TS-003) plus in-app task-driven notifications from
+`cap-tasks-001`'s stage-change auto-generation. Still no general workflow/automation engine (each
+check is its own narrow `pg_cron` → Edge Function job, not a configurable rules engine), and no
+reporting or dashboards exist — `cap-analytics-001`'s Performance page (share-count "Hot"
+tracking) is the only analytics surface, not general reporting.
 
 ## Phase 6 — Migration Platform, AI Mapping, Validation, Preview, Production Import — ✅ Complete
 
@@ -130,7 +154,8 @@ platform.
 - CTX-002 — Product Architecture (per-domain Built/Future status, kept in sync with this phase status)
 - CTX-003 — Engineering Context
 - `theos-registry` — `registry/INDEX.md` and per-capability tracer-bullets for granular shipped status
-- RFC-001, RFC-002, RFC-003 — open infrastructure/architecture decisions affecting what's next
+- RFC-001, RFC-002, RFC-003, RFC-005 — infrastructure/architecture decisions affecting what's
+  next (RFC-005 reconciles RFC-001's superseded hosting decision)
 - CTX-006 — Roadmap (deprecated, merged into this document)
 
 ---
@@ -141,3 +166,4 @@ platform.
 |----------|------|-------------|
 | 1.0.0 | 2026-07-20 | Initial project snapshot (as CTX-005 "Current Status"). |
 | 2.0.0 | 2026-07-27 | Merged with CTX-006 (Roadmap) into one strategic status+roadmap document, retitled "Status & Roadmap." Corrected against actual code state via a birds-eye technical review — Phase 3 and Phase 6 were already complete despite the prior version still listing their contents as "Upcoming"; added the previously-unlisted Client Lifecycle domain. Adopted a phase-level-only, refresh-at-milestone-boundaries policy going forward to prevent the drift that caused this correction to be needed. |
+| 2.1.0 | 2026-08-09 | Corrected against actual code state via a 2026-08-09 birds-eye audit: Phase 4 was still "❌ Not Started, no code exists" despite `cap-buyer-leads-001`/`cap-transactions-001` both being `status: active` with real shipped work since 2026-07-28/2026-08-04 — the most consequential finding, since it's a flatly wrong claim, not merely outdated. Phase 2 (CRM) and Phase 5 (Notifications) also refreshed from "Barely Started" to reflect real shipped scope. This is exactly the phase-boundary trigger this doc's own 2.0.0 policy anticipated — Buyer Operations and Transactions crossing from 0 to substantially-built is a real phase-level milestone, not per-tracer-bullet noise. |

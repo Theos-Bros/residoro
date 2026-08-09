@@ -1,7 +1,7 @@
 # DD-005 — Contacts
 
 **Status:** Draft
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
 **Last Updated:** 2026-08-09
@@ -41,8 +41,10 @@ CRM relationship data (lead status, assignment, activity history) a future CRM d
 | `created_by` | `uuid` | nullable, FK → `auth.users(id)` | Nullable, same rationale as `properties.created_by` — bulk/service-role writes may not have a single acting user |
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
+| `search_vector` | `tsvector` | generated always as, stored | Added by `tb-search-core-entities-001` (2026-08-08). `setweight(name, 'A') \|\| setweight(company, 'B')`. Feeds `search_global()`'s `contact` result type; `lead` results (`buyer_requirements`) are searched via the joined `contacts.search_vector`, since a Lead has no name field of its own (DD note above) |
 
-Index: `idx_contacts_tenant_id` on `(tenant_id)`.
+Index: `idx_contacts_tenant_id` on `(tenant_id)`. `idx_contacts_search_vector` — GIN index on
+`search_vector`, added by the same migration as the column.
 
 This is the one deliberate schema deviation from `properties`'s pattern in this table: `type` is
 plain unconstrained `text`, not a `CHECK (type in (...))` list like `properties.type`/`status`
@@ -88,6 +90,7 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 - `supabase/migrations/20260722140000_contacts.sql` — implements this doc
 - `supabase/migrations/20260728140000_crm_developer_consolidation.sql` — `is_company` added
 - `supabase/migrations/20260809100000_contacts_address.sql` — `address` added
+- `supabase/migrations/20260808140000_search_core_entities.sql` — `search_vector` added
 
 ---
 
@@ -98,3 +101,4 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review. |
 | 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: added `is_company` (from the `developers` consolidation), corrected the stale `service_role`-for-all-routes RLS claim, noted the unified Contacts page shipped on top of this table. |
 | 1.2.0 | 2026-08-09 | Added `address` (`tb-buyer-leads-inquiry-contact-carryover-001`) — closes the gap where a qualified inquiry's captured address had no destination. |
+| 1.3.0 | 2026-08-09 | Added `search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by the same-day birds-eye audit that also caught DD-002/DD-007's identical gap). |

@@ -1,10 +1,10 @@
 # ADR-003 — Scoped-Client Enforcement for Tenant-User-Facing Routes
 
 **Status:** Approved — Implemented (with one known gap, see below)
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-03
+**Last Updated:** 2026-08-09
 
 ---
 
@@ -44,19 +44,25 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
 ## Decision
 
 1. **Tenant-user-facing routes** — anything a brokerage's own users (`admin`/`member` role,
-   `tenant_id` set) call: properties, listings, contacts, projects, developers,
-   project_unit_types, property_media, property_documents, dockets, and the tenant-facing
-   migration-preview/upload routes — **must** use a per-request Supabase client scoped to the
-   caller, constructed by forwarding the caller's JWT (`session.access_token`) rather than the
+   `tenant_id` set) call — **must** use a per-request Supabase client scoped to the caller,
+   constructed by forwarding the caller's JWT (`session.access_token`) rather than the
    service-role key. RLS policies (already correct and consistent across every tenant-scoped
    table) become the actual enforcement boundary for these routes, matching ADR-002's original
-   intent.
+   intent. **Refreshed 2026-08-09** (the original list here — properties, listings, contacts,
+   projects, developers, project_unit_types, property_media, property_documents, dockets, and
+   the tenant-facing migration-preview/upload routes — predated most of what's shipped since;
+   confirmed live via a full route-file survey): every tenant-user-facing route file under
+   `application/backend/src/routes/` now uses `getScopedClient` as its default client, with the
+   specific, named exceptions recorded in Decision #4 and the Known Gap section below — not an
+   enumerated allowlist anymore, since the route count has grown too fast for one to stay
+   current (see RFC-004's documentation-cadence decision on this exact failure mode).
 2. **Operator/cross-tenant/trusted-job routes** — `/admin/*` operator routes, the migration
-   importer (writes into an arbitrary tenant's tables on the operator's behalf), and the three
+   importer (writes into an arbitrary tenant's tables on the operator's behalf), and the
    pg_cron-triggered Edge Functions (`contract-expiry-check`, `training-reminder-check`,
-   `listing-authority-expiry-check`) — continue to use the service-role client
-   (`supabaseAdmin`). These are the genuinely cross-tenant/trusted-job cases ADR-002 meant to
-   carve out.
+   `listing-authority-expiry-check`, and — **added 2026-08-09**, shipped 2026-08-08 by
+   `tb-notifications-task-due-reminder-001`, missed in the prior revision —
+   `task-due-reminder-check`) — continue to use the service-role client (`supabaseAdmin`).
+   These are the genuinely cross-tenant/trusted-job cases ADR-002 meant to carve out.
 3. The existing hand-written `.eq('tenant_id', ...)` filtering pattern is **not** removed from
    tenant-user-facing routes — it stays as an explicit, readable first layer, with RLS now
    providing the actual guarantee underneath it rather than nothing.
@@ -100,6 +106,33 @@ RFC-002 (Approved, 2026-07-27) decided this should be corrected rather than form
      tenant's listing/property data, which a scoped client would silently null out under
      `properties_select_tenant`/`listings_select_tenant`. Same rationale as `dockets.ts`, just
      not recorded here until now.
+   - **Added 2026-08-09 (birds-eye audit):** `matchLogs.ts`'s `/buyer-requirements/:id/match-logs`
+     route, shipped by `tb-buyer-leads-match-itinerary-001` (2026-08-06) — three
+     `supabaseAdmin` reads (`listings`, `properties`, `profiles`, joined for a matched-item's
+     display data) with an inline code comment citing the same rationale as `matching.ts`
+     directly: a logged match item can reference a docket-shared listing sourced from a
+     different tenant. Same pattern, missed when Decision #4 was last updated. A separate call
+     in the same file (`supabaseAdmin.auth.admin.getUserById`) is unrelated — the Auth Admin API
+     always requires the service-role client regardless of tenant scoping, not a cross-tenant
+     RLS case.
+   - **Added 2026-08-09 (birds-eye audit):** `members.ts` (`/workspace/members` invite/list/
+     remove routes), shipped by `tb-client-lifecycle-member-invite-001` (2026-07-29) — every
+     call in this file is on `supabaseAdmin`, for two genuinely distinct reasons, neither a
+     scoped-client gap: (1) `auth.admin.inviteUserByEmail`/`listUsers`/`deleteUser` are Auth
+     Admin API calls, service-role-only by Supabase's own design, same as the `getUserById` case
+     above; (2) the `profiles` table only grants `authenticated` a bare `select` and a
+     column-level `update (full_name)` (`20260721120000_platform_foundation.sql`) — updating
+     `tenant_id`/`role` to add a member, or deleting a `profiles` row to remove one (no delete
+     RLS policy exists on `profiles` at all), are both operations the scoped client is
+     structurally incapable of performing. This was never a gap, just never recorded.
+   - **Fixed, not exempted, 2026-08-09 (birds-eye audit):** `leadActivityLog.ts`'s
+     `/buyer-requirements/:id/activity-log` route had an unexplained `supabaseAdmin` read for
+     `profiles.handle` lookups — unlike the cases above, this one had **no cross-tenant
+     rationale**: the profile rows being read belong to same-tenant colleagues (`logged_by` on
+     an already tenant-filtered `buyer_requirement_activity_log` row), which
+     `profiles_select_same_tenant` already permits directly. Confirmed this was an unexamined
+     bypass, not a designed exception, and switched it to the scoped client already in scope in
+     the same function — no RLS or schema change needed.
 
 ---
 
@@ -166,4 +199,5 @@ client (while the operator branch, which reads an arbitrary tenant's data by des
 | 1.0.0 | 2026-07-27 | Initial decision record, written from RFC-002's approved decision. |
 | 1.1.1 | 2026-07-27 | `tb-properties-media-external-links-001` removed the `property-media` Storage bucket entirely (photos/videos are now pasted external links) — noted that the storage-write exception in Decision #4 no longer applies to `propertyMedia.ts`, only to `propertyDocuments.ts`. |
 | 1.2.0 | 2026-08-03 | Birds-eye review: added `matching.ts`/`buyerRequirements.ts` to Decision #4's exception list (same `dockets.ts` cross-tenant-join pattern, shipped 2026-07-28 but never recorded). Added a new "Known Gap" section documenting `migrations.ts`'s non-compliance with Decision #1 — verified manually safe (every query tenant-filtered) but not yet migrated to the scoped client; this is open follow-up work, not a designed exception. |
+| 1.3.0 | 2026-08-09 | Birds-eye audit: Decision #1's route list replaced with a survey-confirmed statement (enumerated allowlists don't stay current at this shipping velocity — see RFC-004). Decision #2 gained a 4th trusted Edge Function (`task-due-reminder-check`, shipped 2026-08-08, missed in the prior revision). Decision #4 gained two real, previously-unrecorded exceptions (`matchLogs.ts`, `members.ts`). A third case, `leadActivityLog.ts`, turned out to be an unexamined bypass rather than a real exception — fixed same-day, not added to the exception list. |
 | 1.1.0 | 2026-07-27 | Implemented via `tb-platform-rls-scoped-client-001`. Added Decision #4 recording implementation-time exceptions found within "tenant-user-facing" scope (dockets.ts's genuinely cross-tenant reads, workspace.ts's contract_notifications no-policy table, storage write operations) and updated Consequences with live verification results. |

@@ -1,6 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
-import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 const ACTIVITY_TYPES = ['call', 'email', 'meeting', 'note', 'other'] as const;
 type ActivityType = (typeof ACTIVITY_TYPES)[number];
@@ -96,7 +95,7 @@ export async function registerLeadActivityLogRoutes(app: FastifyInstance) {
       const loggedByIds = [...new Set((entries ?? []).map((e) => e.logged_by).filter((v): v is string => !!v))];
       const { data: profileRows } =
         loggedByIds.length > 0
-          ? await supabaseAdmin.from('profiles').select('id, handle').in('id', loggedByIds)
+          ? await supabase.from('profiles').select('id, handle').in('id', loggedByIds)
           : { data: [] as Array<{ id: string; handle: string }> };
       const handleById = new Map((profileRows ?? []).map((r) => [r.id, r.handle]));
 
