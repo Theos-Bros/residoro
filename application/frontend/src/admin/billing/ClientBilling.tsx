@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   createInstallment,
@@ -45,6 +45,9 @@ export function ClientBilling({ session }: Props) {
   function reload() {
     fetchBilling(session.access_token, tenantId!)
       .then(({ contract_billing, installments }) => {
+        // brokerage_name isn't needed on this list page (only the generated
+        // invoice view reads it) -- fetched here via the same tb-billing-
+        // invoice-generation-001 response shape, intentionally unused.
         setContractBillingState(contract_billing);
         setInstallments(installments);
         if (contract_billing) {
@@ -212,6 +215,22 @@ export function ClientBilling({ session }: Props) {
                       </TableCell>
                       <TableCell>{installment.paid_date ?? '—'}</TableCell>
                       <TableCell className="flex justify-end gap-2">
+                        <Button size="sm" variant="outline" asChild>
+                          {/* Same-tab navigation, not target="_blank": a
+                              fresh tab means a full page load, and
+                              AdminApp/BrokerageLayout's session+operator-
+                              status gating has a pre-existing race on cold
+                              load that bounces ANY deep /admin/* URL back to
+                              /admin (reproduced against the already-shipped
+                              /admin/clients/:id/billing route too, not
+                              something this tracer bullet introduced) --
+                              same-tab client-side routing never hits that
+                              cold-load path. InvoiceView's own "Back to
+                              billing" link returns the operator here. */}
+                          <Link to={`/admin/clients/${tenantId}/billing/installments/${installment.id}/invoice`}>
+                            Generate invoice
+                          </Link>
+                        </Button>
                         <Button size="sm" variant="outline" onClick={() => handleTogglePaid(installment)}>
                           {installment.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}
                         </Button>

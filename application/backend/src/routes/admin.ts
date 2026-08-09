@@ -401,7 +401,26 @@ export async function registerAdminRoutes(app: FastifyInstance) {
   // tb-billing-installments-001: fetch a tenant's contract value + every
   // installment for the admin dashboard's Billing section. contract_billing
   // is null until the operator sets it for the first time via PUT below.
+  //
+  // tb-billing-invoice-generation-001: also returns the workspace's
+  // brokerage_name (workspaces.name) -- the invoice-generation view needs it
+  // and no existing billing response carried it. Additive field on an
+  // existing route rather than a new one, per that tracer bullet's design.
   app.get<{ Params: { id: string } }>('/admin/clients/:id/billing', { preHandler: requireOperator }, async (request, reply) => {
+    const { data: workspace, error: workspaceError } = await supabaseAdmin
+      .from('workspaces')
+      .select('name')
+      .eq('id', request.params.id)
+      .maybeSingle();
+
+    if (workspaceError) {
+      request.log.error(workspaceError);
+      return reply.status(500).send({ error: 'Could not load the client' });
+    }
+    if (!workspace) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
+
     const { data: billing, error: billingError } = await supabaseAdmin
       .from('contract_billing')
       .select('tenant_id, contract_value, currency, created_at, updated_at')
@@ -424,7 +443,7 @@ export async function registerAdminRoutes(app: FastifyInstance) {
       return reply.status(500).send({ error: 'Could not load billing installments' });
     }
 
-    return { contract_billing: billing ?? null, installments };
+    return { brokerage_name: workspace.name, contract_billing: billing ?? null, installments };
   });
 
   // tb-billing-installments-001: set/update a tenant's contract value. Upsert
