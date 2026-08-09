@@ -18,6 +18,10 @@ const ENTITY_LABELS: Record<GlobalSearchEntityType, string> = {
   inquiry: 'Inquiries',
   task: 'Tasks',
   project: 'Projects',
+  viewing: 'Viewings',
+  offer: 'Offers',
+  contract: 'Contracts',
+  closing: 'Closings',
 };
 
 // tb-search-core-entities-001: cap-search-001's TB1. A header-level box, not
@@ -73,7 +77,7 @@ export function GlobalSearchBox({ session }: Props) {
     }
     // 'lead' reuses LeadsPage.tsx's existing location.state.openLeadId
     // deep-link convention (tb-calendar-schedule-001's precedent) -- the
-    // only one of these seven entities whose list page already supports
+    // only one of these entities whose list page already supports
     // auto-opening a specific record's detail panel from outside itself.
     // highlightId rides along too, so the row behind the panel is also
     // highlighted once the panel is closed.
@@ -85,12 +89,29 @@ export function GlobalSearchBox({ session }: Props) {
     // route/state to auto-open a detail view -- see this tracer bullet's
     // Context) and instead scrolls to + highlights the matching row via
     // useHighlightFromSearch, keyed off this same highlightId.
+    //
+    // tb-search-transactions-001: viewing/offer/contract/closing have no
+    // list page of their own -- they're nested resources rendered inside
+    // LeadDetailPanel (per buyer_requirement, via /leads) and
+    // ListingDetailModal (per listing, via /listings), and this tracer
+    // bullet's semantic_scope deliberately rules out adding a detail view
+    // or auto-opening either panel. /listings is the more legible landing
+    // spot of the two: the result's title/subtitle are always the linked
+    // property's title/address (same anchor identity as the 'listing'
+    // branch), so what the user just read in the dropdown is exactly what
+    // they'd scan for on that page. highlightId won't match a row there
+    // (entity_id is the transaction's own id, not the listing's) --
+    // useHighlightFromSearch degrades to a harmless no-op in that case.
     const routeByType: Record<Exclude<GlobalSearchEntityType, 'project' | 'lead'>, string> = {
       property: '/properties',
       listing: '/listings',
       contact: '/contacts',
       inquiry: '/leads',
       task: '/tasks',
+      viewing: '/listings',
+      offer: '/listings',
+      contract: '/listings',
+      closing: '/listings',
     };
     navigate(routeByType[result.entity_type], { state: { highlightId: result.entity_id } });
   }
@@ -99,7 +120,19 @@ export function GlobalSearchBox({ session }: Props) {
     (acc[r.entity_type] ??= []).push(r);
     return acc;
   }, {});
-  const groupOrder: GlobalSearchEntityType[] = ['property', 'listing', 'contact', 'lead', 'inquiry', 'task', 'project'];
+  const groupOrder: GlobalSearchEntityType[] = [
+    'property',
+    'listing',
+    'contact',
+    'lead',
+    'inquiry',
+    'task',
+    'project',
+    'viewing',
+    'offer',
+    'contract',
+    'closing',
+  ];
 
   return (
     <div ref={containerRef} className="relative w-full max-w-sm">
