@@ -32,7 +32,7 @@ export function AdminLayout() {
         </div>
       </header>
       <div className="flex flex-1">
-        <nav className="flex w-56 flex-col gap-1 border-r p-4">
+        <nav className="sticky top-0 flex h-[calc(100vh-3.5rem)] w-56 flex-col gap-1 border-r p-4">
           {NAV_LINKS.map((link) => (
             <Link
               key={link.to}

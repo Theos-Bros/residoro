@@ -12,6 +12,14 @@ import { ContractNotificationPanel } from './components/ContractNotificationPane
 import { GlobalSearchBox } from './components/GlobalSearchBox';
 import { Button } from './components/ui/button';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from './components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from './components/ui/dialog';
 import { cn } from './lib/utils';
 
 type Props = {
@@ -101,6 +109,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   const { status: workspaceStatus, refetch: refetchWorkspaceStatus } = useWorkspaceStatus(session);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
   const isActiveLink = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
@@ -128,6 +137,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
   }
 
   const handleExport = async () => {
+    setExportConfirmOpen(false);
     setExportError(null);
     setExporting(true);
     try {
@@ -146,7 +156,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
           a fixed sidebar column ate half the viewport at phone width (tested
           at 390px) -- where a floating trigger + bottom Sheet (below) takes
           over instead (tb-brokerage-mobile-bottom-nav-001). */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r bg-card sm:flex">
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r bg-card sm:flex">
         <div className="flex items-center gap-2.5 border-b px-4 py-4">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-accent-foreground/40 to-primary text-sm font-bold text-primary-foreground [background:linear-gradient(150deg,hsl(var(--accent)),hsl(var(--primary)))]">
             R
@@ -207,7 +217,7 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-tertiary-foreground sm:inline">{session.user.email}</span>
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+            <Button variant="outline" size="sm" onClick={() => setExportConfirmOpen(true)} disabled={exporting}>
               {exporting ? 'Exporting…' : 'Export My Data'}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => supabase.auth.signOut()}>
@@ -220,6 +230,26 @@ export function BrokerageLayout({ session, loading, operatorStatus }: Props) {
             {exportError}
           </p>
         )}
+        <Dialog open={exportConfirmOpen} onOpenChange={setExportConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Export your data?</DialogTitle>
+              <DialogDescription>
+                This downloads a zip archive of everything in your workspace's account under
+                your email. It may take a moment to prepare, depending on how much data you
+                have.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button size="sm" variant="outline" onClick={() => setExportConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleExport}>
+                Export
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <ContractWarningBanner status={workspaceStatus} />
         <ContractNotificationPanel
           session={session}
