@@ -37,7 +37,7 @@ import { registerSearchRoutes } from './routes/search.js';
 
 const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: true });
+await app.register(cors, { origin: process.env.FRONTEND_URL ?? true });
 await app.register(multipart);
 await registerHealthRoute(app);
 await registerMigrationRoutes(app);
