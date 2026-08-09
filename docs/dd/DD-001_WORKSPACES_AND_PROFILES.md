@@ -1,7 +1,7 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.4.0
+**Version:** 2.5.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
 **Last Updated:** 2026-08-10
@@ -178,6 +178,19 @@ section for the full reasoning. No new RLS policy was needed for any of these �
 update_own`'s row-level check already covers any column on the caller's own row; enforcement of
 *which* columns is entirely the grant's job.
 
+**Correction (2026-08-10) — this section described intent, not reality, for six weeks:** every
+migration above only ever ran column-specific `grant update (...)` statements, but `authenticated`
+actually held **full table-level UPDATE/INSERT/DELETE/TRUNCATE** on `profiles` the entire time —
+Supabase's default privilege behavior for new `public`-schema tables, never explicitly revoked.
+Combined with `profiles_update_own`'s row-only RLS check, this meant any member could directly
+`UPDATE`	their own `role` to `admin` or `tenant_id` to any other workspace — full account/tenant
+takeover, live-proven and fixed same day. See `docs/security-review-2026-07-29.md` Finding 7 for
+the full exploit/fix narrative and `supabase/migrations/20260810170000_profiles_grant_lockdown.sql`
+(`revoke all` then re-`grant` exactly `select` + `update (first_name, last_name, prefix)`). After
+this fix, the paragraph above is finally an accurate description of `profiles`' actual grants —
+verified via `information_schema.role_table_grants`/`column_privileges`, not assumed from the
+migration files alone.
+
 `workspaces` gets no `insert` grant for `authenticated` — the only path that creates a
 workspace row is the signup trigger, which runs as `SECURITY DEFINER` and needs no grant.
 
@@ -228,6 +241,10 @@ reachable this way. See ADR-002's Consequences section.
 - `supabase/migrations/20260810150000_profiles_name_split.sql` — `first_name`/`last_name`
   columns replacing `full_name`, the backfill, the grant swap, and the redefined
   `handle_new_user()` (`tb-user-profile-name-split-001`, theos-registry)
+- `supabase/migrations/20260810170000_profiles_grant_lockdown.sql` — closes the accidental
+  table-wide grant to `authenticated`; see `docs/security-review-2026-07-29.md` Finding 7
+- `docs/security-review-2026-07-29.md` — Finding 7 (2026-08-10 addendum): the full
+  privilege-escalation exploit/fix narrative this correction summarizes
 
 ---
 
@@ -241,3 +258,4 @@ reachable this way. See ADR-002's Consequences section.
 | 2.2.0 | 2026-08-06 | Added `profiles_select_own` RLS policy (`tb-user-profile-display-name-001`) — closes a gap where an operator could not read even their own `profiles` row through an RLS-scoped client, since `profiles_select_same_tenant` compares two nulls for a tenant-less operator. Additive, non-structural (no table/column change), hence a minor version bump per STD-002. |
 | 2.3.0 | 2026-08-10 | Added `profiles.prefix` column plus its `update (prefix)` grant (`tb-user-profile-email-prefix-001`) — self-editable free-text professional/courtesy title, same grant shape as `full_name`. No new RLS policy needed. Structural (new column), hence a minor version bump per STD-002 (additive column, not a breaking change). |
 | 2.4.0 | 2026-08-10 | Replaced `profiles.full_name` with `first_name`/`last_name` (`tb-user-profile-name-split-001`) — existing rows backfilled by splitting on the first space, the `update (full_name)` grant swapped for `update (first_name, last_name)`, and `handle_new_user()` redefined to split incoming `full_name` signup metadata the same way. No new RLS policy needed. Breaking at the column level (a column was dropped, not just added) but every existing API response consumers outside the self-edit surface depend on kept its `full_name` field, now computed server-side — flagged as a minor bump per STD-002 since no external contract broke, only internal storage. |
+| 2.5.0 | 2026-08-10 | **Correction, critical.** The "Column-level grant, not a blanket one" paragraph (present since v1.0.0) described intent, not reality: `authenticated` actually held full table-level UPDATE/INSERT/DELETE/TRUNCATE on `profiles` via Supabase's un-revoked default privileges, letting any member self-promote to admin/operator or hijack any tenant via a direct PostgREST write. Fixed same day via `20260810170000_profiles_grant_lockdown.sql` (`revoke all` + precise re-grant). Full narrative in `docs/security-review-2026-07-29.md` Finding 7. Correction to previously-inaccurate documentation, not a new schema change, hence a minor bump per STD-002. |

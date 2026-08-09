@@ -2,6 +2,8 @@
 
 **Status update (2026-07-29, same day):** Findings 1–4 are fixed and live-reverified against this same Supabase project; see "Fixes Applied" at the end of this doc. Findings 5–6 (dependencies, advisors) partially addressed — see that section for what remains.
 
+**Status update (2026-08-10):** Finding 7 (Critical) added — discovered incidentally while verifying `tb-employee-position-001`'s access control, not from a fresh review pass. Fixed and live-reverified same day; see that finding's own section and its "Fix Applied" note.
+
 **Scope:** Multi-tenant isolation, IDOR, auth/access boundaries, CSV migration import, dependency/config baseline.
 **Method:** Live exploitation against the "Residoro Prototype" Supabase project (`skfnrcwqvmurnpwrmixj`) and the local backend (`localhost:4000`) — the only environment this app runs in (no hosted deployment exists yet, no real client data exists yet; every workspace in the DB was a prior dev/verification fixture). All test accounts, workspaces, and records created during this review were deleted afterward; the DB was verified back at its pre-review baseline of 12 workspaces.
 
@@ -19,8 +21,9 @@
 | 4 | CSV upload with an embedded null byte crashes the insert with an unhandled 500 instead of a clean validation error | Low |
 | 5 | `npm audit` findings (backend: 2 high; frontend: 3 moderate) | Low–Medium |
 | 6 | Supabase security advisors — not retrievable with available tooling this session | Info |
+| 7 | `authenticated` held full table-level UPDATE (plus INSERT/DELETE/TRUNCATE) on `profiles` via Supabase's default table privileges, never explicitly revoked — combined with `profiles_update_own`'s row-only RLS check, any member could self-promote to `admin`/`operator` or hijack any other tenant via a direct PostgREST write (added 2026-08-10) | **Critical** |
 
-Everything under "IDOR on core resources" and the rest of "Auth and access boundaries" tested **clean** — see the Clean Findings section. RLS policy coverage and the RLS enforcement mechanism itself are solid; the break is upstream of RLS, at account provisioning.
+Everything under "IDOR on core resources" and the rest of "Auth and access boundaries" tested **clean** — see the Clean Findings section. RLS policy coverage and the RLS enforcement mechanism itself are solid; the break is upstream of RLS, at account provisioning (Finding 1) and, as Finding 7 shows, at the grant layer sitting alongside RLS on `profiles` specifically.
 
 ---
 
@@ -138,6 +141,34 @@ Recommend running `npm audit fix` on the backend (non-breaking) and reviewing `n
 ## 6. Supabase security advisors — not retrievable this session
 
 The `claude.ai Supabase` MCP tool's `get_advisors` only has permission for a different, inactive project (`Rdoro Demo`, `ngizypfgpynsvijiopji`) — consistent with existing project memory that MCP is scoped to an abandoned Supabase org, separate from the CLI-linked "Residoro Prototype" project actually in use. The Supabase CLI has no equivalent `advisors` command. **Recommend checking the Dashboard directly** (Database → Advisors, or Advisors → Security) for `skfnrcwqvmurnpwrmixj` — I wasn't able to pull this programmatically with the tooling available in this session.
+
+---
+
+## 7. CRITICAL — `authenticated` held full table-level grant on `profiles`, defeating every column-level protection (added 2026-08-10)
+
+**How this was found:** Not from a fresh review pass — discovered incidentally while live-verifying `tb-employee-position-001`'s design that `position` should have no client-facing update grant at all (admin-set only). A direct PostgREST write to a temp account's own `position` column succeeded despite no migration ever having granted it.
+
+**What I did:** Every migration touching `public.profiles` since `mil-platform-foundation-001` shipped only ever wrote `grant select on public.profiles to authenticated` plus column-specific `grant update (<col>) on public.profiles to authenticated` statements (`full_name`, later `prefix`, `first_name`/`last_name`) — the pattern DD-001 documents as the deliberate safeguard keeping `role`/`tenant_id`/`handle` non-client-writable ("a blanket grant... would let a user change their own role or tenant_id"). Querying `information_schema.role_table_grants` for `profiles`/`authenticated` showed the actual state:
+
+```
+SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+```
+
+Full table-level access — never explicitly granted by any migration in this repo. This is Supabase's default privilege behavior for new tables in the `public` schema, and nothing ever revoked it. `workspaces` has the same table-level grant (confirmed via the same query), inherited from the same original migration.
+
+**Proof of impact:** Created a disposable throwaway account (created, tested, deleted — no real data touched), signed in as it, and issued a direct PostgREST call using only its own login session (no service-role key, no backend API involved):
+```
+UPDATE profiles SET role = 'admin' WHERE id = <own auth.uid()>
+```
+This succeeded — `HTTP 200`, `role` changed from `member` to `admin`. `profiles_update_own`'s RLS policy (`id = (select auth.uid())`) only restricts *which row* is touched, never *which columns or values* — table-level column grants are what were supposed to close the rest, and they didn't exist. The identical path also allows setting `tenant_id` to any other workspace's id in the same request — a member can become `admin` of a brokerage they were never invited to, not just self-promote within their own tenant.
+
+**Impact:** Total compromise of the `admin`/`member`/`operator` role boundary and tenant isolation for any account that already exists, independent of and in addition to Finding 1's signup-time escalation (which was fixed 2026-07-29). Also silently defeated `tb-accounts-handle-001`'s "no client-facing rename endpoint by design" claim for `handle`, and would have defeated `tb-employee-position-001`'s "admin-set only" design for `position` the moment that tracer bullet shipped, had this not been caught first.
+
+**Fix Applied (2026-08-10, same day):**
+- `supabase/migrations/20260810170000_profiles_grant_lockdown.sql`: `revoke all on public.profiles from authenticated`, then re-`grant select` plus `update` on exactly the columns meant to be self-service (`first_name`, `last_name`, `prefix`). No RLS policy change — this was purely a grant-layer fix.
+- **Re-verified live** with a fresh disposable account: direct writes of `role`, `tenant_id`, `handle`, and `position` are now all rejected (`42501`-class RLS/grant error); direct writes of `first_name` and `prefix` (the intended self-service columns) still succeed. 7/7 checks pass.
+- Two other pre-existing verification scripts (`verify-brokerage-permissions-delegation.ts`, `verify-itinerary-permissions-delegation.ts`) and one standing test-account utility (`create-member-test-account.ts`) still referenced the now-dropped `full_name` column from their own unrelated fixture setup (a side effect of `tb-user-profile-name-split-001`, not this finding) — updated to `first_name`/`last_name` and re-verified passing.
+- **Not fixed as part of this pass:** `workspaces` has the same table-level-grant pattern (confirmed present), meaning a *real* tenant admin (not an escalated one) could self-edit `access_state`/`contract_end_date`/`exclusivity_hard_block` directly via PostgREST, bypassing controls DD-001 documents as operator/Edge-Function-only. Lower severity than the `profiles` role/tenant escalation (requires already being a legitimate admin of your own tenant, not a full takeover of another tenant), scoped out of this fix at the user's explicit direction — flagged here for a future pass.
 
 ---
 
