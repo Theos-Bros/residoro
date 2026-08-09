@@ -22,12 +22,16 @@ type Props = {
 // name inputs -- first name required, last name optional, same partial-
 // update semantics as prefix.
 //
-// tb-employee-position-001: position is shown read-only, same treatment as
-// email -- it has no client-facing update grant, admin-set only via the
-// Team page.
+// tb-employee-position-001: position was originally shown read-only, same
+// treatment as email -- no client-facing update grant, admin-set only via
+// the Team page.
+//
+// tb-user-profile-position-self-edit-001: position is now an editable input,
+// same Save button as prefix/first/last name. The Team page's admin-only
+// editor is unchanged -- both paths write the same column, last write wins.
 export function ProfileSettingsPage({ session }: Props) {
   const [email, setEmail] = useState<string | null>(null);
-  const [position, setPosition] = useState<string | null>(null);
+  const [position, setPosition] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [prefix, setPrefix] = useState('');
@@ -40,7 +44,7 @@ export function ProfileSettingsPage({ session }: Props) {
     fetchProfile(session.access_token)
       .then((profile) => {
         setEmail(profile.email);
-        setPosition(profile.position);
+        setPosition(profile.position ?? '');
         setFirstName(profile.first_name ?? '');
         setLastName(profile.last_name ?? '');
         setPrefix(profile.prefix ?? '');
@@ -58,10 +62,12 @@ export function ProfileSettingsPage({ session }: Props) {
         first_name: firstName,
         last_name: lastName,
         prefix,
+        position,
       });
       setFirstName(profile.first_name ?? '');
       setLastName(profile.last_name ?? '');
       setPrefix(profile.prefix ?? '');
+      setPosition(profile.position ?? '');
       setSaved(true);
     } catch (err) {
       setError((err as Error).message);
@@ -92,7 +98,13 @@ export function ProfileSettingsPage({ session }: Props) {
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Position</label>
-            <p className="text-sm text-muted-foreground">{position ?? '— (set by your admin)'}</p>
+            <input
+              type="text"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              placeholder="e.g. Senior Agent"
+              className="h-9 w-full rounded-md border border-input px-3 text-sm"
+            />
           </div>
 
           <div className="space-y-2">

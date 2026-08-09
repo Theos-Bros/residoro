@@ -7,7 +7,12 @@ type ProfileRow = {
   prefix: string | null;
   position: string | null;
 };
-type ProfilePatchBody = { first_name?: string; last_name?: string | null; prefix?: string | null };
+type ProfilePatchBody = {
+  first_name?: string;
+  last_name?: string | null;
+  prefix?: string | null;
+  position?: string | null;
+};
 
 // tb-user-profile-display-name-001: the smallest slice of cap-user-profile-001
 // -- full_name only, self-scoped, shared by both tenant users and operators
@@ -28,10 +33,14 @@ type ProfilePatchBody = { first_name?: string; last_name?: string | null; prefix
 // with partial-update semantics (an omitted key leaves the stored value
 // unchanged, an empty string clears it to null).
 //
-// tb-employee-position-001: position is read-only here, deliberately not in
-// ProfilePatchBody -- it has no client-facing update grant at all (see
-// 20260810160000_profiles_position.sql), admin-set only via
+// tb-employee-position-001: position was originally read-only here (no
+// client-facing update grant), admin-set only via
 // PATCH /workspace/members/:id/position in members.ts.
+//
+// tb-user-profile-position-self-edit-001: position is now also self-editable
+// here, same partial-update semantics as prefix (20260810190000_profiles_
+// position_self_edit.sql). The admin-only Team-page route is unchanged and
+// still works -- both paths write the same column, last write wins.
 export async function registerProfileRoutes(app: FastifyInstance) {
   app.get('/me/profile', { preHandler: requireAnyIdentity }, async (request, reply) => {
     const { data, error } = await getScopedClient(request)
@@ -58,7 +67,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
     '/me/profile',
     { preHandler: requireAnyIdentity },
     async (request, reply) => {
-      const { first_name: firstName, last_name: lastName, prefix } = request.body ?? {};
+      const { first_name: firstName, last_name: lastName, prefix, position } = request.body ?? {};
       if (typeof firstName !== 'string' || firstName.trim() === '') {
         return reply.status(400).send({ error: 'first_name is required' });
       }
@@ -69,6 +78,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
           first_name: firstName.trim(),
           ...(lastName !== undefined && { last_name: lastName?.trim() || null }),
           ...(prefix !== undefined && { prefix: prefix?.trim() || null }),
+          ...(position !== undefined && { position: position?.trim() || null }),
         })
         .eq('id', request.identity!.id)
         .select('first_name, last_name, prefix, position')

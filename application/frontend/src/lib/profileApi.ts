@@ -12,6 +12,7 @@ export type ProfileUpdate = {
   first_name: string;
   last_name?: string | null;
   prefix?: string | null;
+  position?: string | null;
 };
 
 async function parseJsonOrThrow(response: Response) {

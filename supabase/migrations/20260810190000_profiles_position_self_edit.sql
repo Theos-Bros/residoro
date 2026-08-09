@@ -1,0 +1,21 @@
+-- ============================================================================
+-- Migration: profiles.position becomes self-editable (tb-user-profile-position-self-edit-001)
+--
+-- tb-employee-position-001 (20260810160000_profiles_position.sql) added
+-- `position` with deliberately NO `authenticated` grant at all -- the same
+-- access pattern DD-001 documents for role/tenant_id. That reasoning doesn't
+-- hold: unlike role/tenant_id, position has no access-level implications --
+-- it's descriptive free text like prefix. Reversed at the user's request
+-- 2026-08-10.
+--
+-- This is an ADDITIVE grant on top of 20260810170000_profiles_grant_lockdown.sql's
+-- `revoke all` + precise re-grant -- it does not touch that revoke, and does
+-- not re-open role/tenant_id (still no grant on either).
+--
+-- The existing admin-only route (PATCH /workspace/members/:id/position,
+-- members.ts, via supabaseAdmin) is unaffected by this migration and
+-- continues to work unchanged -- both paths now write the same column, last
+-- write wins.
+-- ============================================================================
+
+grant update (position) on public.profiles to authenticated;
