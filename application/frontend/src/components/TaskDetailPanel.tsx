@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchTask,
@@ -7,6 +8,7 @@ import {
   updateTask,
   deleteTask,
   TASK_STATUSES,
+  TASK_ENTITY_ROUTE,
   type Task,
   type TaskAssignee,
   type TaskStatus,
@@ -150,9 +152,19 @@ export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, prefi
     }
   }
 
-  const linkedEntity = task ? { entityType: task.entity_type, entityId: task.entity_id } : prefillEntity
-    ? { entityType: prefillEntity.entityType, entityId: prefillEntity.entityId }
-    : null;
+  // tb-tasks-linked-entity-display-001: `task` (an already-saved task, loaded
+  // via fetchTask) carries the backend-resolved entity_name; a not-yet-saved
+  // task only has prefillEntity's entityType/entityId (no name -- resolving
+  // one would mean a 4th per-type API branch here just for this transient
+  // pre-save moment, out of scope per the tech design's "no new prop shape"
+  // instruction for prefillEntity). entityName stays null in that case, and
+  // the render below falls back to a plain (non-linked, non-UUID) type label
+  // rather than ever showing the raw id.
+  const linkedEntity = task
+    ? { entityType: task.entity_type, entityId: task.entity_id, entityName: task.entity_name }
+    : prefillEntity
+      ? { entityType: prefillEntity.entityType, entityId: prefillEntity.entityId, entityName: null as string | null }
+      : null;
 
   return (
     <FloatingPanel title={isNew ? 'New Task' : 'Task'} onClose={onClose} className="max-w-lg sm:max-w-xl">
@@ -167,7 +179,18 @@ export function TaskDetailPanel({ session, taskId, isAdmin, prefillEntity, prefi
         <div className="space-y-4">
           {linkedEntity?.entityType && (
             <p className="text-xs text-muted-foreground">
-              Linked to: {linkedEntity.entityType} ({linkedEntity.entityId})
+              Linked to:{' '}
+              {linkedEntity.entityName ? (
+                <Link
+                  to={TASK_ENTITY_ROUTE[linkedEntity.entityType] ?? '/tasks'}
+                  state={{ openId: linkedEntity.entityId }}
+                  className="text-accent-foreground hover:underline"
+                >
+                  {linkedEntity.entityName}
+                </Link>
+              ) : (
+                toSentenceCase(linkedEntity.entityType.replace(/_/g, ' '))
+              )}
             </p>
           )}
 

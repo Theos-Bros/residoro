@@ -12,6 +12,13 @@ type Props = {
   isAdmin: boolean;
   onClose: () => void;
   onSaved: () => void;
+  // tb-tasks-linked-entity-display-001: mirrors LeadDetailPanel's own
+  // onOpenTask -- FloatingPanel is "one at a time" (see FloatingPanel.tsx),
+  // so opening a task swaps this panel out for a standalone TaskDetailPanel
+  // at the parent (ContactsPage) level rather than nesting a second
+  // fixed-position panel on top of this one. Undefined for the 'new' contact
+  // flow, which has no id yet to link a task to.
+  onOpenTask?: (taskId: string | 'new') => void;
 };
 
 // tb-crm-contacts-page-001: one form for both an individual and a company --
@@ -19,7 +26,7 @@ type Props = {
 // the same contacts row shape either way. Delete is admin-only, matching
 // contacts_delete_admin RLS; a still-referenced contact surfaces the
 // backend's named 409 rather than a raw error.
-export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSaved }: Props) {
+export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSaved, onOpenTask }: Props) {
   const isNew = contactId === 'new';
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -172,6 +179,11 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
             <Button size="sm" onClick={handleSave} disabled={saving}>
               {isNew ? 'Create Contact' : 'Save'}
             </Button>
+            {!isNew && onOpenTask && (
+              <Button size="sm" variant="outline" onClick={() => onOpenTask('new')}>
+                Add Task
+              </Button>
+            )}
             {!isNew && isAdmin && (
               <Button size="sm" variant="outline" onClick={handleDelete} disabled={saving}>
                 Delete

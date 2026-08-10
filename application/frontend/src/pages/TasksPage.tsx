@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import {
   fetchTasks,
@@ -6,6 +7,7 @@ import {
   fetchTaskRoutingSettings,
   createTask,
   updateTask,
+  TASK_ENTITY_ROUTE,
   type Task,
   type TaskAssignee,
   type TaskStatus,
@@ -317,7 +319,20 @@ export function TasksPage({ session }: Props) {
                             {task.title}
                           </span>
                           <span className="truncate text-[13px] text-accent-foreground">
-                            {task.entity_type ? task.entity_type.replace(/_/g, ' ') : 'General'}
+                            {task.entity_type && task.entity_name ? (
+                              <Link
+                                to={TASK_ENTITY_ROUTE[task.entity_type] ?? '/tasks'}
+                                state={{ openId: task.entity_id }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="hover:underline"
+                              >
+                                {task.entity_name}
+                              </Link>
+                            ) : task.entity_type ? (
+                              task.entity_type.replace(/_/g, ' ')
+                            ) : (
+                              'General'
+                            )}
                           </span>
                           <span className="truncate text-[13px] text-muted-foreground">{assigneeName(task.assignee_id)}</span>
                           <span className={cn('text-right text-[13px] font-medium', dueColorClass(task, todayStr))}>

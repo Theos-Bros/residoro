@@ -131,7 +131,14 @@ export function LeadsPage({ session }: Props) {
   // tb-calendar-schedule-001: same location.state prefill pattern as
   // ListingsPage's prefillListingId -- lets the Calendar page deep-link a
   // viewing event straight to its Lead's detail panel.
-  const openLeadId = (location.state as { openLeadId?: string } | null)?.openLeadId;
+  // tb-tasks-linked-entity-display-001: `openId` is the generic key
+  // PropertiesListPage/ListingsPage/ContactsPage's own route-state effects
+  // use (a linked task's "buyer_requirement" entity routes here) -- accepted
+  // as an alias for openLeadId rather than replacing it, so
+  // CalendarPage.tsx/GlobalSearchBox.tsx's existing openLeadId callers stay
+  // unchanged.
+  const state = location.state as { openLeadId?: string; openId?: string } | null;
+  const openLeadId = state?.openLeadId ?? state?.openId;
 
   const [inquiries, setInquiries] = useState<Inquiry[] | null>(null);
   const [leads, setLeads] = useState<BuyerRequirement[] | null>(null);
