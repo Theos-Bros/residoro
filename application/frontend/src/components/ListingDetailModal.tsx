@@ -28,6 +28,12 @@ type Props = {
   // tb-buyer-leads-schema-001's "Mark Sold on Listings Page" convenience
   // action pre-selects a buyer -- see ListingsPage's prefill handling.
   initialBuyerContactId?: string;
+  // tb-tasks-linked-entity-display-001: mirrors LeadDetailPanel's own
+  // onOpenTask -- FloatingPanel is "one at a time" (see FloatingPanel.tsx),
+  // so opening a task swaps this modal out for a standalone TaskDetailPanel
+  // at the parent (ListingsPage) level rather than nesting a second
+  // fixed-position panel on top of this one.
+  onOpenTask: (taskId: string | 'new') => void;
 };
 
 // tb-listings-detail-edit-modal-001: opened by clicking a row on
@@ -41,7 +47,7 @@ type Props = {
 // moved. `listing` is looked up fresh from the parent's own `listings` array
 // on every render (not a frozen snapshot), so a status change or field edit
 // is reflected here immediately after `onUpdated` triggers the parent reload.
-export function ListingDetailModal({ session, listing, onClose, onUpdated, initialBuyerContactId }: Props) {
+export function ListingDetailModal({ session, listing, onClose, onUpdated, initialBuyerContactId, onOpenTask }: Props) {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -375,6 +381,9 @@ export function ListingDetailModal({ session, listing, onClose, onUpdated, initi
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => setMode('edit')}>
               Edit
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onOpenTask('new')}>
+              Add Task
             </Button>
             <Button size="sm" variant="outline" onClick={handleCheckHazardRisk}>
               Check Hazard Risk

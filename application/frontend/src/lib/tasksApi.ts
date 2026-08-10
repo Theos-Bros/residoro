@@ -14,10 +14,28 @@ export type Task = {
   assignee_id: string | null;
   entity_type: string | null;
   entity_id: string | null;
+  // tb-tasks-linked-entity-display-001: resolved server-side (GET/POST/PATCH
+  // /tasks[/:id]) from entity_type/entity_id -- the linked record's real
+  // display name, e.g. a Lead's contact name or a Listing's property title.
+  // null whenever entity_type/entity_id are null (a standalone task).
+  entity_name: string | null;
   task_type: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
+};
+
+// tb-tasks-linked-entity-display-001: where a task's linked-entity name
+// navigates to when clicked -- the list page that owns that entity's detail
+// view. None of these entity types has a per-record route (see each list
+// page's own location.state.openId effect), so this is a route + state pair,
+// not a plain href. Keyed on the same entity_type values already written by
+// TaskDetailPanel.tsx's prefillEntity / stageTaskGeneration.ts.
+export const TASK_ENTITY_ROUTE: Record<string, string> = {
+  buyer_requirement: '/leads',
+  property: '/properties',
+  listing: '/listings',
+  contact: '/contacts',
 };
 
 export type TaskAssignee = { id: string; full_name: string; handle: string | null };

@@ -17,6 +17,8 @@ import { ShareDetailsModal } from '@/components/ShareDetailsModal';
 import { ShareDocketModal } from '@/components/ShareDocketModal';
 import { ListingDetailModal } from '@/components/ListingDetailModal';
 import { ListingFilterTabs, type FilterTabOption } from '@/components/ListingFilterTabs';
+import { TaskDetailPanel } from '@/components/TaskDetailPanel';
+import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn } from '@/lib/utils';
 
@@ -113,8 +115,21 @@ export function ListingsPage({ session }: Props) {
   // still goes through ListingDetailModal's own handleMarkSold -> PATCH
   // /listings/:id, entirely unmodified.
   const location = useLocation();
-  const prefill = location.state as { prefillListingId?: string; prefillBuyerContactId?: string } | null;
-  const [openDetailId, setOpenDetailId] = useState<string | null>(prefill?.prefillListingId ?? null);
+  // tb-tasks-linked-entity-display-001: `openId` is the same location.state
+  // deep-link convention LeadsPage.tsx's openLeadId already established --
+  // lets a task's linked-entity link (or any other future caller) land here
+  // with a specific listing's detail modal already open.
+  const prefill = location.state as
+    | { prefillListingId?: string; prefillBuyerContactId?: string; openId?: string }
+    | null;
+  const [openDetailId, setOpenDetailId] = useState<string | null>(prefill?.prefillListingId ?? prefill?.openId ?? null);
+  const { status: workspaceStatus } = useWorkspaceStatus(session);
+  const isAdmin = workspaceStatus?.role === 'admin';
+  // tb-tasks-linked-entity-display-001: mirrors LeadsPage.tsx's own
+  // openPanel 'task' variant -- FloatingPanel is "one at a time", so opening
+  // a task from ListingDetailModal's "Add Task" button swaps the listing
+  // modal out for a standalone TaskDetailPanel, then swaps back in on close.
+  const [openTaskId, setOpenTaskId] = useState<string | 'new' | null>(null);
   // Bumped on every row click (even re-clicking the currently-open listing)
   // and used as ListingDetailModal's `key` below, forcing a fresh mount --
   // and so a fresh, expanded FloatingPanel -- every time a row is clicked.
@@ -328,7 +343,7 @@ export function ListingsPage({ session }: Props) {
           onClose={() => setShareDocketListingId(null)}
         />
       )}
-      {openDetailListing && (
+      {openDetailListing && !openTaskId && (
         <ListingDetailModal
           key={openDetailToken}
           session={session}
@@ -338,6 +353,17 @@ export function ListingsPage({ session }: Props) {
           initialBuyerContactId={
             openDetailListing.id === prefill?.prefillListingId ? prefill?.prefillBuyerContactId : undefined
           }
+          onOpenTask={setOpenTaskId}
+        />
+      )}
+      {openTaskId && openDetailId && (
+        <TaskDetailPanel
+          session={session}
+          taskId={openTaskId}
+          isAdmin={isAdmin}
+          prefillEntity={{ entityType: 'listing', entityId: openDetailId }}
+          onClose={() => setOpenTaskId(null)}
+          onSaved={() => {}}
         />
       )}
     </div>

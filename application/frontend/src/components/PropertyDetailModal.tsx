@@ -42,6 +42,12 @@ type Props = {
   property: Property;
   onClose: () => void;
   onUpdated: () => void;
+  // tb-tasks-linked-entity-display-001: mirrors LeadDetailPanel's own
+  // onOpenTask -- FloatingPanel is "one at a time" (see FloatingPanel.tsx),
+  // so opening a task swaps this modal out for a standalone TaskDetailPanel
+  // at the parent (PropertiesListPage) level rather than nesting a second
+  // fixed-position panel on top of this one.
+  onOpenTask: (taskId: string | 'new') => void;
 };
 
 const verificationSelectClass =
@@ -170,7 +176,7 @@ function formatSpecsSummary(property: PropertyDetail): string {
 // for the full PropertyDetail shape, since the list page's own `Property`
 // type is missing several fields (city/province/owner_type/owner_id/
 // project_id/project_name/lease_*) this view needs.
-export function PropertyDetailModal({ session, property: propertyListItem, onClose, onUpdated }: Props) {
+export function PropertyDetailModal({ session, property: propertyListItem, onClose, onUpdated, onOpenTask }: Props) {
   const propertyId = propertyListItem.id;
   const [property, setProperty] = useState<PropertyDetail | null>(null);
   const [media, setMedia] = useState<PropertyMedia[] | null>(null);
@@ -399,6 +405,9 @@ export function PropertyDetailModal({ session, property: propertyListItem, onClo
                   Edit
                 </Button>
               )}
+              <Button variant="outline" size="sm" onClick={() => onOpenTask('new')}>
+                Add Task
+              </Button>
               {isAdmin ? (
                 <select
                   aria-label={`Verification status for ${property.title}`}

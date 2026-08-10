@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { SearchX, Building2 } from 'lucide-react';
 import {
@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { CreateListingPanel } from '@/components/CreateListingPanel';
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { PropertyDetailModal } from '@/components/PropertyDetailModal';
+import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn, toSentenceCase } from '@/lib/utils';
 
@@ -137,6 +138,13 @@ type OpenPanel =
 // whose panel is open gets a light-gold highlight (bg-amber-100) so it's
 // obvious which property the floating panel refers to.
 export function PropertiesListPage({ session }: Props) {
+  const location = useLocation();
+  // tb-tasks-linked-entity-display-001: same location.state.openId deep-link
+  // convention LeadsPage.tsx's openLeadId already established -- lets a
+  // task's linked-entity link (or any other future caller) land here with a
+  // specific property's detail modal already open.
+  const openIdFromState = (location.state as { openId?: string } | null)?.openId;
+
   const [properties, setProperties] = useState<Property[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
@@ -147,12 +155,18 @@ export function PropertiesListPage({ session }: Props) {
   // a fresh, expanded FloatingPanel) every time. Separate from `openPanel`
   // above, which still exclusively drives the "Create listing"/"Listing
   // history" panels and is untouched by this change.
-  const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  const [openDetailId, setOpenDetailId] = useState<string | null>(openIdFromState ?? null);
   const [openDetailToken, setOpenDetailToken] = useState(0);
   const openDetailProperty = properties?.find((p) => p.id === openDetailId) ?? null;
   const { highlightedId, clearHighlight } = useHighlightFromSearch(properties !== null);
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
+
+  // tb-tasks-linked-entity-display-001: mirrors LeadsPage.tsx's own
+  // openPanel 'task' variant -- FloatingPanel is "one at a time", so opening
+  // a task from PropertyDetailModal's "Add Task" button swaps the property
+  // modal out for a standalone TaskDetailPanel, then swaps back in on close.
+  const [openTaskId, setOpenTaskId] = useState<string | 'new' | null>(null);
 
   // tb-listings-properties-keyword-search-001: this page's first-ever
   // client-side filter -- previously every fetched property rendered
@@ -514,13 +528,24 @@ export function PropertiesListPage({ session }: Props) {
           onClose={() => setOpenPanel(null)}
         />
       )}
-      {openDetailProperty && (
+      {openDetailProperty && !openTaskId && (
         <PropertyDetailModal
           key={openDetailToken}
           session={session}
           property={openDetailProperty}
           onClose={() => setOpenDetailId(null)}
           onUpdated={reload}
+          onOpenTask={setOpenTaskId}
+        />
+      )}
+      {openTaskId && openDetailId && (
+        <TaskDetailPanel
+          session={session}
+          taskId={openTaskId}
+          isAdmin={isAdmin}
+          prefillEntity={{ entityType: 'property', entityId: openDetailId }}
+          onClose={() => setOpenTaskId(null)}
+          onSaved={() => {}}
         />
       )}
     </div>

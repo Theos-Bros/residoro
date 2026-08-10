@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ContactDetailPanel } from '@/components/ContactDetailPanel';
+import { TaskDetailPanel } from '@/components/TaskDetailPanel';
 import { useHighlightFromSearch } from '@/hooks/useHighlightFromSearch';
 import { cn } from '@/lib/utils';
 
@@ -29,12 +31,23 @@ const selectClass = 'flex h-9 rounded-md border border-input bg-background px-3 
 export function ContactsPage({ session }: Props) {
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
+  const location = useLocation();
+  // tb-tasks-linked-entity-display-001: same location.state.openId deep-link
+  // convention LeadsPage.tsx's openLeadId already established -- lets a
+  // task's linked-entity link (or any other future caller) land here with a
+  // specific contact's detail panel already open.
+  const openIdFromState = (location.state as { openId?: string } | null)?.openId;
 
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['value']>('all');
   const [error, setError] = useState<string | null>(null);
-  const [openContactId, setOpenContactId] = useState<string | 'new' | null>(null);
+  const [openContactId, setOpenContactId] = useState<string | 'new' | null>(openIdFromState ?? null);
   const { highlightedId, clearHighlight } = useHighlightFromSearch(contacts !== null);
+  // tb-tasks-linked-entity-display-001: mirrors LeadsPage.tsx's own
+  // openPanel 'task' variant -- FloatingPanel is "one at a time", so opening
+  // a task from ContactDetailPanel's "Add Task" button swaps the contact
+  // panel out for a standalone TaskDetailPanel, then swaps back in on close.
+  const [openTaskId, setOpenTaskId] = useState<string | 'new' | null>(null);
 
   function reload() {
     fetchContacts(session.access_token, filter === 'all' ? undefined : { isCompany: filter === 'company' })
@@ -108,13 +121,24 @@ export function ContactsPage({ session }: Props) {
         </div>
       )}
 
-      {openContactId && (
+      {openContactId && !openTaskId && (
         <ContactDetailPanel
           session={session}
           contactId={openContactId}
           isAdmin={isAdmin}
           onClose={() => setOpenContactId(null)}
           onSaved={reload}
+          onOpenTask={setOpenTaskId}
+        />
+      )}
+      {openTaskId && openContactId && openContactId !== 'new' && (
+        <TaskDetailPanel
+          session={session}
+          taskId={openTaskId}
+          isAdmin={isAdmin}
+          prefillEntity={{ entityType: 'contact', entityId: openContactId }}
+          onClose={() => setOpenTaskId(null)}
+          onSaved={() => {}}
         />
       )}
     </div>

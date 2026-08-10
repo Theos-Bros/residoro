@@ -57,6 +57,97 @@ type TaskRow = {
   updated_at: string;
 };
 
+// tb-tasks-linked-entity-display-001: `entity_type`/`entity_id` is a
+// deliberately FK-less polymorphic link (see tasks_schema migration), so
+// resolving a display name is a per-type lookup -- one single-table select
+// per entity_type actually present in the batch, not a generic join. Batches
+// across every task in a list response (GET /tasks) or wraps a single task
+// (GET /tasks/:id) so both call sites share one implementation and stay in
+// sync. Returns a lookup function rather than a plain Map so callers don't
+// need to know the `${entity_type}:${entity_id}` key format.
+async function resolveEntityNames(
+  supabase: SupabaseClient,
+  tenantId: string,
+  tasks: Pick<TaskRow, 'entity_type' | 'entity_id'>[],
+): Promise<(task: Pick<TaskRow, 'entity_type' | 'entity_id'>) => string | null> {
+  const idsByType = new Map<string, Set<string>>();
+  for (const task of tasks) {
+    if (!task.entity_type || !task.entity_id) continue;
+    const set = idsByType.get(task.entity_type) ?? new Set<string>();
+    set.add(task.entity_id);
+    idsByType.set(task.entity_type, set);
+  }
+
+  const nameByKey = new Map<string, string | null>();
+
+  const buyerRequirementIds = idsByType.get('buyer_requirement');
+  if (buyerRequirementIds?.size) {
+    // A Lead has no name of its own -- it's always the linked contact's name
+    // (same derivation LeadDetailPanel/LeadsPage already use).
+    const { data, error } = await supabase
+      .from('buyer_requirements')
+      .select('id, contacts(name)')
+      .eq('tenant_id', tenantId)
+      .in('id', [...buyerRequirementIds])
+      .returns<{ id: string; contacts: { name: string } | null }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      nameByKey.set(`buyer_requirement:${row.id}`, row.contacts?.name ?? null);
+    }
+  }
+
+  const propertyIds = idsByType.get('property');
+  if (propertyIds?.size) {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('id, title')
+      .eq('tenant_id', tenantId)
+      .in('id', [...propertyIds])
+      .returns<{ id: string; title: string }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      nameByKey.set(`property:${row.id}`, row.title);
+    }
+  }
+
+  const listingIds = idsByType.get('listing');
+  if (listingIds?.size) {
+    // A listing has no title of its own -- confirmed still true at
+    // implementation time (2026-08-11): listings.ts's own row shape has no
+    // title/name column, only a property_id join through to properties.title
+    // (same as CalendarPage.tsx/viewings.ts already resolve elsewhere).
+    const { data, error } = await supabase
+      .from('listings')
+      .select('id, properties(title)')
+      .eq('tenant_id', tenantId)
+      .in('id', [...listingIds])
+      .returns<{ id: string; properties: { title: string } | null }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      nameByKey.set(`listing:${row.id}`, row.properties?.title ?? null);
+    }
+  }
+
+  const contactIds = idsByType.get('contact');
+  if (contactIds?.size) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .select('id, name')
+      .eq('tenant_id', tenantId)
+      .in('id', [...contactIds])
+      .returns<{ id: string; name: string }[]>();
+    if (error) throw error;
+    for (const row of data ?? []) {
+      nameByKey.set(`contact:${row.id}`, row.name);
+    }
+  }
+
+  return (task) => {
+    if (!task.entity_type || !task.entity_id) return null;
+    return nameByKey.get(`${task.entity_type}:${task.entity_id}`) ?? null;
+  };
+}
+
 type ListQuery = {
   status?: string;
   assignee_id?: string;
@@ -122,7 +213,17 @@ export async function registerTasksRoutes(app: FastifyInstance) {
       request.log.error(error);
       return reply.status(500).send({ error: 'Could not load tasks' });
     }
-    return { tasks: data ?? [] };
+
+    const tasks = data ?? [];
+    let entityNameFor: (task: TaskRow) => string | null;
+    try {
+      entityNameFor = await resolveEntityNames(supabase, request.user!.tenantId, tasks);
+    } catch (resolveError) {
+      request.log.error(resolveError);
+      return reply.status(500).send({ error: 'Could not resolve linked-entity names' });
+    }
+
+    return { tasks: tasks.map((task) => ({ ...task, entity_name: entityNameFor(task) })) };
   });
 
   // Powers the assignee picker on both TaskDetailPanel and
@@ -201,7 +302,19 @@ export async function registerTasksRoutes(app: FastifyInstance) {
       request.log.error(error);
       return reply.status(500).send({ error: 'Could not create the task' });
     }
-    return reply.status(201).send(data);
+
+    // Same resolution as GET /tasks and GET /tasks/:id -- keeps every
+    // response shape carrying entity_name consistent, so a caller that
+    // replaces its local task state wholesale from a create/update response
+    // (see TaskDetailPanel.tsx) never has to fall back to a stale value.
+    let entityNameFor: (task: TaskRow) => string | null;
+    try {
+      entityNameFor = await resolveEntityNames(supabase, request.user!.tenantId, [data]);
+    } catch (resolveError) {
+      request.log.error(resolveError);
+      return reply.status(500).send({ error: 'Could not resolve linked-entity name' });
+    }
+    return reply.status(201).send({ ...data, entity_name: entityNameFor(data) });
   });
 
   app.get<{ Params: { id: string } }>('/tasks/:id', { preHandler: requireAuth }, async (request, reply) => {
@@ -220,7 +333,15 @@ export async function registerTasksRoutes(app: FastifyInstance) {
     if (!data) {
       return reply.status(404).send({ error: 'Task not found in your workspace' });
     }
-    return data;
+
+    let entityNameFor: (task: TaskRow) => string | null;
+    try {
+      entityNameFor = await resolveEntityNames(supabase, request.user!.tenantId, [data]);
+    } catch (resolveError) {
+      request.log.error(resolveError);
+      return reply.status(500).send({ error: 'Could not resolve the linked-entity name' });
+    }
+    return { ...data, entity_name: entityNameFor(data) };
   });
 
   app.patch<{ Params: { id: string }; Body: UpdateTaskBody }>(
@@ -260,7 +381,15 @@ export async function registerTasksRoutes(app: FastifyInstance) {
       if (!data) {
         return reply.status(404).send({ error: 'Task not found in your workspace' });
       }
-      return data;
+
+      let entityNameFor: (task: TaskRow) => string | null;
+      try {
+        entityNameFor = await resolveEntityNames(supabase, request.user!.tenantId, [data]);
+      } catch (resolveError) {
+        request.log.error(resolveError);
+        return reply.status(500).send({ error: 'Could not resolve the linked-entity name' });
+      }
+      return { ...data, entity_name: entityNameFor(data) };
     },
   );
 
