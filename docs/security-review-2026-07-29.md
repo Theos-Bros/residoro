@@ -6,6 +6,8 @@
 
 **Status update (2026-08-10, later same day):** Finding 8 (Critical) added, then fully closed, same day. A user-requested follow-up security pass ("run a security check for anything we haven't covered") generalized Finding 7's root cause: the un-revoked table-wide grant pattern was present on 37 of 39 public tables, not just `profiles`/`workspaces`, and `anon` (never addressed by either Finding 7 fix) held it on literally every table. Fixed in two passes the same day: the six highest-blast-radius tables (financial + audit-log) first, then the remaining ~30 tables plus `anon` everywhere via a dedicated tracer bullet (`tb-platform-grant-lockdown-001`), started and finished the same day rather than left as a scoped-out follow-up. See Finding 8's own section for the full closure narrative.
 
+**Status update (2026-08-10/11):** `tb-platform-grant-lockdown-001`'s own residual gap (`properties.owner_type`/`owner_id`, app-layer-only admin check with no DB-level mirror) closed via `tb-properties-owner-admin-lockdown-001` (`BEFORE UPDATE` trigger). The public signup toggle (Supabase Auth → "Allow new users to sign up"), recommended but left undone in Finding 1's fix, has now been flipped off. Finding 9 (below) added and closed same day, from a fresh pass over Supabase's built-in security advisors.
+
 **Scope:** Multi-tenant isolation, IDOR, auth/access boundaries, CSV migration import, dependency/config baseline.
 **Method:** Live exploitation against the "Residoro Prototype" Supabase project (`skfnrcwqvmurnpwrmixj`) and the local backend (`localhost:4000`) — the only environment this app runs in (no hosted deployment exists yet, no real client data exists yet; every workspace in the DB was a prior dev/verification fixture). All test accounts, workspaces, and records created during this review were deleted afterward; the DB was verified back at its pre-review baseline of 12 workspaces.
 
@@ -25,6 +27,7 @@
 | 6 | Supabase security advisors — not retrievable with available tooling this session | Info |
 | 7 | `authenticated` held full table-level UPDATE (plus INSERT/DELETE/TRUNCATE) on `profiles` via Supabase's default table privileges, never explicitly revoked — combined with `profiles_update_own`'s row-only RLS check, any member could self-promote to `admin`/`operator` or hijack any other tenant via a direct PostgREST write (added 2026-08-10) | **Critical** |
 | 8 | Same root cause as Finding 7, confirmed present on 37 of 39 public tables plus `anon` (unauthenticated) on every table, including the two Finding 7 "fixed" — fully closed same day across two passes (six financial/audit tables, then the remaining ~30 tables via `tb-platform-grant-lockdown-001`) (added 2026-08-10) | **Critical, now fixed** |
+| 9 | Supabase security advisors triage: `generate_unique_handle(text)` publicly executable (weak email/handle enumeration), plus a batch of advisor warnings that turned out to be false positives once read against the actual function bodies — fixed/triaged same day (added 2026-08-11) | **Low, now fixed** |
 
 Everything under "IDOR on core resources" and the rest of "Auth and access boundaries" tested **clean** — see the Clean Findings section. RLS policy coverage and the RLS enforcement mechanism itself are solid; the break is upstream of RLS, at account provisioning (Finding 1) and, as Findings 7–8 show, at the grant layer sitting alongside RLS across most of the schema.
 
@@ -210,6 +213,71 @@ Every column list across all four migrations was built by reading every real `ge
 One residual gap flagged, not fixed here (a grant-layer fix can't close it): `properties.owner_type`/`owner_id` has an app-layer-only admin check (`routes/listings.ts`, 403 for non-admins) that `properties_update_tenant`'s RLS never mirrored — those two columns must stay grantable for the legitimate admin flow, so a non-admin can still set them via direct PostgREST, bypassing the 403. Needs an RLS/trigger change, tracked in `tb-platform-grant-lockdown-001`'s What Happens Next, not a new finding here.
 
 Every DD doc touched (20 of 20 in the repo, given how schema-wide this was) got a dated correction note, matching this doc's own precedent. Finding 8 is now fully closed — every one of the 39 public tables, and `anon` on all of them, has been read against real backend usage and locked down to exactly what's used.
+
+---
+
+## 9. LOW, FIXED — Supabase security advisors triage (added and closed 2026-08-11)
+
+**How this was found:** User pasted screenshots of Supabase's built-in Security Advisors panel
+for the "Residoro Prototype" project (13 warnings, 6 suggestions, 0 errors) — the same tooling
+Finding 6 flagged as unreachable via the MCP connection (still true; this was read directly from
+the Dashboard). Rather than taking the advisor labels at face value, each flagged function's
+actual body was read to judge real exploitability.
+
+**What I found, triaged:**
+
+**Real, fixed:** `generate_unique_handle(text)` (the function backing `profiles.handle`, see
+DD-001) had never had an explicit `grant`/`revoke` statement anywhere in the migrations — it sat
+on Postgres's implicit default PUBLIC EXECUTE plus Supabase's own default-privileges grant to
+`anon`/`authenticated` on new `public`-schema functions, the same un-revoked-default shape as
+Findings 7/8, this time on a function rather than a table. It's only ever meant to be called
+internally by `handle_new_user()` (confirmed: no application code calls it via RPC). A direct,
+unauthenticated `POST /rest/v1/rpc/generate_unique_handle` let a caller pass an arbitrary email
+and infer from the returned candidate (base handle vs. base+suffix) whether that email's derived
+handle already exists — a weak enumeration primitive, not a privilege escalation.
+
+**False positives, confirmed by reading the code, not fixed (no fix needed):**
+- `provision_workspace_settings_defaults()` flagged "Public Can Execute" — it's a `RETURNS
+  trigger` function; Postgres refuses to invoke those outside a real trigger context, so the
+  default grant isn't actually callable regardless of what the advisor shows.
+- `current_role()`, `current_tenant_id()`, `current_tenant_id_writable()`,
+  `has_settings_delegation()` flagged as callable by public/signed-in users — all self-scope off
+  `auth.uid()`, `NULL` for an unauthenticated caller, so each returns nothing/false to `anon`.
+  This is the required, by-design shape for RLS helper functions.
+- `search_global` flagged "Function Search Path Mutable" — `SECURITY INVOKER` (not `SECURITY
+  DEFINER`), and every table reference inside it is already schema-qualified, so there's no
+  privilege-escalation path, just a lint.
+- `pg_net` flagged "Extension in Public" — hygiene-only; confirmed no migration grants
+  `net.http_post`/`net.http_get` execute to `authenticated`/`anon` anywhere, so the extension's
+  own functions aren't reachable by a tenant user regardless of which schema it lives in.
+- Six "RLS Enabled No Policy" suggestions (`contract_notifications`, `import_batches`,
+  `imported_contacts`, `imported_properties`, `migration_temp_files`, `training_sessions`) — the
+  same six tables this doc's Clean Findings section and Finding 8's Tier 3 already confirmed are
+  deliberately service-role-only, default-deny by design.
+
+**Fix Applied (2026-08-11, same day):**
+- `supabase/migrations/20260811100000_generate_unique_handle_grant_lockdown.sql`: `revoke execute
+  ... from public`. **Turned out incomplete** — re-querying `information_schema.routine_privileges`
+  after applying it showed `anon` and `authenticated` still held EXECUTE, each as a separately-
+  recorded grant independent of the generic `PUBLIC` pseudo-role entry (Supabase's schema setup
+  grants EXECUTE on new `public`-schema functions to `anon`/`authenticated`/`service_role`
+  explicitly, not just via `PUBLIC`) — the same lesson Finding 8 already established for tables,
+  rediscovered here for functions. Corrected same day via
+  `20260811100001_generate_unique_handle_grant_lockdown_fix.sql`, explicitly revoking from `anon`
+  and `authenticated` (leaving `service_role`/`postgres`, the function owner, untouched).
+- **Re-verified live** (`application/backend/src/scripts/verify-generate-unique-handle-grant-lockdown.ts`,
+  disposable invited account, deleted after): a direct anon RPC call now rejected (`42501:
+  permission denied for function generate_unique_handle`, confirmed via `curl` before writing the
+  script and again via the script itself); the legitimate invite → `handle_new_user()` path still
+  assigns a handle correctly. 2/2 checks pass.
+- Also confirmed via `information_schema.routine_privileges` that only `service_role` and
+  `postgres` now hold EXECUTE on `generate_unique_handle(text)`.
+- **Also actioned, not a code fix:** public signup at the Supabase Auth project level (Dashboard
+  → Authentication → Settings → "Allow new users to sign up") — recommended in Finding 1's fix
+  but left for the user to flip — has now been turned off, removing the "why does public signup
+  even work at all" surface entirely, on top of Finding 1's code-level fix.
+- DD-001 (Workspaces and Profiles) gets a dated correction note (v2.10.0), same pattern as
+  Findings 7/8's DD corrections, since `generate_unique_handle` is documented there.
 
 ---
 
