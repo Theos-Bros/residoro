@@ -1,10 +1,10 @@
 # DD-005 — Contacts
 
 **Status:** Draft
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-10
+**Last Updated:** 2026-08-11
 
 ---
 
@@ -42,6 +42,7 @@ CRM relationship data (lead status, assignment, activity history) a future CRM d
 | `created_at` | `timestamptz` | not null, default `now()` | |
 | `updated_at` | `timestamptz` | not null, default `now()` | Maintained by `set_updated_at()` trigger |
 | `search_vector` | `tsvector` | generated always as, stored | Added by `tb-search-core-entities-001` (2026-08-08). `setweight(name, 'A') \|\| setweight(company, 'B')`. Feeds `search_global()`'s `contact` result type; `lead` results (`buyer_requirements`) are searched via the joined `contacts.search_vector`, since a Lead has no name field of its own (DD note above) |
+| `linked_handle` | `text` | nullable, partial unique per `(tenant_id, lower(linked_handle))` | Added by `tb-listings-co-broker-share-contact-gate-001` (2026-08-11) — links a Contact to a real platform account's `profiles.handle`. Set via `PATCH /contacts/:id`, validated against a real profile at write time (same lookup `POST /listing-dockets` already did). This is the enforcement anchor for the new docket-share contact gate: `POST /listing-dockets` now 403s unless the sharer has a contact row whose `linked_handle` matches the resolved recipient handle — previously any handle on the platform could be shared with, no relationship check (see `tb-listings-co-broker-share-001`'s original gap) |
 
 Index: `idx_contacts_tenant_id` on `(tenant_id)`. `idx_contacts_search_vector` — GIN index on
 `search_vector`, added by the same migration as the column.
@@ -78,6 +79,12 @@ re-grant `select` + `insert`/`update` on exactly `name, type, is_company, email,
 notes` (+ `address` on insert only, matching the one route that sets it) + full `delete`. Live-
 verified end-to-end via the real `/contacts` routes (`verify-buyer-leads-schema.ts`).
 
+**Also note (2026-08-11):** because that lockdown's `update` grant is an explicit column list, a
+column added afterward isn't automatically covered by it — `linked_handle`'s own migration
+(`20260811110000_contacts_linked_handle.sql`) grants `update (linked_handle) on public.contacts
+to authenticated` explicitly, or `PATCH /contacts/:id` would silently fail to persist it under the
+scoped client despite the route-level code allowing it.
+
 **Also unrepresented in this DD:** `tb-crm-contacts-page-001` (2026-07-28) shipped a unified
 Contacts page (list + full CRUD via `contacts.ts`/`contactsApi.ts`) on top of this table without
 changing its shape — a frontend/API-surface addition, not a schema change, so it doesn't add a
@@ -100,6 +107,8 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 - `supabase/migrations/20260728140000_crm_developer_consolidation.sql` — `is_company` added
 - `supabase/migrations/20260809100000_contacts_address.sql` — `address` added
 - `supabase/migrations/20260808140000_search_core_entities.sql` — `search_vector` added
+- `supabase/migrations/20260811110000_contacts_linked_handle.sql` — `linked_handle` added
+- `tb-listings-co-broker-share-001` (Theos Registry) — the original unrestricted docket-share gap this column closes
 
 ---
 
@@ -112,3 +121,4 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 | 1.2.0 | 2026-08-09 | Added `address` (`tb-buyer-leads-inquiry-contact-carryover-001`) — closes the gap where a qualified inquiry's captured address had no destination. |
 | 1.3.0 | 2026-08-09 | Added `search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by the same-day birds-eye audit that also caught DD-002/DD-007's identical gap). |
 | 1.4.0 | 2026-08-10 | **Correction.** `authenticated`'s grant was table-wide, not column-scoped as the RLS-only description implied; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |
+| 1.5.0 | 2026-08-11 | Added `linked_handle` + its partial unique index (`tb-listings-co-broker-share-contact-gate-001`) — the enforcement anchor for the new docket-share contact gate, plus its own explicit `update` grant (not automatically covered by the prior column-scoped lockdown). |

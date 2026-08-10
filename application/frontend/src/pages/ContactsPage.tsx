@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import { useLocation } from 'react-router-dom';
 import { fetchContacts, type Contact } from '@/lib/contactsApi';
 import { useWorkspaceStatus } from '@/hooks/useWorkspaceStatus';
 import { Button } from '@/components/ui/button';
@@ -29,12 +30,28 @@ const selectClass = 'flex h-9 rounded-md border border-input bg-background px-3 
 export function ContactsPage({ session }: Props) {
   const { status: workspaceStatus } = useWorkspaceStatus(session);
   const isAdmin = workspaceStatus?.role === 'admin';
+  const location = useLocation();
 
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['value']>('all');
   const [error, setError] = useState<string | null>(null);
   const [openContactId, setOpenContactId] = useState<string | 'new' | null>(null);
   const { highlightedId, clearHighlight } = useHighlightFromSearch(contacts !== null);
+
+  // tb-listings-co-broker-share-contact-gate-001: ShareDocketModal's "add
+  // @handle as a contact" shortcut on a 403 rejection navigates here with
+  // this state, so the dead-end case is a two-click fix (click the
+  // shortcut, click Create Contact) rather than a fresh manual lookup.
+  // Mirrors useHighlightFromSearch's location.state convention.
+  const prefillLinkedHandle = (location.state as { prefillLinkedHandle?: string } | null)?.prefillLinkedHandle;
+
+  useEffect(() => {
+    if (prefillLinkedHandle) setOpenContactId('new');
+    // Only react to a fresh navigation (location.key changes per nav);
+    // re-running on every render would re-open the panel after the user
+    // closes it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   function reload() {
     fetchContacts(session.access_token, filter === 'all' ? undefined : { isCompany: filter === 'company' })
@@ -115,6 +132,7 @@ export function ContactsPage({ session }: Props) {
           isAdmin={isAdmin}
           onClose={() => setOpenContactId(null)}
           onSaved={reload}
+          prefillLinkedHandle={openContactId === 'new' ? prefillLinkedHandle : undefined}
         />
       )}
     </div>

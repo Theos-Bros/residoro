@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, getScopedClient } from '../lib/auth.js';
+import { supabaseAdmin } from '../lib/supabaseAdmin.js';
 
 type ContactRow = {
   id: string;
@@ -11,6 +12,7 @@ type ContactRow = {
   company: string | null;
   notes: string | null;
   is_company: boolean;
+  linked_handle: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -28,9 +30,13 @@ type CreateContactBody = {
   notes?: string;
 };
 
-type UpdateContactBody = Partial<CreateContactBody>;
+// linked_handle is PATCH-only (tb-listings-co-broker-share-contact-gate-001)
+// -- not part of CreateContactBody/POST /contacts, since the linking flow is
+// "add the handle to an existing contact," per that tracer bullet's DoD.
+type UpdateContactBody = Partial<CreateContactBody> & { linked_handle?: string | null };
 
-const CONTACT_COLUMNS = 'id, tenant_id, name, type, email, phone, company, notes, is_company, created_by, created_at, updated_at';
+const CONTACT_COLUMNS =
+  'id, tenant_id, name, type, email, phone, company, notes, is_company, linked_handle, created_by, created_at, updated_at';
 
 // tb-properties-owner-linking-001: contacts previously had no brokerage-
 // facing read route -- only written via Migration's CSV import
@@ -120,13 +126,44 @@ export async function registerContactsRoutes(app: FastifyInstance) {
     { preHandler: requireAuth },
     async (request, reply) => {
       const supabase = getScopedClient(request);
-      const { name, type, is_company, email, phone, company, notes } = request.body ?? {};
+      const { name, type, is_company, email, phone, company, notes, linked_handle } = request.body ?? {};
 
       if (name !== undefined && !name.trim()) {
         return reply.status(400).send({ error: 'name cannot be empty' });
       }
       if (type !== undefined && !type.trim()) {
         return reply.status(400).send({ error: 'type cannot be empty' });
+      }
+
+      // tb-listings-co-broker-share-contact-gate-001: empty string/null
+      // clears the link (same partial-update semantics as the other
+      // optional fields above -- an empty string is a deliberate "clear",
+      // not left alone). A non-empty value must resolve to a real account,
+      // the same lookup POST /listing-dockets does against profiles.handle
+      // -- cross-tenant by design (the linked person is never in the
+      // sharer's own tenant), so this stays on supabaseAdmin like that
+      // route's equivalent lookup.
+      let normalizedLinkedHandle: string | null | undefined;
+      if (linked_handle !== undefined) {
+        const trimmed = (linked_handle ?? '').trim().toLowerCase();
+        if (!trimmed) {
+          normalizedLinkedHandle = null;
+        } else {
+          const { data: linkedProfile, error: linkedProfileError } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .eq('handle', trimmed)
+            .maybeSingle();
+
+          if (linkedProfileError) {
+            request.log.error(linkedProfileError);
+            return reply.status(500).send({ error: 'Could not look up that handle' });
+          }
+          if (!linkedProfile) {
+            return reply.status(404).send({ error: 'No account found with that handle' });
+          }
+          normalizedLinkedHandle = trimmed;
+        }
       }
 
       const updateFields: Record<string, unknown> = {};
@@ -137,6 +174,7 @@ export async function registerContactsRoutes(app: FastifyInstance) {
       if (phone !== undefined) updateFields.phone = phone;
       if (company !== undefined) updateFields.company = company;
       if (notes !== undefined) updateFields.notes = notes;
+      if (normalizedLinkedHandle !== undefined) updateFields.linked_handle = normalizedLinkedHandle;
 
       const { data, error } = await supabase
         .from('contacts')
@@ -147,6 +185,11 @@ export async function registerContactsRoutes(app: FastifyInstance) {
         .maybeSingle<ContactRow>();
 
       if (error) {
+        // 23505 = unique_violation -- contacts_tenant_linked_handle_key,
+        // another contact in this tenant already has this handle linked.
+        if (error.code === '23505') {
+          return reply.status(409).send({ error: 'Another contact already has that handle linked' });
+        }
         request.log.error(error);
         return reply.status(500).send({ error: 'Could not update the contact' });
       }

@@ -12,6 +12,10 @@ type Props = {
   isAdmin: boolean;
   onClose: () => void;
   onSaved: () => void;
+  // tb-listings-co-broker-share-contact-gate-001: lets ShareDocketModal's
+  // "add @handle as a contact" shortcut open a fresh contact pre-filled with
+  // the handle that was rejected, instead of a blank form.
+  prefillLinkedHandle?: string;
 };
 
 // tb-crm-contacts-page-001: one form for both an individual and a company --
@@ -19,7 +23,7 @@ type Props = {
 // the same contacts row shape either way. Delete is admin-only, matching
 // contacts_delete_admin RLS; a still-referenced contact surfaces the
 // backend's named 409 rather than a raw error.
-export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSaved }: Props) {
+export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSaved, prefillLinkedHandle }: Props) {
   const isNew = contactId === 'new';
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
@@ -32,6 +36,7 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
   const [notes, setNotes] = useState('');
+  const [linkedHandle, setLinkedHandle] = useState(prefillLinkedHandle ?? '');
 
   useEffect(() => {
     if (isNew) return;
@@ -46,6 +51,7 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
         setPhone(found.phone ?? '');
         setCompany(found.company ?? '');
         setNotes(found.notes ?? '');
+        setLinkedHandle(found.linked_handle ?? '');
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);
@@ -71,7 +77,13 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
     setError(null);
     try {
       if (isNew) {
-        await createContact(session.access_token, {
+        // linked_handle isn't part of CreateContactBody -- it's validated
+        // and written via PATCH only (matches PATCH /contacts/:id being the
+        // one route dockets.ts's "add @handle as a contact first" shortcut
+        // needs). A prefilled/typed handle on a brand-new contact is saved
+        // as an immediate follow-up PATCH, so the shortcut still lands in
+        // one "Create Contact" click from the broker's point of view.
+        const created = await createContact(session.access_token, {
           name,
           type,
           is_company: isCompany,
@@ -80,6 +92,9 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
           company: company || undefined,
           notes: notes || undefined,
         });
+        if (linkedHandle.trim()) {
+          await updateContact(session.access_token, created.id, { linked_handle: linkedHandle.trim() });
+        }
       } else {
         await updateContact(session.access_token, contactId, {
           name,
@@ -89,6 +104,7 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
           phone: phone || undefined,
           company: company || undefined,
           notes: notes || undefined,
+          linked_handle: linkedHandle.trim() ? linkedHandle.trim() : null,
         });
       }
       onSaved();
@@ -158,6 +174,19 @@ export function ContactDetailPanel({ session, contactId, isAdmin, onClose, onSav
               <Input value={company} onChange={(e) => setCompany(e.target.value)} />
             </div>
           )}
+
+          <div className="space-y-1">
+            <Label>Residoro handle (optional)</Label>
+            <Input
+              value={linkedHandle}
+              onChange={(e) => setLinkedHandle(e.target.value)}
+              placeholder="@handle"
+            />
+            <p className="text-xs text-muted-foreground">
+              Links this contact to a real Residoro account by @handle — required before you can share a docket
+              with them.
+            </p>
+          </div>
 
           <div className="space-y-1">
             <Label>Notes</Label>
