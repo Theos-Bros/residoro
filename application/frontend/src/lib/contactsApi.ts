@@ -9,6 +9,10 @@ export type Contact = {
   company: string | null;
   notes: string | null;
   is_company: boolean;
+  // tb-listings-co-broker-share-contact-gate-001: optional link to a real
+  // platform account (profiles.handle). PATCH-only -- not settable on
+  // create, see UpdateContactBody's equivalent note in contacts.ts.
+  linked_handle: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -69,6 +73,7 @@ export async function updateContact(
     phone: string;
     company: string;
     notes: string;
+    linked_handle: string | null;
   }>,
 ): Promise<Contact> {
   const response = await fetch(`${BACKEND_URL}/contacts/${id}`, {

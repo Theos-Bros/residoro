@@ -134,6 +134,29 @@ export async function registerDocketRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'You cannot share a docket with yourself' });
     }
 
+    // tb-listings-co-broker-share-contact-gate-001: the recipient handle
+    // resolving to a real account is no longer sufficient -- the sharer must
+    // have this person on their own Contacts list (linked by handle) before
+    // a docket can be shared with them. This is a read of the sharer's own
+    // tenant's contacts, unlike the cross-tenant profile lookup above, so it
+    // can safely use the scoped client.
+    const { data: linkedContact, error: linkedContactError } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('tenant_id', request.user!.tenantId)
+      .eq('linked_handle', normalizedHandle)
+      .maybeSingle();
+
+    if (linkedContactError) {
+      request.log.error(linkedContactError);
+      return reply.status(500).send({ error: 'Could not verify your contact list' });
+    }
+    if (!linkedContact) {
+      return reply.status(403).send({
+        error: 'You can only share with people on your contact list — add @handle as a contact first',
+      });
+    }
+
     const { data: docket, error: docketError } = await supabase
       .from('listing_dockets')
       .insert({

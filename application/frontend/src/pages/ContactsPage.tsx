@@ -49,6 +49,21 @@ export function ContactsPage({ session }: Props) {
   // panel out for a standalone TaskDetailPanel, then swaps back in on close.
   const [openTaskId, setOpenTaskId] = useState<string | 'new' | null>(null);
 
+  // tb-listings-co-broker-share-contact-gate-001: ShareDocketModal's "add
+  // @handle as a contact" shortcut on a 403 rejection navigates here with
+  // this state, so the dead-end case is a two-click fix (click the
+  // shortcut, click Create Contact) rather than a fresh manual lookup.
+  // Mirrors useHighlightFromSearch's location.state convention.
+  const prefillLinkedHandle = (location.state as { prefillLinkedHandle?: string } | null)?.prefillLinkedHandle;
+
+  useEffect(() => {
+    if (prefillLinkedHandle) setOpenContactId('new');
+    // Only react to a fresh navigation (location.key changes per nav);
+    // re-running on every render would re-open the panel after the user
+    // closes it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
+
   function reload() {
     fetchContacts(session.access_token, filter === 'all' ? undefined : { isCompany: filter === 'company' })
       .then(({ contacts }) => setContacts(contacts))
@@ -129,6 +144,7 @@ export function ContactsPage({ session }: Props) {
           onClose={() => setOpenContactId(null)}
           onSaved={reload}
           onOpenTask={setOpenTaskId}
+          prefillLinkedHandle={openContactId === 'new' ? prefillLinkedHandle : undefined}
         />
       )}
       {openTaskId && openContactId && openContactId !== 'new' && (
