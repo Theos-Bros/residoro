@@ -31,6 +31,7 @@ type Props = {
 // editor is unchanged -- both paths write the same column, last write wins.
 export function ProfileSettingsPage({ session }: Props) {
   const [email, setEmail] = useState<string | null>(null);
+  const [handle, setHandle] = useState<string | null>(null);
   const [position, setPosition] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -44,6 +45,7 @@ export function ProfileSettingsPage({ session }: Props) {
     fetchProfile(session.access_token)
       .then((profile) => {
         setEmail(profile.email);
+        setHandle(profile.handle);
         setPosition(profile.position ?? '');
         setFirstName(profile.first_name ?? '');
         setLastName(profile.last_name ?? '');
@@ -94,6 +96,13 @@ export function ProfileSettingsPage({ session }: Props) {
           <div className="space-y-2">
             <label className="text-sm font-medium">Email</label>
             <p className="text-sm text-muted-foreground">{email ?? '—'}</p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Handle</label>
+            <p className="text-sm text-muted-foreground">
+              {handle ? `@${handle}` : '—'} — assigned at signup, not self-editable
+            </p>
           </div>
 
           <div className="space-y-2">

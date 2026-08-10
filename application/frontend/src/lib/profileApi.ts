@@ -5,6 +5,7 @@ export type Profile = {
   last_name: string | null;
   prefix: string | null;
   position: string | null;
+  handle: string | null;
   email: string | null;
 };
 

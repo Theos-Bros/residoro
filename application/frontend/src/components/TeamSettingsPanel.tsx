@@ -172,6 +172,7 @@ export function TeamSettingsPanel({ session }: Props) {
                   <TableCell className="font-medium">
                     {member.full_name ?? '—'}
                     {member.handle && <span className="ml-1 text-muted-foreground">@{member.handle}</span>}
+                    {member.id === session.user.id && <span className="ml-1 text-muted-foreground">(You)</span>}
                   </TableCell>
                   <TableCell className="capitalize">{member.role}</TableCell>
                   <TableCell>

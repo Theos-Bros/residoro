@@ -6,6 +6,7 @@ type ProfileRow = {
   last_name: string | null;
   prefix: string | null;
   position: string | null;
+  handle: string | null;
 };
 type ProfilePatchBody = {
   first_name?: string;
@@ -45,7 +46,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
   app.get('/me/profile', { preHandler: requireAnyIdentity }, async (request, reply) => {
     const { data, error } = await getScopedClient(request)
       .from('profiles')
-      .select('first_name, last_name, prefix, position')
+      .select('first_name, last_name, prefix, position, handle')
       .eq('id', request.identity!.id)
       .single<ProfileRow>();
 
@@ -59,6 +60,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
       last_name: data.last_name,
       prefix: data.prefix,
       position: data.position,
+      handle: data.handle,
       email: request.identity!.email,
     };
   });
@@ -81,7 +83,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
           ...(position !== undefined && { position: position?.trim() || null }),
         })
         .eq('id', request.identity!.id)
-        .select('first_name, last_name, prefix, position')
+        .select('first_name, last_name, prefix, position, handle')
         .single<ProfileRow>();
 
       if (error || !data) {
@@ -94,6 +96,7 @@ export async function registerProfileRoutes(app: FastifyInstance) {
         last_name: data.last_name,
         prefix: data.prefix,
         position: data.position,
+        handle: data.handle,
         email: request.identity!.email,
       };
     },
