@@ -8,6 +8,14 @@ type Props = {
   session: Session;
 };
 
+function formatFieldValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (field === 'price' && typeof value === 'number') {
+    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return String(value);
+}
+
 const FIELD_LABELS: Record<string, string> = {
   listing_type: 'Listing type',
   price: 'Price',
@@ -84,9 +92,7 @@ export function SharedWithMePage({ session }: Props) {
                         <TableCell className="p-2 text-left font-medium text-muted-foreground">
                           {FIELD_LABELS[field] ?? field}
                         </TableCell>
-                        <TableCell className="p-2">
-                          {value === null || value === undefined || value === '' ? '—' : String(value)}
-                        </TableCell>
+                        <TableCell className="p-2">{formatFieldValue(field, value)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
