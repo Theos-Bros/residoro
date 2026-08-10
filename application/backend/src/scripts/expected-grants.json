@@ -1,0 +1,747 @@
+{
+  "_comment": "Expected authenticated/anon grants for every public table, per tb-platform-grant-audit-001. Built from tb-platform-grant-lockdown-001's migrations, NOT re-derived from scratch: 20260810170000_profiles_grant_lockdown.sql, 20260810180000_workspaces_grant_lockdown.sql, 20260810200000_financial_audit_grant_lockdown.sql, 20260810210000_tier3_zero_policy_grant_lockdown.sql, 20260810220000_profiles_workspaces_anon_lockdown.sql, 20260810230000_tier2_grant_lockdown.sql, 20260810240000_tier1_grant_lockdown.sql. Every one of those migrations ends its `revoke all` with `insert`/`update` grants scoped to exact column lists (never a bare table-wide insert/update) and never re-grants anything to `anon` -- so `anon` is zero-grant across the board here. `select` is always granted table-wide (never column-scoped) where granted at all. `delete`/`truncate` are always table-level booleans (Postgres has no column-level DELETE/TRUNCATE). If a future migration adds a new public table or changes one of these, update this file in the same commit -- that's the whole point of verify-grants.ts diffing against it.",
+  "anonBaseline": {
+    "select": false,
+    "insert": [],
+    "update": [],
+    "delete": false,
+    "truncate": false
+  },
+  "tables": {
+    "profiles": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "first_name",
+          "last_name",
+          "prefix",
+          "position"
+        ],
+        "delete": false,
+        "truncate": false,
+        "_note": "position's update grant comes from 20260810190000_profiles_position_self_edit.sql (tb-user-profile-position-self-edit-001), an additive grant on top of 20260810170000_profiles_grant_lockdown.sql's revoke-all + re-grant -- not one of the 7 migrations this manifest was primarily built from, but genuinely correct current state (role/tenant_id/handle remain correctly ungranted)."
+      }
+    },
+    "workspaces": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "commission_earnings": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "closing_id",
+          "total_commission",
+          "currency",
+          "brokerage_pct",
+          "agent_pct",
+          "co_broker_pct",
+          "brokerage_amount",
+          "agent_amount",
+          "co_broker_amount",
+          "created_by"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "billing_installments": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "contract_billing": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "buyer_requirement_match_logs": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "buyer_requirement_id",
+          "logged_by"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "buyer_requirement_match_log_items": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "match_log_id",
+          "listing_id",
+          "property_id"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "buyer_requirement_activity_log": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "buyer_requirement_id",
+          "activity_type",
+          "notes",
+          "occurred_at",
+          "logged_by"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "contract_notifications": {
+      "authenticated": {
+        "select": false,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "import_batches": {
+      "authenticated": {
+        "select": false,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "imported_contacts": {
+      "authenticated": {
+        "select": false,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "imported_properties": {
+      "authenticated": {
+        "select": false,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "migration_temp_files": {
+      "authenticated": {
+        "select": false,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "training_sessions": {
+      "authenticated": {
+        "select": false,
+        "insert": [],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "settings_edit_delegations": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "member_id",
+          "setting_key",
+          "granted_by"
+        ],
+        "update": [
+          "tenant_id",
+          "member_id",
+          "setting_key",
+          "granted_by"
+        ],
+        "delete": true,
+        "truncate": false
+      }
+    },
+    "workspace_commission_settings": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "default_brokerage_pct",
+          "default_agent_pct",
+          "default_co_broker_pct"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "workspace_itinerary_settings": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "recipient_email",
+          "drive_folder_id",
+          "template_document_id"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "workspace_matching_settings": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "match_score_threshold"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "workspace_performance_settings": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "hot_share_threshold"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "workspace_sharing_settings": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "public_share_template",
+          "co_broker_share_template",
+          "buyer_wanted_share_template"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "workspace_task_routing_settings": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "task_type",
+          "default_assignee_id",
+          "assignee_role"
+        ],
+        "update": [
+          "tenant_id",
+          "task_type",
+          "default_assignee_id",
+          "assignee_role"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "listing_dockets": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "source_listing_id",
+          "source_tenant_id",
+          "shared_by",
+          "shared_with",
+          "included_fields"
+        ],
+        "update": [
+          "status"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "listing_share_events": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "listing_id",
+          "tenant_id",
+          "audience",
+          "shared_by"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "notifications": {
+      "authenticated": {
+        "select": true,
+        "insert": [],
+        "update": [
+          "dismissed_at"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "contracts": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "buyer_requirement_id",
+          "listing_id",
+          "offer_id",
+          "agreed_price",
+          "currency",
+          "terms",
+          "created_by"
+        ],
+        "update": [
+          "agreed_price",
+          "currency",
+          "terms",
+          "signing_status",
+          "signed_at"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "closings": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "contract_id",
+          "buyer_requirement_id",
+          "listing_id",
+          "final_price",
+          "currency",
+          "created_by"
+        ],
+        "update": [
+          "final_price",
+          "currency",
+          "checklist_state",
+          "completed_at"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "offers": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "buyer_requirement_id",
+          "listing_id",
+          "offered_by",
+          "amount",
+          "currency",
+          "terms",
+          "supersedes_offer_id",
+          "created_by"
+        ],
+        "update": [
+          "status"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "listings": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "property_id",
+          "agent_id",
+          "listing_type",
+          "price",
+          "price_currency",
+          "exclusivity",
+          "status",
+          "authority_starts_at",
+          "authority_expires_at"
+        ],
+        "update": [
+          "status",
+          "authority_starts_at",
+          "authority_expires_at",
+          "buyer_contact_id",
+          "listing_type",
+          "price",
+          "exclusivity"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "contacts": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "name",
+          "type",
+          "is_company",
+          "email",
+          "phone",
+          "company",
+          "notes",
+          "address"
+        ],
+        "update": [
+          "name",
+          "type",
+          "is_company",
+          "email",
+          "phone",
+          "company",
+          "notes"
+        ],
+        "delete": true,
+        "truncate": false
+      }
+    },
+    "tasks": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "title",
+          "description",
+          "due_date",
+          "task_type",
+          "entity_type",
+          "entity_id",
+          "assignee_id"
+        ],
+        "update": [
+          "title",
+          "description",
+          "status",
+          "due_date",
+          "assignee_id",
+          "task_type"
+        ],
+        "delete": true,
+        "truncate": false
+      }
+    },
+    "projects": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "developer_id",
+          "name",
+          "project_type",
+          "location",
+          "total_units",
+          "status"
+        ],
+        "update": [
+          "name",
+          "project_type",
+          "location",
+          "total_units",
+          "status"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "properties": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "title",
+          "type",
+          "owner_type",
+          "owner_id",
+          "project_id",
+          "address",
+          "city",
+          "province",
+          "floor_area_sqm",
+          "lot_area_sqm",
+          "bedrooms",
+          "bathrooms",
+          "parking_slots",
+          "storeys",
+          "features",
+          "price",
+          "price_currency",
+          "unit_type_id",
+          "unit_number"
+        ],
+        "update": [
+          "title",
+          "address",
+          "city",
+          "province",
+          "price_currency",
+          "floor_area_sqm",
+          "lot_area_sqm",
+          "bedrooms",
+          "bathrooms",
+          "parking_slots",
+          "storeys",
+          "price",
+          "features",
+          "status",
+          "lease_monthly_amount",
+          "lease_term_months",
+          "owner_type",
+          "owner_id",
+          "project_id",
+          "verification_status"
+        ],
+        "delete": true,
+        "truncate": false,
+        "_note": "owner_type/owner_id are grant-layer-open but app-layer admin-only (routes/listings.ts) -- a documented, unfixed residual risk per tb-platform-grant-lockdown-001's Tier 1 migration comment and DD-002's correction note. Not this script's job to close, only to keep the grant state itself from drifting further."
+      }
+    },
+    "viewings": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "buyer_requirement_id",
+          "listing_id",
+          "scheduled_at",
+          "created_by"
+        ],
+        "update": [
+          "outcome",
+          "feedback",
+          "scheduled_at"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "property_media": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "property_id",
+          "type",
+          "external_url",
+          "sort_order",
+          "is_cover",
+          "created_by"
+        ],
+        "update": [
+          "sort_order",
+          "is_cover"
+        ],
+        "delete": true,
+        "truncate": false
+      }
+    },
+    "property_documents": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "property_id",
+          "document_type",
+          "storage_path",
+          "file_name",
+          "created_by"
+        ],
+        "update": [],
+        "delete": true,
+        "truncate": false
+      }
+    },
+    "buyer_requirements": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "contact_id",
+          "source_inquiry_id",
+          "stage",
+          "intent",
+          "property_type",
+          "budget_min",
+          "budget_max",
+          "budget_currency",
+          "target_city",
+          "target_province",
+          "floor_area_sqm_min",
+          "lot_area_sqm_min",
+          "storeys",
+          "bedrooms",
+          "bathrooms",
+          "household_adults",
+          "household_kids",
+          "household_pets",
+          "notes"
+        ],
+        "update": [
+          "stage",
+          "won_listing_id",
+          "lease_end_date",
+          "last_searched_at",
+          "intent",
+          "property_type",
+          "budget_min",
+          "budget_max",
+          "budget_currency",
+          "target_city",
+          "target_province",
+          "floor_area_sqm_min",
+          "lot_area_sqm_min",
+          "storeys",
+          "bedrooms",
+          "bathrooms",
+          "household_adults",
+          "household_kids",
+          "household_pets",
+          "notes"
+        ],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "buyer_requirement_matches": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "buyer_requirement_id",
+          "listing_id",
+          "score",
+          "created_by"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    },
+    "inquiries": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "stage",
+          "buyer_name",
+          "buyer_phone",
+          "buyer_email",
+          "buyer_address",
+          "source",
+          "intent",
+          "property_type",
+          "budget_min",
+          "budget_max",
+          "budget_currency",
+          "target_city",
+          "target_province",
+          "floor_area_sqm_min",
+          "lot_area_sqm_min",
+          "storeys",
+          "bedrooms",
+          "bathrooms",
+          "household_adults",
+          "household_kids",
+          "household_pets",
+          "notes"
+        ],
+        "update": [
+          "stage",
+          "probed_by",
+          "buyer_name",
+          "buyer_phone",
+          "buyer_email",
+          "buyer_address",
+          "source",
+          "promoted_lead_id",
+          "archived_at",
+          "last_searched_at",
+          "intent",
+          "property_type",
+          "budget_min",
+          "budget_max",
+          "budget_currency",
+          "target_city",
+          "target_province",
+          "floor_area_sqm_min",
+          "lot_area_sqm_min",
+          "storeys",
+          "bedrooms",
+          "bathrooms",
+          "household_adults",
+          "household_kids",
+          "household_pets",
+          "notes"
+        ],
+        "delete": true,
+        "truncate": false
+      }
+    },
+    "project_unit_types": {
+      "authenticated": {
+        "select": true,
+        "insert": [
+          "tenant_id",
+          "created_by",
+          "project_id",
+          "name",
+          "property_type",
+          "floor_area_sqm",
+          "lot_area_sqm",
+          "bedrooms",
+          "bathrooms",
+          "parking_slots",
+          "storeys",
+          "features",
+          "price",
+          "price_currency",
+          "listing_type",
+          "exclusivity"
+        ],
+        "update": [],
+        "delete": false,
+        "truncate": false
+      }
+    }
+  }
+}
