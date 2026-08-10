@@ -330,9 +330,20 @@ All test accounts (5 auth users, including the two escalated ones), test workspa
 ### Finding 4 (Low) — fixed
 - Confirmed `parseCsv()` already stripped null bytes (`/\x00/g`) from the raw content before parsing — this turned out to already be correct in the file (an earlier `Edit` attempt to "fix" it was based on a terminal-rendering misread, not an actual bug).
 
-### Finding 5 (Dependencies) — partially fixed
-- Backend: `npm audit fix` applied, **0 vulnerabilities remaining**.
-- Frontend: `esbuild`/`vite` and `react-router`/`react-router-dom` both require major-version bumps (Vite 6→8, React Router 6→7.18+) that `npm audit fix` declined to apply automatically and that I did not force — both need actual app/routing testing after upgrade, which is a separate piece of work, not a blind dependency bump.
+### Finding 5 (Dependencies) — partially fixed (2026-07-29), further closed (2026-08-11)
+- Backend: `npm audit fix` applied, **0 vulnerabilities remaining** (2026-07-29). New CVEs
+  (`brace-expansion`, `fast-uri` — `find-my-way`'s original CVE was superseded) surfaced by
+  2026-08-11 simply from time passing, not a regression; re-run clean, 0 vulnerabilities again.
+- Frontend, 2026-08-11: `react-router-dom` bumped 6.27.0 → 7.18.2, closing the open-redirect +
+  SSR-deserialization CVEs — lower risk than expected since the app only uses declarative
+  routing (`BrowserRouter`/`Routes`/`Route`, no data router, no splat routes), so v7's breaking
+  changes didn't apply. Live-verified (sign-in, cross-page navigation, a route-param detail
+  modal, browser back) with zero console errors; full production build passes. `nanoid`/
+  `postcss` also picked up via the same `npm audit fix` pass.
+- **Still open:** `esbuild`/`vite` require a major-version bump (Vite 5→8) that `npm audit fix`
+  still declines to apply automatically — deliberately not forced, needs actual dev-server/build
+  testing after upgrade, a separate piece of work. Dev-server-only exposure, no production
+  impact.
 
 ### Finding 6 (Supabase advisors) — unchanged
 Still not retrievable with available tooling this session (see original section above).
