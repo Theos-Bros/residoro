@@ -1,7 +1,7 @@
 # DD-002 — Properties
 
 **Status:** Draft
-**Version:** 2.4.0
+**Version:** 2.5.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
 **Last Updated:** 2026-08-10
@@ -147,6 +147,22 @@ direct PostgREST; needs an RLS/trigger fix, not a grant fix, tracked in
 default the whole time. Live-verified end-to-end via the real `/properties` routes plus targeted
 escalation checks (7/13 + 6/6 checks across two verify scripts).
 
+**Correction (2026-08-10, `tb-properties-owner-admin-lockdown-001`):** closes the residual gap the
+previous correction flagged. A new `BEFORE UPDATE` trigger,
+`properties_owner_admin_lockdown` (function `enforce_properties_owner_admin_only()`), now mirrors
+`PATCH /properties/:id`'s app-layer 403 at the DB level: any `UPDATE` that changes `owner_type` or
+`owner_id` is rejected with `42501` unless `current_role() = 'admin'` (the same
+`SECURITY DEFINER` role-resolution helper every other admin-gated RLS policy on this table already
+uses — no second role mechanism introduced). The columns stay grantable to `authenticated` for the
+legitimate admin PATCH flow, exactly as before; the trigger is the enforcement layer RLS couldn't
+express. Fires on `UPDATE` only — `POST /properties` has no role check on these columns by design,
+and CSV import is insert-only via `service_role`, so neither path is affected. Added via
+`supabase/migrations/20260810250000_properties_owner_admin_lockdown.sql`. Live-verified: a
+non-admin's direct PostgREST write to `owner_type`/`owner_id` is rejected (42501, ownership
+unchanged), the same non-admin's write to an unrelated column (`price`) is unaffected, and an
+admin's write to `owner_type`/`owner_id` still succeeds unchanged (4/4 checks,
+`verify-properties-owner-admin-lockdown.ts`).
+
 ---
 
 ## Related Documents
@@ -163,6 +179,10 @@ escalation checks (7/13 + 6/6 checks across two verify scripts).
 - `supabase/migrations/20260727130000_project_unit_types.sql` — `unit_type_id`
 - `supabase/migrations/20260727140000_properties_unit_number.sql` — `unit_number`
 - `supabase/migrations/20260808140000_search_core_entities.sql` — `search_vector`
+- `supabase/migrations/20260810240000_tier1_grant_lockdown.sql` — the grant fix that flagged the
+  `owner_type`/`owner_id` residual gap
+- `supabase/migrations/20260810250000_properties_owner_admin_lockdown.sql` — the `BEFORE UPDATE`
+  trigger that closes it (`tb-properties-owner-admin-lockdown-001`, theos-registry)
 
 ---
 
@@ -176,3 +196,4 @@ escalation checks (7/13 + 6/6 checks across two verify scripts).
 | 2.2.0 | 2026-08-08 | `tb-listings-rent-to-lease-001`: `lease_monthly_rent` renamed to `lease_monthly_amount` (0 live rows, pure schema op), and the `'leased'` status note's cross-reference to `listings.listing_type = 'rent'` corrected to `'lease'` (that enum value was renamed app-wide in the same tracer bullet). |
 | 2.3.0 | 2026-08-09 | Added `search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by a 2026-08-09 birds-eye audit). |
 | 2.4.0 | 2026-08-10 | **Correction.** Documented, for the first time, that `authenticated` held an un-revoked table-wide grant this whole doc never mentioned; closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Flags one residual gap (`owner_type`/`owner_id`'s app-layer-only admin check). Correction to previously-silent documentation, not a schema change, hence a minor bump per STD-002. |
+| 2.5.0 | 2026-08-10 | **Correction.** Closes the residual gap v2.4.0 flagged: added a `BEFORE UPDATE` trigger (`properties_owner_admin_lockdown` / `enforce_properties_owner_admin_only()`) that rejects (42501) any non-admin change to `owner_type`/`owner_id`, mirroring `PATCH /properties/:id`'s app-layer 403 at the DB level (`tb-properties-owner-admin-lockdown-001`, via `20260810250000_properties_owner_admin_lockdown.sql`). Live-verified 4/4 (`verify-properties-owner-admin-lockdown.ts`). Structural (new trigger/function), hence a minor version bump per STD-002. |
