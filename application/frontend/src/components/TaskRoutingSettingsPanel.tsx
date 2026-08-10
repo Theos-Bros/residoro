@@ -9,6 +9,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { toSentenceCase } from '@/lib/utils';
 
 type Props = {
   session: Session;
@@ -133,7 +134,7 @@ export function TaskRoutingSettingsPanel({ session }: Props) {
             <TableBody>
               {taskTypes.map((taskType) => (
                 <TableRow key={taskType}>
-                  <TableCell className="font-medium">{taskType}</TableCell>
+                  <TableCell className="font-medium">{toSentenceCase(taskType)}</TableCell>
                   <TableCell>
                     <select
                       className={selectClass}
