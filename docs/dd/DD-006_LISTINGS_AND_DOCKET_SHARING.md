@@ -1,10 +1,10 @@
 # DD-006 — Listings & Docket Sharing
 
 **Status:** Draft
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -97,6 +97,16 @@ Mirrors `profiles_update_own`'s existing `auth.uid()` pattern (DD-001) instead.
 
 Both tables: `authenticated` granted `select, insert, update` (no `delete` on either — listings
 are withdrawn not deleted; dockets are revoked not deleted). `service_role` has full access.
+
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** the verb set above was correct,
+but table-wide (every column), not scoped to what `listings.ts`/`dockets.ts` actually write — a
+row-only RLS check plus a table-wide grant on `listings` meant any tenant member could write any
+column (not just `status`/`price`/etc.) via direct PostgREST; `listing_dockets`' `shared_by =
+auth.uid()` check was tighter but had the identical grant gap. `anon` held the same default on
+both. Closed via `supabase/migrations/20260810240000_tier1_grant_lockdown.sql` (`listings`) and
+`20260810230000_tier2_grant_lockdown.sql` (`listing_dockets`, grouped with the other
+narrower-RLS tables). Live-verified end-to-end via the real routes (`verify-buyer-leads-
+schema.ts`'s sold-listing flow, `verify-rls-docket-cross-tenant.ts`).
 **Update, 2026-07-27/29 (`tb-platform-rls-scoped-client-001`, per ADR-003):** `listings.ts` is
 now on the per-request scoped client for essentially all `listings`/`properties` data calls —
 RLS is the real enforcement boundary here, not `service_role`. `dockets.ts` is mostly scoped
@@ -136,3 +146,4 @@ exception table: `matching.ts` (`scoreReceivedDockets`) and `buyerRequirements.t
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering five already-shipped tracer bullets. |
 | 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: `'inactive'` status, `buyer_contact_id`, `commission_note` columns added; corrected the stale "`service_role` for all routes" RLS claim now that `tb-platform-rls-scoped-client-001` moved `listings.ts`/`dockets.ts` mostly onto the scoped client per ADR-003. |
 | 1.2.0 | 2026-08-08 | `tb-listings-rent-to-lease-001`: `listing_type`'s `CHECK` constraint renamed from (`sale`, `rent`) to (`sale`, `lease`), with a live data migration converting 7 existing rows. |
+| 1.3.0 | 2026-08-10 | **Correction.** The documented verb set (`select, insert, update`) was correct but table-wide, not column-scoped; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` / `20260810230000_tier2_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

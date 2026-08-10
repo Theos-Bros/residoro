@@ -1,10 +1,10 @@
 # DD-012 — Transactions: Contract
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-04
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -70,6 +70,16 @@ belongs to, matching this domain's existing precedent rather than reopening the 
 Written on the per-request scoped client throughout (`contracts.ts`), consistent with ADR-003's
 scoped-client enforcement pattern.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** wrong on two counts — table-wide,
+not column-scoped, and `delete` was never used (no `DELETE /contracts/:id` route exists — a
+contract is voided via `signing_status`, never removed). `anon` held the identical default too.
+Closed via `supabase/migrations/20260810240000_tier1_grant_lockdown.sql`: `select` + `insert` on
+exactly `tenant_id, buyer_requirement_id, listing_id, offer_id, agreed_price, currency, terms,
+created_by` + `update` on exactly `agreed_price, currency, terms, signing_status, signed_at` — no
+`delete` grant. Live-verified end-to-end via the real full deal-flow
+(`verify-tier1-transactions-grant-lockdown.ts`, 12/12 checks pass, including the drafted -> sent
+-> signed transition).
+
 ---
 
 ## Server-Side Behavior Beyond the Schema
@@ -132,3 +142,4 @@ fresh offer/contract cycle), but only the newest is ever the "current" one the U
 | Version | Date | Description |
 |---------|------|--------------|
 | 1.0.0 | 2026-08-04 | Initial version, written alongside implementation per RFC-004. |
+| 1.1.0 | 2026-08-10 | **Correction.** `authenticated`'s grant was table-wide (not column-scoped) and included an unused `delete`; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

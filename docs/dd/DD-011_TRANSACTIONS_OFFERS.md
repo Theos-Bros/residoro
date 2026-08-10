@@ -1,10 +1,10 @@
 # DD-011 — Transactions: Offers
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-04
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -69,6 +69,15 @@ tracer bullet's doc didn't call this out as an open question, so it defaults to 
 | `offers_delete_tenant` | `delete` where `tenant_id = current_tenant_id()` |
 
 `authenticated` granted `select, insert, update, delete`. `service_role` has full access.
+
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** wrong on two counts — table-wide,
+not column-scoped, and `delete` was never used (an offer is resolved via PATCH `status`, never
+removed). `anon` held the identical default too. Closed via `supabase/migrations/
+20260810240000_tier1_grant_lockdown.sql`: `select` + `insert` on exactly `tenant_id,
+buyer_requirement_id, listing_id, offered_by, amount, currency, terms, supersedes_offer_id,
+created_by` + `update` on exactly `status` — no `delete` grant. Live-verified end-to-end via the
+real `POST`/`PATCH /offers` routes (`verify-tier1-transactions-grant-lockdown.ts`, 12/12 checks
+pass).
 Written on the per-request scoped client throughout (`offers.ts`), consistent with ADR-003's
 scoped-client enforcement pattern.
 
@@ -126,3 +135,4 @@ the acceptance-side auto-flip.
 | Version | Date | Description |
 |---------|------|--------------|
 | 1.0.0 | 2026-08-04 | Initial version, written alongside implementation per RFC-004. |
+| 1.1.0 | 2026-08-10 | **Correction.** `authenticated`'s grant was table-wide (not column-scoped) and included an unused `delete`; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

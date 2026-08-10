@@ -1,7 +1,7 @@
 # DD-001 — Workspaces & Profiles
 
 **Status:** Draft
-**Version:** 2.8.0
+**Version:** 2.9.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
 **Last Updated:** 2026-08-10
@@ -78,6 +78,11 @@ Indexes: `idx_contract_notifications_tenant` on `(tenant_id)`;
 
 RLS: enabled, **no policies, no grants to `anon`/`authenticated`** — same "service-role-only"
 posture as `migration_temp_files` (see DD-003). Every access goes through the backend API.
+
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** "no grants to anon/authenticated"
+wasn't actually true until this date — same un-revoked-default pattern as this doc's own Finding
+7, never exploitable here given RLS's zero-policy default-deny. Closed via `supabase/migrations/
+20260810210000_tier3_zero_policy_grant_lockdown.sql`.
 
 ---
 
@@ -289,3 +294,4 @@ reachable this way. See ADR-002's Consequences section.
 | 2.6.0 | 2026-08-10 | Added `profiles.position` column (`tb-employee-position-001`) — free-text job title, admin-set only via a service-role route, deliberately no `authenticated` grant at all (the first `profiles` column to follow `role`/`tenant_id`'s access pattern rather than the self-service one). No new RLS policy needed. Structural (new column), hence a minor version bump per STD-002. |
 | 2.7.0 | 2026-08-10 | **Correction, critical.** `workspaces` had the same accidental table-wide grant `profiles` did (v2.5.0) — `authenticated` held a full table-wide `update` on `workspaces` via the same un-revoked Supabase default, letting a real tenant admin self-edit `access_state`/`contract_end_date`/`exclusivity_hard_block`/`rollback_window_hours` directly, bypassing the operator/Edge-Function/system-only controls this doc always claimed governed them. Deferred at Finding 7's original fix time (lower severity, scoped out at the user's explicit direction), independently re-confirmed by a second review pass later the same day, then fixed and live-reverified in a third pass via `20260810180000_workspaces_grant_lockdown.sql` (`revoke all` + `select`-only re-grant — stronger than the `profiles` fix, since no legitimate feature updates `workspaces` via `authenticated` at all). Full narrative in `docs/security-review-2026-07-29.md` Finding 7. Correction to previously-inaccurate documentation, not a new schema change, hence a minor bump per STD-002. |
 | 2.8.0 | 2026-08-10 | `profiles.position` becomes self-editable (`tb-user-profile-position-self-edit-001`), reversing part of `tb-employee-position-001`'s access model (v2.6.0) at the user's request — position has no access-level implications the way role/tenant_id do, so gating it admin-only was over-scoped. `grant update (position) on public.profiles to authenticated` added via `20260810190000_profiles_position_self_edit.sql`, additive on top of the `20260810170000` lockdown (role/tenant_id remain ungranted). The existing admin-only Team-page route is unchanged; both paths now write the same column, last write wins. Live-reverified (self-edit succeeds, role/tenant_id still rejected) and browser-verified (edit, save, reload, persisted). Structural (grant change on an existing column, not a new one), hence a minor version bump per STD-002. |
+| 2.9.0 | 2026-08-10 | **Correction** (`tb-platform-grant-lockdown-001`, Finding 8). Two gaps neither v2.5.0 nor v2.7.0 closed: (1) `anon` held the identical un-revoked default grant on `profiles`/`workspaces` that `authenticated` did — both fixes only ever ran `revoke ... from authenticated`. Not exploitable (every RLS policy here keys off `auth.uid()`, `NULL` pre-auth), but the same latent risk. Closed via `20260810220000_profiles_workspaces_anon_lockdown.sql`. (2) `contract_notifications`' "no grants to anon/authenticated" claim wasn't actually true either — same pattern, closed via `20260810210000_tier3_zero_policy_grant_lockdown.sql`. Correction to previously-inaccurate documentation, not a schema change, hence a minor bump per STD-002. |

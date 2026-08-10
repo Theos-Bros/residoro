@@ -83,8 +83,9 @@ async function main() {
     });
     if (listingRes.status !== 201) throw new Error(`FAIL setup: listing: ${JSON.stringify(listingRes.body)}`);
     listingId = listingRes.body.id;
-    const activateRes = await call(`/listings/${listingId}`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) });
-    if (activateRes.status !== 200) throw new Error(`FAIL setup: activate listing: ${JSON.stringify(activateRes.body)}`);
+    // Listings are created 'active' directly now (routes/listings.ts's
+    // insert), so this redundant activate-PATCH became an illegal
+    // active->active self-transition per STATUS_TRANSITIONS -- dropped.
 
     const leadRes = await call('/buyer-requirements', {
       method: 'POST',

@@ -1,10 +1,10 @@
 # DD-003 — Migration Temp Files
 
 **Status:** Draft
-**Version:** 2.0.0
+**Version:** 2.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -94,6 +94,13 @@ role attribute, same as `DD-002` established for the future migration importer's
 backend context"). If a future tracer bullet needs direct client reads of this table, add
 tenant-scoped policies then rather than pre-building unused ones now.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** "no grants... to anon or
+authenticated" was aspirational, not actual — both held Supabase's un-revoked table-wide default
+the whole time. Never exploitable (RLS's zero-policy default-deny already blocked every command
+regardless of the grant), but the same latent "one future policy away" risk Finding 8 flagged
+platform-wide. Closed via `supabase/migrations/20260810210000_tier3_zero_policy_grant_lockdown.sql`
+— this section's claim is now actually true, not just intended.
+
 ---
 
 ## Related Documents
@@ -120,3 +127,4 @@ tenant-scoped policies then rather than pre-building unused ones now.
 |----------|------|-------------|
 | 1.0.0 | 2026-07-21 | Initial version, matching the migration_temp_files migration for tb-migration-csv-001. |
 | 2.0.0 | 2026-07-27 | Refreshed from a birds-eye technical review: `entity_type` and `'confirmed'` status added; corrected the "no imported state yet" claim (now false, see DD-004); flagged `claude_suggested_mappings` as a misleading column name (no LLM call in that codepath). Structural revision, hence major version bump per STD-002. |
+| 2.1.0 | 2026-08-10 | **Correction.** "No grants to anon/authenticated" wasn't actually true until this date — closed via `20260810210000_tier3_zero_policy_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Not previously exploitable (RLS already default-denied with zero policies). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

@@ -1,7 +1,7 @@
 # DD-020 — Settings Delegations & Per-Setting Tables
 
 **Status:** Draft
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-09
 **Last Updated:** 2026-08-10
@@ -169,6 +169,21 @@ created or removed by a route.
 
 `service_role` has full access on all six tables in this doc.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** this section described RLS policy
+intent but never stated the actual grant, and the actual grant didn't match the policies'
+narrower intent — every table here (all seven, including `settings_edit_delegations`) held
+Supabase's un-revoked table-wide default for `authenticated`, plus `anon` held it too. Closed via
+`supabase/migrations/20260810230000_tier2_grant_lockdown.sql`: `settings_edit_delegations`
+narrowed to `select` + `insert`/`update`/`delete` on exactly `tenant_id, member_id, setting_key,
+granted_by`; each of the five `select`+`update`-only tables (`sharing`/`performance`/`matching`/
+`commission`/`itinerary`) narrowed to exactly its own setting columns, no `insert`/`delete`
+(confirmed no route writes either — rows are seeded once by the tenant-creation trigger).
+`workspace_task_routing_settings` is the one exception — its own routes do `insert`/upsert per
+task type, so it also kept a narrow `insert` grant (`tenant_id, task_type, default_assignee_id,
+assignee_role`); covered in DD-017 alongside `tasks`, not here. Live-verified end-to-end
+(`verify-brokerage-permissions-delegation.ts`, 24/24 checks pass, including direct-PostgREST
+writes both before and after a delegation grant).
+
 ---
 
 ## Related Documents
@@ -208,3 +223,4 @@ created or removed by a route.
 |----------|------|-------------|
 | 1.0.0 | 2026-08-09 | Initial version, written retroactively from a 2026-08-09 birds-eye audit — this four-table domain had zero DD coverage across three migrations since 2026-07-28. |
 | 1.1.0 | 2026-08-10 | Added `workspace_itinerary_settings` (`tb-buyer-leads-itinerary-settings-001`) and, catching a second pre-existing drift while here, the previously-undocumented `workspace_commission_settings` (`tb-commission-structure-001`, shipped 2026-08-04, missed by this doc's own initial 2026-08-09 version). |
+| 1.2.0 | 2026-08-10 | **Correction.** This doc never stated the actual grant behind its RLS policies — all seven tables held the un-revoked table-wide default, plus `anon`. Closed via `20260810230000_tier2_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-silent documentation, hence a minor bump per STD-002. |

@@ -1,10 +1,10 @@
 # DD-019 — Listing Share Events
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-09
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -65,6 +65,15 @@ share events, not just admins or the original sharer (same pattern as `property_
 `authenticated` granted `select, insert` only — no `update`/`delete` grant at all, matching the
 append-only design above. `service_role` has full access.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** the verb set here was accurate,
+but `authenticated` actually held the full un-revoked table-wide default (`update`/`delete`
+included) the whole time, plus `anon` held it too — neither matched this section's claim until
+today. Closed via `supabase/migrations/20260810230000_tier2_grant_lockdown.sql`: `select` (all
+columns) + `insert` narrowed to exactly `listing_id, tenant_id, audience, shared_by`. Live-
+verified (`verify-tier2-grant-lockdown.ts`): a direct-PostgREST `update` attempt is now rejected
+(`42501`), confirming the append-only design this doc always described is now actually
+enforced.
+
 ---
 
 ## Related Documents
@@ -89,3 +98,4 @@ append-only design above. `service_role` has full access.
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-08-09 | Initial version, written retroactively from a 2026-08-09 birds-eye audit — this table had zero DD coverage since 2026-07-28. |
+| 1.1.0 | 2026-08-10 | **Correction.** The `select, insert only` verb claim was right, but the underlying grant was table-wide (`update`/`delete` included) until today; `anon` held the identical default. Closed via `20260810230000_tier2_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

@@ -1,10 +1,10 @@
 # DD-004 — Import Batches & Row Tracking
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -109,6 +109,11 @@ posture as `migration_temp_files` (DD-003) and `contract_notifications` (DD-001)
 goes through the backend API using the service-role client; the frontend never queries these
 tables directly (it hits `GET /migrations/batches/:batchId` instead).
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** "no grants to anon/authenticated"
+wasn't actually true until this date on any of the three tables — Supabase's un-revoked default
+was present, never exploitable given RLS's zero-policy default-deny, but latent. Closed via
+`supabase/migrations/20260810210000_tier3_zero_policy_grant_lockdown.sql`.
+
 ---
 
 ## Related Documents
@@ -133,3 +138,4 @@ tables directly (it hits `GET /migrations/batches/:batchId` instead).
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering five already-shipped tracer bullets. |
+| 1.1.0 | 2026-08-10 | **Correction.** "No grants to anon/authenticated" wasn't actually true until this date — closed via `20260810210000_tier3_zero_policy_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Not previously exploitable. Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

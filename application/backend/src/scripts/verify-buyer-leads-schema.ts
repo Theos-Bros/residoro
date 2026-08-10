@@ -68,8 +68,9 @@ async function main() {
     });
     if (listingRes.status !== 201) throw new Error(`FAIL setup: could not create listing: ${JSON.stringify(listingRes.body)}`);
     listingId = listingRes.body.id;
-    const activate = await call(`/listings/${listingId}`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) });
-    if (activate.status !== 200) throw new Error('FAIL setup: could not activate listing');
+    // Listings are created 'active' directly now (routes/listings.ts's
+    // insert), so this redundant activate-PATCH became an illegal
+    // active->active self-transition per STATUS_TRANSITIONS -- dropped.
     console.log(`property=${propertyId} listing=${listingId}`);
 
     console.log('\n--- 1. POST /inquiries defaults stage=to_probe regardless of client-sent stage ---');
@@ -163,11 +164,17 @@ async function main() {
     console.log('PASS');
 
     console.log('\n--- 6. POST /buyer-requirements/:id/options-sent rejects a non-active listing ---');
-    const draftListingRes = await call('/listings', {
-      method: 'POST',
-      body: JSON.stringify({ property_id: propertyId, listing_type: 'sale', price: 1000000, authority_starts_at: new Date().toISOString().slice(0, 10) }),
-    });
-    const draftListingId = draftListingRes.body.id;
+    // POST /listings now always creates status:'active' directly (no
+    // draft-by-default path left in the app) -- forcing a non-active
+    // fixture via supabaseAdmin is the only way left to set this test up,
+    // same fixture-bypass precedent other verify scripts already use.
+    const { data: draftListing, error: draftListingError } = await supabaseAdmin
+      .from('listings')
+      .insert({ tenant_id: tenantId, property_id: propertyId, agent_id: signIn.user!.id, listing_type: 'sale', price: 1000000, status: 'inactive' })
+      .select('id')
+      .single();
+    if (draftListingError || !draftListing) throw new Error(`FAIL setup: could not create non-active listing fixture: ${draftListingError?.message}`);
+    const draftListingId = draftListing.id;
     const rejectDraft = await call(`/buyer-requirements/${leadId}/options-sent`, {
       method: 'POST',
       body: JSON.stringify({ listing_ids: [draftListingId] }),

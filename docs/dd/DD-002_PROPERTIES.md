@@ -1,10 +1,10 @@
 # DD-002 — Properties
 
 **Status:** Draft
-**Version:** 2.3.0
+**Version:** 2.4.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-21
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -133,6 +133,20 @@ client with no app-level `tenant_id` filter returns empty, not the row
 (`verify-rls-scoped-client.ts`). `service_role` is still used for the CSV migration importer
 (`migrations.ts`) and other operator/trusted-job routes, per ADR-003 Decision #2.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** this section never actually stated
+what `authenticated`'s table-level grant was — a silent gap, not a wrong claim, but the same root
+cause as DD-001/DD-014's documented incidents: `authenticated` held Supabase's un-revoked default
+table-wide INSERT/UPDATE/DELETE/TRUNCATE the whole time, letting any tenant member write any
+column via direct PostgREST regardless of what `listings.ts`'s routes actually exposed. Fixed via
+`supabase/migrations/20260810240000_tier1_grant_lockdown.sql`: `revoke all` then re-grant `select`
++ precise `insert`/`update`/`delete` columns matching real route usage (flagged residual gap:
+`owner_type`/`owner_id` stay grantable for the legitimate admin PATCH flow, but the app-layer
+403-for-non-admin check they're behind isn't mirrored in RLS — a non-admin can still set them via
+direct PostgREST; needs an RLS/trigger fix, not a grant fix, tracked in
+`tb-platform-grant-lockdown-001`'s What Happens Next). `anon` also closed, holding the identical
+default the whole time. Live-verified end-to-end via the real `/properties` routes plus targeted
+escalation checks (7/13 + 6/6 checks across two verify scripts).
+
 ---
 
 ## Related Documents
@@ -161,3 +175,4 @@ client with no app-level `tenant_id` filter returns empty, not the row
 | 2.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: `owner_id` FK added (→ `contacts(id)`, once `developers` folded into `contacts`), `'leased'` status + `lease_monthly_rent`/`lease_term_months` columns added, and the `service_role`-for-all-routes claim corrected now that `tb-platform-rls-scoped-client-001` moved `properties` reads/writes to a per-request scoped client. |
 | 2.2.0 | 2026-08-08 | `tb-listings-rent-to-lease-001`: `lease_monthly_rent` renamed to `lease_monthly_amount` (0 live rows, pure schema op), and the `'leased'` status note's cross-reference to `listings.listing_type = 'rent'` corrected to `'lease'` (that enum value was renamed app-wide in the same tracer bullet). |
 | 2.3.0 | 2026-08-09 | Added `search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by a 2026-08-09 birds-eye audit). |
+| 2.4.0 | 2026-08-10 | **Correction.** Documented, for the first time, that `authenticated` held an un-revoked table-wide grant this whole doc never mentioned; closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Flags one residual gap (`owner_type`/`owner_id`'s app-layer-only admin check). Correction to previously-silent documentation, not a schema change, hence a minor bump per STD-002. |

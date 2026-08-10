@@ -1,10 +1,10 @@
 # DD-016 — Notifications
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-08
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -73,6 +73,15 @@ the RLS-performance precedent (`tb-platform-performance-hardening-001`).
 
 Grants: `select, update` to `authenticated`; `all` to `service_role`.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** the verb set here was accurate,
+but the grant behind it was actually table-wide (every column) plus an unused `insert`/`delete`,
+and `anon` held the identical default — none of that was true "grants: select, update" claimed.
+Closed via `supabase/migrations/20260810230000_tier2_grant_lockdown.sql`: `select` (all columns)
++ `update` narrowed to exactly `dismissed_at`. `insert` confirmed as never used by any
+`getScopedClient` call — rows are created exclusively by the `task-due-reminder-check` Edge
+Function via `service_role`. Live-verified (`verify-tier2-grant-lockdown.ts`): a direct-PostgREST
+insert attempt is now rejected (`42501`).
+
 ---
 
 ## Column added to `tasks`: `reminder_sent_at`
@@ -117,3 +126,4 @@ same pattern as `contract-expiry-check`, `listing-authority-expiry-check`, and
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-08-08 | Initial version, written same-day per CLAUDE.md's DS/DD-note DoD requirement (RFC-004). |
+| 1.1.0 | 2026-08-10 | **Correction.** The `select, update` verb claim was right, but the underlying grant was table-wide plus an unused `insert`/`delete`; `anon` held the identical default. Closed via `20260810230000_tier2_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

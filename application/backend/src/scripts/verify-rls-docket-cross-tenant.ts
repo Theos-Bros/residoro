@@ -30,11 +30,17 @@ async function createWorkspaceAndUser(label: string, email: string, password: st
     email,
     password,
     email_confirm: true,
-    user_metadata: { tenant_id: workspace.id },
   });
   if (userError || !userData.user) throw new Error(`user: ${userError?.message}`);
 
-  const { error: handleError } = await supabaseAdmin.from('profiles').update({ handle }).eq('id', userData.user.id);
+  // handle_new_user() has ignored user_metadata entirely since Finding 1's
+  // fix (2026-07-29, docs/security-review-2026-07-29.md) -- every signup
+  // gets an inert profile now. Assign tenant_id/handle the same trusted way
+  // every other verify script does, via a direct service-role update.
+  const { error: handleError } = await supabaseAdmin
+    .from('profiles')
+    .update({ handle, tenant_id: workspace.id, role: 'member' })
+    .eq('id', userData.user.id);
   if (handleError) throw new Error(`handle: ${handleError.message}`);
 
   return { tenantId: workspace.id as string, userId: userData.user.id as string };

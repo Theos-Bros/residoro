@@ -1,10 +1,10 @@
 # DD-013 — Transactions: Closing
 
 **Status:** Draft
-**Version:** 1.0.1
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-04
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -69,6 +69,16 @@ Tenant-scoped CRUD, same shape as `contracts` (DD-012), `offers` (DD-011), and `
 `authenticated` granted `select, insert, update, delete`. `service_role` has full access.
 Written on the per-request scoped client throughout (`closings.ts`), consistent with ADR-003's
 scoped-client enforcement pattern.
+
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** wrong on two counts — table-wide,
+not column-scoped, and `delete` was never used (no `DELETE /closings/:id` route exists). `anon`
+held the identical default too. Closed via `supabase/migrations/
+20260810240000_tier1_grant_lockdown.sql`: `select` + `insert` on exactly `tenant_id, contract_id,
+buyer_requirement_id, listing_id, final_price, currency, created_by` + `update` on exactly
+`final_price, currency, checklist_state, completed_at` — no `delete` grant. Live-verified
+end-to-end via the real full deal-flow (`verify-tier1-transactions-grant-lockdown.ts`, 12/12
+checks pass, including the completion side effects that flip `listings.status` and advance
+`buyer_requirements.stage`).
 
 ---
 
@@ -144,3 +154,4 @@ own read endpoints.
 |---------|------|--------------|
 | 1.0.0 | 2026-08-04 | Initial version, written alongside implementation per RFC-004. |
 | 1.0.1 | 2026-08-08 | `tb-listings-rent-to-lease-001`: the completion rule's `listing_type = 'rent'` check corrected to `'lease'` (that enum value was renamed app-wide). |
+| 1.1.0 | 2026-08-10 | **Correction.** `authenticated`'s grant was table-wide (not column-scoped) and included an unused `delete`; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

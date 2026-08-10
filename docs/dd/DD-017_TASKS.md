@@ -1,10 +1,10 @@
 # DD-017 — Tasks
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-09
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -83,6 +83,17 @@ member can view), `task_routing_write_delegated` (write requires
 `has_settings_delegation('tasks')`, the delegation flag added to `settings_edit_delegations`'
 `setting_key` `CHECK` list by this same migration).
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** neither table's actual grant
+matched what's described above. `tasks`' `select, insert, update, delete` verb claim was right
+but table-wide, not column-scoped, and `anon` held the identical default; closed via
+`supabase/migrations/20260810240000_tier1_grant_lockdown.sql` (`select` all columns + `insert`/
+`update` narrowed to exactly the columns `routes/tasks.ts` writes, full `delete`).
+`workspace_task_routing_settings`' actual grant was never stated here — it too held the
+un-revoked table-wide default despite `task_routing_write_delegated` being a single `ALL` policy;
+closed via `20260810230000_tier2_grant_lockdown.sql` (`select` + `insert`/`update` narrowed to
+exactly `tenant_id, task_type, default_assignee_id, assignee_role`). Live-verified end-to-end
+(`verify-buyer-leads-stage-tasks.ts`, `verify-tier2-grant-lockdown.ts`).
+
 ---
 
 ## Related Documents
@@ -106,3 +117,4 @@ member can view), `task_routing_write_delegated` (write requires
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-08-09 | Initial version, written retroactively from a 2026-08-09 birds-eye audit — this domain had zero DD coverage across four migrations since 2026-07-28. |
+| 1.1.0 | 2026-08-10 | **Correction.** Both tables' actual grants were table-wide (not column-scoped as described/implied), and `anon` held the identical default on both. Closed via `20260810240000_tier1_grant_lockdown.sql` / `20260810230000_tier2_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |

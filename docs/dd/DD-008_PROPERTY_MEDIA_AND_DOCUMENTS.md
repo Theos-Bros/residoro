@@ -1,10 +1,10 @@
 # DD-008 — Property Media & Documents
 
 **Status:** Draft
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-07-27
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -106,6 +106,16 @@ delete` (no `update`) on `property_documents`. `service_role` has full access on
 every other table, the backend currently uses `service_role` for all routes (see ADR-002's
 "Superseded By (partial)" note and ADR-003).
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** the verb sets above were both
+correct, but table-wide (every column) rather than scoped to what `propertyMedia.ts`/
+`propertyDocuments.ts` actually write — a row-only RLS check plus a table-wide grant meant any
+tenant member could write any column via direct PostgREST. `anon` held the identical default on
+both. Closed via `supabase/migrations/20260810240000_tier1_grant_lockdown.sql`: `property_media`
+narrowed to `insert`/`update` on exactly `type, external_url, sort_order, is_cover` (+ the FK
+columns on insert); `property_documents` narrowed to `insert` on exactly `document_type,
+storage_path, file_name` (+ FK columns). Live-verified end-to-end
+(`verify-property-media-external-links.ts`, `verify-tier1-escalation-checks.ts`).
+
 ---
 
 ## Related Documents
@@ -126,4 +136,5 @@ every other table, the backend currently uses `service_role` for all routes (see
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.1.0 | 2026-07-27 | `tb-properties-media-external-links-001`: removed the `property-media` Storage bucket entirely; `property_media.storage_path` replaced with `external_url`; `type` widened to `photo`\|`video`. `property_documents`/`property-documents` unaffected. |
+| 1.2.0 | 2026-08-10 | **Correction.** Both tables' documented verb sets were correct but table-wide, not column-scoped; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |
 | 1.0.0 | 2026-07-27 | Initial version, written retroactively from a birds-eye technical review covering two already-shipped tracer bullets. |

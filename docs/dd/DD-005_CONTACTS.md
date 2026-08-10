@@ -1,10 +1,10 @@
 # DD-005 — Contacts
 
 **Status:** Draft
-**Version:** 1.3.0
+**Version:** 1.4.0
 **Owner:** Residoro Engineering
 **Created:** 2026-07-27
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -69,6 +69,15 @@ Standard tenant-scoped CRUD, matching `properties`'s pattern exactly (DD-002).
 fully on the per-request scoped client — RLS is the real enforcement boundary for `contacts`
 routes now, not `service_role`.
 
+**Correction (2026-08-10, `tb-platform-grant-lockdown-001`):** the verb set above (`select,
+insert, update, delete`) was correct, but it was table-wide (every column), not scoped to what
+`contacts.ts` actually writes — `contacts_update_tenant`'s RLS check is row-only (tenant), so any
+tenant member could write any column via direct PostgREST. `anon` held the identical default too.
+Both closed via `supabase/migrations/20260810240000_tier1_grant_lockdown.sql`: `revoke all` then
+re-grant `select` + `insert`/`update` on exactly `name, type, is_company, email, phone, company,
+notes` (+ `address` on insert only, matching the one route that sets it) + full `delete`. Live-
+verified end-to-end via the real `/contacts` routes (`verify-buyer-leads-schema.ts`).
+
 **Also unrepresented in this DD:** `tb-crm-contacts-page-001` (2026-07-28) shipped a unified
 Contacts page (list + full CRUD via `contacts.ts`/`contactsApi.ts`) on top of this table without
 changing its shape — a frontend/API-surface addition, not a schema change, so it doesn't add a
@@ -102,3 +111,4 @@ See `cap-crm-001` in the Theos Registry for that capability's full scope.
 | 1.1.0 | 2026-08-03 | Refreshed from a 2026-08-03 birds-eye review: added `is_company` (from the `developers` consolidation), corrected the stale `service_role`-for-all-routes RLS claim, noted the unified Contacts page shipped on top of this table. |
 | 1.2.0 | 2026-08-09 | Added `address` (`tb-buyer-leads-inquiry-contact-carryover-001`) — closes the gap where a qualified inquiry's captured address had no destination. |
 | 1.3.0 | 2026-08-09 | Added `search_vector` (`tb-search-core-entities-001`, 2026-08-08 — missed at ship time, caught by the same-day birds-eye audit that also caught DD-002/DD-007's identical gap). |
+| 1.4.0 | 2026-08-10 | **Correction.** `authenticated`'s grant was table-wide, not column-scoped as the RLS-only description implied; `anon` held the identical default. Closed via `20260810240000_tier1_grant_lockdown.sql` (`tb-platform-grant-lockdown-001`). Correction to previously-inaccurate documentation, hence a minor bump per STD-002. |
