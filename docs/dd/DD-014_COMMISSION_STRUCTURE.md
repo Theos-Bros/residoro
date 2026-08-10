@@ -1,10 +1,10 @@
 # DD-014 — Commission: Structure & Computed Earnings
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-04
-**Last Updated:** 2026-08-04
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -110,6 +110,22 @@ total commission.
 contracts/closings; no `PATCH`/`DELETE` route is actually exposed in v1 — see Server-Side
 Behavior). `service_role` has full access.
 
+**Correction (2026-08-10):** the paragraph above rationalized a real vulnerability as
+"boilerplate parity." `authenticated` holding a genuine table-wide UPDATE/DELETE grant, with
+`commission_earnings_update_tenant`'s RLS check only verifying `tenant_id` (no column
+restriction), meant any tenant member could directly `PATCH` `total_commission`/`agent_amount`/
+`brokerage_amount`/etc. on *any* closing in their tenant via a raw PostgREST call — completely
+bypassing the "no PATCH/DELETE route exists" protection this doc relied on, since that protection
+only ever existed at the backend-API layer, never at the DB layer the backend itself depends on.
+Same root cause as DD-001's Finding 7 (`profiles`/`workspaces`), found in the same 2026-08-10
+follow-up security pass ("run a security check for anything we haven't covered") that generalized
+Finding 7's fix beyond the two tables it originally covered. Fixed same day via
+`supabase/migrations/20260810200000_financial_audit_grant_lockdown.sql` (`revoke all` then
+`grant select` + `insert` on exactly the columns `routes/commission.ts`'s `.insert()` call uses —
+no update, no delete, matching the "no legitimate write route" reality this table always had).
+Live-verified via `scripts/verify-financial-audit-grant-lockdown.ts` (7/7 checks pass): UPDATE and
+DELETE are now rejected with `42501: permission denied`, the legitimate insert path is unaffected.
+
 ---
 
 ## Server-Side Behavior Beyond the Schema
@@ -168,3 +184,4 @@ commission data as admin-only.
 | Version | Date | Description |
 |---------|------|--------------|
 | 1.0.0 | 2026-08-04 | Initial version, written alongside implementation per RFC-004. |
+| 1.1.0 | 2026-08-10 | **Correction, critical.** The "boilerplate parity" UPDATE/DELETE grant rationale in Row-Level Security was a live privilege-escalation/financial-fraud vector (any tenant member could PATCH commission amounts on any closing via direct PostgREST). Fixed via `20260810200000_financial_audit_grant_lockdown.sql`, live-verified 7/7. Correction to previously-inaccurate risk assessment, not a new schema change, hence a minor bump per STD-002. |

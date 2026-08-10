@@ -1,10 +1,10 @@
 # DD-018 — Buyer Leads: Inquiries, Leads & Match History
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-09
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -181,6 +181,29 @@ current_tenant_id())` wrapper from the start (established by `20260728190000`, t
 migration that retrofitted the two 2026-07-28 tables to match); every other table in this doc
 also carries that wrapper as of `tb-platform-performance-hardening-001` (2026-07-28).
 
+**Correction (2026-08-10), two issues found in the same follow-up security pass that generalized
+DD-001 Finding 7's fix:**
+
+1. `authenticated` actually held Supabase's un-revoked default table-wide UPDATE/DELETE/TRUNCATE
+   on `buyer_requirement_activity_log` and `buyer_requirement_match_logs`/`_match_log_items` too
+   — the "Select/Insert only" / "None" cells above described the RLS *policy* set accurately but
+   implied the grant matched it, which it never did. Not exploitable (no UPDATE/DELETE policy
+   exists, so RLS default-denies those commands regardless of grant), but the same latent trap as
+   DD-014/DD-015.
+2. **Real bug, not just latent:** `buyer_requirement_activity_log_insert_tenant` /
+   `buyer_requirement_match_logs_insert_tenant`'s `WITH CHECK` verified `tenant_id` only, never
+   `logged_by`. Since both routes (`leadActivityLog.ts`, `matchLogs.ts`) set `logged_by:
+   request.user!.id` themselves, a direct PostgREST insert could set `logged_by` to any other
+   member's UUID in the same tenant — forging an audit-trail entry attributed to a colleague.
+   Fixed by adding `and logged_by = (select auth.uid())` to both `WITH CHECK` clauses.
+
+Both fixed via `supabase/migrations/20260810200000_financial_audit_grant_lockdown.sql` (revoke-all
++ precise re-grant, matching each table's actual insert-column usage; `WITH CHECK` fix on the two
+log tables' INSERT policies). Live-verified via `scripts/
+verify-financial-audit-grant-lockdown.ts` (7/7 checks pass): a spoofed `logged_by` is now
+rejected with `42501: new row violates row-level security policy`; a legitimate self-attributed
+insert still passes the grant/RLS layer (only fails on an intentionally-fake FK in the test).
+
 ---
 
 ## Related Documents
@@ -213,3 +236,4 @@ also carries that wrapper as of `tb-platform-performance-hardening-001` (2026-07
 | Version | Date | Description |
 |----------|------|-------------|
 | 1.0.0 | 2026-08-09 | Initial version, written retroactively from a 2026-08-09 birds-eye audit — this entire six-table domain had zero DD coverage across five migrations since 2026-07-28. |
+| 1.1.0 | 2026-08-10 | **Correction.** `authenticated` held a dangling table-wide UPDATE/DELETE/TRUNCATE grant on the two log tables (latent, not exploitable); more importantly, both log tables' INSERT `WITH CHECK` never verified `logged_by`, letting a direct PostgREST call forge an audit-trail entry attributed to another tenant member. Fixed via `20260810200000_financial_audit_grant_lockdown.sql`, live-verified 7/7. Correction to a real bug plus a previously-inaccurate risk description, not a schema change, hence a minor bump per STD-002. |

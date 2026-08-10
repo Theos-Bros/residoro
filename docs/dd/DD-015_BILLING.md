@@ -1,10 +1,10 @@
 # DD-015 — Billing: Contract Value & Installment Tracking
 
 **Status:** Draft
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Owner:** Residoro Engineering
 **Created:** 2026-08-06
-**Last Updated:** 2026-08-06
+**Last Updated:** 2026-08-10
 
 ---
 
@@ -102,6 +102,19 @@ own tenant; the same admin CANNOT SELECT another tenant's rows (empty result, no
 filter applied); a non-admin member of the *same* tenant CANNOT SELECT either table; an
 RLS-scoped INSERT attempt as the tenant admin is rejected.
 
+**Correction (2026-08-10):** "`authenticated` granted `select` only... no insert/update/delete
+grant at all" was wrong — `authenticated` actually held Supabase's un-revoked default table-wide
+INSERT/UPDATE/DELETE/TRUNCATE on both tables the entire time. The 2026-08-06 live-verification's
+"INSERT attempt... is rejected" finding was still correct, but for the wrong reason stated here:
+it was RLS's total absence of an INSERT policy blocking it (default-deny), not an absent grant —
+the grant was present and armed the whole time. Found in the 2026-08-10 follow-up security pass
+that generalized DD-001 Finding 7's fix beyond the two tables it originally covered; not
+currently exploitable given the missing write policies, but the same "grant assumed narrow,
+never actually was" trap DD-001/DD-014 also fell into, one future write-policy addition away from
+becoming live. Fixed via `supabase/migrations/20260810200000_financial_audit_grant_lockdown.sql`
+(`revoke all` then `grant select` only, matching what this section always claimed was already
+true). Re-verified live via `scripts/verify-financial-audit-grant-lockdown.ts`.
+
 ---
 
 ## Server-Side Behavior Beyond the Schema
@@ -137,3 +150,4 @@ against `billing_installments_paid_date_matches_status` as a raw constraint viol
 | Version | Date | Description |
 |---------|------|--------------|
 | 1.0.0 | 2026-08-06 | Initial version, written alongside implementation per RFC-004. |
+| 1.1.0 | 2026-08-10 | **Correction.** Row-Level Security's "no insert/update/delete grant at all" claim was inaccurate — the un-revoked Supabase default table-wide grant was present the whole time, latent behind the absence of a write policy. Fixed via `20260810200000_financial_audit_grant_lockdown.sql`. Correction to previously-inaccurate documentation, not a new schema change, hence a minor bump per STD-002. |
