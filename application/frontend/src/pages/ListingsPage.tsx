@@ -15,6 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ListingHistoryPanel } from '@/components/ListingHistoryPanel';
 import { ShareDetailsModal } from '@/components/ShareDetailsModal';
 import { ShareDocketModal } from '@/components/ShareDocketModal';
+import { DocketSharesPanel } from '@/components/DocketSharesPanel';
 import { ListingDetailModal } from '@/components/ListingDetailModal';
 import { ListingFilterTabs, type FilterTabOption } from '@/components/ListingFilterTabs';
 import { TaskDetailPanel } from '@/components/TaskDetailPanel';
@@ -28,6 +29,7 @@ type Props = {
 
 type OpenHistory = { propertyId: string; propertyTitle: string } | null;
 type OpenShare = { listingId: string; propertyTitle: string } | null;
+type OpenDocketShares = { listingId: string; propertyTitle: string } | null;
 
 // tb-listings-filters-001: three independent, combinable (AND) client-side
 // filters over the already-fetched `listings` array -- no new API surface,
@@ -108,6 +110,7 @@ export function ListingsPage({ session }: Props) {
   const [openHistory, setOpenHistory] = useState<OpenHistory>(null);
   const [openShare, setOpenShare] = useState<OpenShare>(null);
   const [shareDocketListingId, setShareDocketListingId] = useState<string | null>(null);
+  const [openDocketShares, setOpenDocketShares] = useState<OpenDocketShares>(null);
   // tb-buyer-leads-schema-001: LeadDetailPanel's "Mark Sold on Listings Page"
   // convenience action navigates here with this state, opening that
   // listing's detail modal with the buyer already pre-selected -- purely a
@@ -311,6 +314,15 @@ export function ListingsPage({ session }: Props) {
                       >
                         History
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setOpenDocketShares({ listingId: listing.id, propertyTitle: listing.property_title })
+                        }
+                      >
+                        Docket Shares
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -341,6 +353,14 @@ export function ListingsPage({ session }: Props) {
           session={session}
           listingId={shareDocketListingId}
           onClose={() => setShareDocketListingId(null)}
+        />
+      )}
+      {openDocketShares && (
+        <DocketSharesPanel
+          session={session}
+          listingId={openDocketShares.listingId}
+          propertyTitle={openDocketShares.propertyTitle}
+          onClose={() => setOpenDocketShares(null)}
         />
       )}
       {openDetailListing && !openTaskId && (

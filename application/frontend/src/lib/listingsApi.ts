@@ -402,6 +402,37 @@ export const DOCKET_PROPERTY_FIELDS = [
 
 export type DocketField = (typeof DOCKET_LISTING_FIELDS)[number] | (typeof DOCKET_PROPERTY_FIELDS)[number];
 
+// tb-listings-docket-shares-panel-001: hoisted out of SharedWithMePage.tsx so
+// DocketSharesPanel.tsx can reuse the same human-readable labels/formatting
+// instead of duplicating them.
+export const DOCKET_FIELD_LABELS: Record<string, string> = {
+  listing_type: 'Listing type',
+  price: 'Price',
+  price_currency: 'Currency',
+  exclusivity: 'Exclusivity',
+  authority_starts_at: 'Authority starts',
+  authority_expires_at: 'Authority ends',
+  status: 'Status',
+  title: 'Title',
+  type: 'Property type',
+  address: 'Address',
+  city: 'City',
+  province: 'Province',
+  floor_area_sqm: 'Floor area (sqm)',
+  lot_area_sqm: 'Lot area (sqm)',
+  bedrooms: 'Bedrooms',
+  bathrooms: 'Bathrooms',
+  parking_slots: 'Parking slots',
+};
+
+export function formatDocketFieldValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (field === 'price' && typeof value === 'number') {
+    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return String(value);
+}
+
 export type CreatedDocket = {
   id: string;
   source_listing_id: string;
@@ -448,6 +479,20 @@ export async function revokeDocket(accessToken: string, docketId: string): Promi
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ status: 'revoked' }),
+  });
+  return parseJsonOrThrow(response);
+}
+
+export type SentDocket = {
+  id: string;
+  shared_with_handle: string | null;
+  included_fields: DocketField[];
+  created_at: string;
+};
+
+export async function fetchSentDockets(accessToken: string, listingId: string): Promise<{ dockets: SentDocket[] }> {
+  const response = await fetch(`${BACKEND_URL}/listings/${listingId}/dockets`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   return parseJsonOrThrow(response);
 }

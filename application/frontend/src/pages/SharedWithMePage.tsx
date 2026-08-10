@@ -1,39 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { fetchReceivedDockets, type ReceivedDocket } from '@/lib/listingsApi';
+import {
+  fetchReceivedDockets,
+  DOCKET_FIELD_LABELS,
+  formatDocketFieldValue,
+  type ReceivedDocket,
+} from '@/lib/listingsApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 
 type Props = {
   session: Session;
-};
-
-function formatFieldValue(field: string, value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
-  if (field === 'price' && typeof value === 'number') {
-    return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-  return String(value);
-}
-
-const FIELD_LABELS: Record<string, string> = {
-  listing_type: 'Listing type',
-  price: 'Price',
-  price_currency: 'Currency',
-  exclusivity: 'Exclusivity',
-  authority_starts_at: 'Authority starts',
-  authority_expires_at: 'Authority ends',
-  status: 'Status',
-  title: 'Title',
-  type: 'Property type',
-  address: 'Address',
-  city: 'City',
-  province: 'Province',
-  floor_area_sqm: 'Floor area (sqm)',
-  lot_area_sqm: 'Lot area (sqm)',
-  bedrooms: 'Bedrooms',
-  bathrooms: 'Bathrooms',
-  parking_slots: 'Parking slots',
 };
 
 // tb-listings-co-broker-share-001: the recipient's read-only view of every
@@ -90,9 +67,9 @@ export function SharedWithMePage({ session }: Props) {
                     {Object.entries(docket.fields).map(([field, value]) => (
                       <TableRow key={field}>
                         <TableCell className="p-2 text-left font-medium text-muted-foreground">
-                          {FIELD_LABELS[field] ?? field}
+                          {DOCKET_FIELD_LABELS[field] ?? field}
                         </TableCell>
-                        <TableCell className="p-2">{formatFieldValue(field, value)}</TableCell>
+                        <TableCell className="p-2">{formatDocketFieldValue(field, value)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

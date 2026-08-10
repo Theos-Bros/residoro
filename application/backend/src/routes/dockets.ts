@@ -260,6 +260,75 @@ export async function registerDocketRoutes(app: FastifyInstance) {
     return { dockets };
   });
 
+  // tb-listings-docket-shares-panel-001: a listing's own outgoing dockets,
+  // for the "who have I shared this with, and can I revoke it" panel --
+  // tenant-scoped via the listing ownership check below (not filtered by
+  // shared_by), since any teammate in the tenant should be able to see who
+  // the listing has been shared with, matching the tenant-wide "Share
+  // Details"/"History" row actions this panel sits alongside. Revoke itself
+  // stays sharer-only, unchanged, per PATCH /listing-dockets/:id above.
+  app.get<{ Params: { id: string } }>('/listings/:id/dockets', { preHandler: requireAuth }, async (request, reply) => {
+    const supabase = getScopedClient(request);
+
+    const { data: listing, error: listingError } = await supabase
+      .from('listings')
+      .select('id')
+      .eq('id', request.params.id)
+      .eq('tenant_id', request.user!.tenantId)
+      .maybeSingle();
+
+    if (listingError) {
+      request.log.error(listingError);
+      return reply.status(500).send({ error: 'Could not verify the listing' });
+    }
+    if (!listing) {
+      return reply.status(404).send({ error: 'Listing not found in your workspace' });
+    }
+
+    const { data, error } = await supabase
+      .from('listing_dockets')
+      .select('id, shared_with, included_fields, created_at')
+      .eq('source_listing_id', request.params.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      request.log.error(error);
+      return reply.status(500).send({ error: 'Could not load this listing\'s shared dockets' });
+    }
+
+    const rows = data as unknown as Array<{
+      id: string;
+      shared_with: string;
+      included_fields: string[];
+      created_at: string;
+    }>;
+
+    // Cross-tenant by design -- a recipient is never in the source listing's
+    // own tenant, so profiles_select_same_tenant would block this under the
+    // scoped client. Stays on supabaseAdmin; see file-level note above.
+    const recipientIds = [...new Set(rows.map((row) => row.shared_with))];
+    const { data: recipients, error: recipientsError } =
+      recipientIds.length > 0
+        ? await supabaseAdmin.from('profiles').select('id, handle').in('id', recipientIds)
+        : { data: [], error: null };
+
+    if (recipientsError) {
+      request.log.error(recipientsError);
+      return reply.status(500).send({ error: 'Could not load recipient info' });
+    }
+    const handleById = new Map((recipients ?? []).map((recipient) => [recipient.id, recipient.handle]));
+
+    const dockets = rows.map((row) => ({
+      id: row.id,
+      shared_with_handle: handleById.get(row.shared_with) ?? null,
+      included_fields: row.included_fields,
+      created_at: row.created_at,
+    }));
+
+    return { dockets };
+  });
+
   app.patch<{ Params: { id: string }; Body: RevokeDocketBody }>(
     '/listing-dockets/:id',
     { preHandler: requireAuth },
